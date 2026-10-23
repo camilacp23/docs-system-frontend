@@ -20,7 +20,7 @@ color not in the reference): **STOP and ask the user. Never invent.**
 
 ## 2. Stack (exact versions — pinned with `save-exact`)
 
-Node ≥ 22.22 · React 19.3.0 / react-dom 19.3.0 · react-router 8.4.0 · Vite 8.3.5 ·
+Node ≥ 22.22.2 · React 19.3.0 / react-dom 19.3.0 · react-router 8.4.0 · Vite 8.3.5 ·
 Tailwind CSS 4.3.3 (+ `@tailwindcss/vite` 4.3.3) · @xyflow/react 12.12.0 (Module 5, later) ·
 lucide-react 1.59.0 · TypeScript 5.9.3 · Vitest + Testing Library · openapi-typescript.
 New dependencies: exact latest stable version compatible with the above; justify in the commit.
