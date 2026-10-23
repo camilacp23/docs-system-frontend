@@ -39,6 +39,15 @@ export class FakeBackend {
   refreshCount = 0;
   sessionExpiresIn: number;
   latencyMs: number;
+  /** The user every login / refresh answers with (change `role` to test the views of each role). */
+  user: User = TEST_USER;
+  /** Set to make /auth/login answer a failure instead (status, code, details, headers such as Retry-After). */
+  loginFailure: {
+    status: number;
+    code: string;
+    details?: unknown;
+    headers?: Record<string, string>;
+  } | null = null;
   /** Set to make /auth/refresh answer a failure instead. */
   refreshFailure: { status: number; code: string; headers?: Record<string, string> } | null = null;
 
@@ -102,7 +111,7 @@ export class FakeBackend {
         tokenType: 'Bearer',
         expiresIn: 28800,
         sessionExpiresIn: this.sessionExpiresIn,
-        user: TEST_USER,
+        user: this.user,
       },
     };
   }
@@ -126,6 +135,10 @@ export class FakeBackend {
     await this.wait();
 
     if (path === '/auth/login') {
+      if (this.loginFailure) {
+        const { status, code, details, headers: extra } = this.loginFailure;
+        return this.error(status, code, details ?? null, extra);
+      }
       const body = JSON.parse(init?.body as string) as { password: string };
       if (body.password !== 'right-password') return this.error(401, 'INVALID_CREDENTIALS');
       this.familyRevoked = false;
