@@ -23,7 +23,7 @@ export function TextField({ invalid = false, mono = false, className, ...rest }:
         mono ? 'font-mono text-label' : 'text-body-lg',
         invalid
           ? 'border-danger'
-          : 'border-border focus:border-accent enabled:hover:border-border-hover',
+          : 'border-border-control focus:border-accent enabled:hover:border-border-control-hover',
         className,
       )}
     />

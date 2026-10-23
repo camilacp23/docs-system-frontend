@@ -32,7 +32,7 @@ const VARIANT_CLASS: Record<ButtonVariant, string> = {
   primary:
     'border-transparent bg-(image:--gradient-primary) text-on-primary shadow-primary-button enabled:hover:bg-(image:--gradient-primary-hover) enabled:active:bg-(image:--gradient-primary-active)',
   secondary:
-    'border-border bg-surface text-ink-900 shadow-card enabled:hover:bg-control-hover enabled:active:bg-control-active',
+    'border-border-control bg-surface text-ink-900 shadow-card enabled:hover:bg-control-hover enabled:active:bg-control-active',
   ghost:
     'border-transparent bg-transparent text-primary enabled:hover:bg-control-hover enabled:active:bg-control-active',
   danger:

@@ -117,7 +117,10 @@
   /* ---- Color: derived interaction states (pending design confirmation) ---- */
   --color-control-hover: var(--color-search-bg);
   --color-control-active: var(--color-disabled-bg);
-  --color-border-hover: color-mix(in srgb, var(--color-border) 40%, var(--color-ink-500));
+  /* Border of form controls (TextField, PasswordField, secondary Button): >= 3:1 on white and canvas (WCAG 1.4.11).
+     = mix(border 30 %, ink-500 70 %). Decorative borders and dividers keep `border`. */
+  --color-border-control: #7f8897;
+  --color-border-control-hover: var(--color-ink-500);
   --color-focus-ring: var(--color-accent);
 
   /* ---- Gradients (use with `bg-(image:--gradient-*)`) ---- */

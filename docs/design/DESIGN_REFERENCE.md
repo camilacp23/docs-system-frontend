@@ -176,7 +176,8 @@ Contrast computed per WCAG 2.x (text ≥ 4.5:1, components and focus ≥ 3:1).
 | `--gradient-danger-hover` / `-active` | each stop of `--gradient-danger` mixed 88 % / 76 % with `ink-900` | white text 7.7:1 / 8.9:1 on `#b42318` stop; ≥ 5.7:1 on the light stop |
 | `--color-control-hover` | = `search-bg` `#f4f6fa` (secondary and ghost buttons, hover) | `ink-900` 15.2:1 · `primary` text 6.5:1 |
 | `--color-control-active` | = `disabled-bg` `#eaeef2` (secondary and ghost buttons, pressed) | `ink-900` 15.2:1 · `primary` text 6.0:1 |
-| `--color-border-hover` | `border` 40 % + `ink-500` 60 % = `#8b93a2` (input hover) | 3.1:1 on white |
+| `--color-border-control` | `border` 30 % + `ink-500` 70 % = `#7f8897`; border of form controls only (TextField, PasswordField, secondary Button). Dividers, cards and other decorative borders keep `border` `#d3d9e2`. Derived for accessibility (WCAG 1.4.11), pending confirmation in design | 3.6:1 on white · 3.3:1 on `canvas` (≥ 3:1 required) |
+| `--color-border-control-hover` | = `ink-500` `#5b6577` (control hover) | 5.9:1 on white · 5.3:1 on `canvas` |
 | `--color-focus-ring` | = `accent`; ring 2 px, offset 2 px (approved) | 3.9:1 on white · 3.6:1 on `canvas` · 4.1:1 on `navy-900` |
 | Input focus border | `accent` (seen on the focused field of S-42) | 3.9:1 on white |
 | Disabled secondary / ghost / danger | same flat look and opacity .45 as the disabled primary button (Figma only shows the primary) | exempt (inactive component) |
@@ -186,5 +187,5 @@ Contrast computed per WCAG 2.x (text ≥ 4.5:1, components and focus ≥ 3:1).
 | Spinner | 3 px arc, `currentColor`, 0.25 track; static under `prefers-reduced-motion` | n/a |
 | Skeleton animation | none (the Figma frame is static) | n/a |
 
-Known gap in the approved design (not changed): the input / secondary-button border `#d3d9e2` on white is 1.4:1, below the
-3:1 of WCAG 1.4.11 for component boundaries. The text, label and placeholder contrasts are fine.
+The Figma border of inputs and secondary buttons (`#d3d9e2`, 1.4:1 on white) does not meet WCAG 1.4.11 (3:1 for component
+boundaries); `--color-border-control` replaces it on those controls only. To confirm in design or in SDD v1.1.
