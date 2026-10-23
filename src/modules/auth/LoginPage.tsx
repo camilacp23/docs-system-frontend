@@ -32,6 +32,14 @@ interface Banners {
   text: string;
 }
 
+function checkEmail(value: string): string | null {
+  return EMAIL_PATTERN.test(value.trim()) ? null : EMAIL_ERROR_TEXT;
+}
+
+function checkPassword(value: string): string | null {
+  return value === '' ? PASSWORD_ERROR_TEXT : null;
+}
+
 /** Seconds to wait after a 429: Retry-After, or `details.minutes` x 60 when the header is missing; null if neither. */
 function waitSeconds(error: {
   retryAfterSeconds: number | null;
@@ -50,6 +58,9 @@ export function LoginPage() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [banner, setBanner] = useState<Banners | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // A field is validated when it loses focus only after the user has edited it (S-01c shows the errors of edited
+  // fields next to the countdown, when the button cannot be pressed).
+  const edited = useRef({ email: false, password: false });
   const { remaining, start } = useCountdown();
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
@@ -60,8 +71,8 @@ export function LoginPage() {
     event.preventDefault();
     if (blocked || submitting) return;
 
-    const nextEmailError = EMAIL_PATTERN.test(email.trim()) ? null : EMAIL_ERROR_TEXT;
-    const nextPasswordError = password === '' ? PASSWORD_ERROR_TEXT : null;
+    const nextEmailError = checkEmail(email);
+    const nextPasswordError = checkPassword(password);
     setEmailError(nextEmailError);
     setPasswordError(nextPasswordError);
     setBanner(null);
@@ -151,8 +162,12 @@ export function LoginPage() {
                 autoComplete="username"
                 value={email}
                 onChange={(event) => {
+                  edited.current.email = true;
                   setEmail(event.target.value);
                   setEmailError(null);
+                }}
+                onBlur={() => {
+                  if (edited.current.email) setEmailError(checkEmail(email));
                 }}
               />
             )}
@@ -166,8 +181,12 @@ export function LoginPage() {
                 placeholder="Your password"
                 value={password}
                 onChange={(event) => {
+                  edited.current.password = true;
                   setPassword(event.target.value);
                   setPasswordError(null);
+                }}
+                onBlur={() => {
+                  if (edited.current.password) setPasswordError(checkPassword(password));
                 }}
               />
             )}

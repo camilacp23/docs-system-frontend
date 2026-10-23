@@ -61,6 +61,22 @@ describe('login page', () => {
     expect(backend.count('/auth/login')).toBe(0);
   });
 
+  it('validates an edited field when it loses focus, but not an untouched one', async () => {
+    await openLogin();
+    const email = screen.getByLabelText(/^Email/);
+    const password = screen.getByLabelText(/^Password/);
+    fireEvent.blur(email);
+    fireEvent.blur(password);
+    expect(screen.queryByText('Enter your password.')).not.toBeInTheDocument();
+    fireEvent.change(email, { target: { value: 'camila.castillo@' } });
+    fireEvent.blur(email);
+    expect(screen.getByText('Enter a valid email, e.g. name@domain.com.')).toBeInTheDocument();
+    fireEvent.change(password, { target: { value: 'x' } });
+    fireEvent.change(password, { target: { value: '' } });
+    fireEvent.blur(password);
+    expect(screen.getByText('Enter your password.')).toBeInTheDocument();
+  });
+
   it('shows the S-01b banner on 401 (same text whatever the cause)', async () => {
     const user = userEvent.setup();
     await openLogin();
