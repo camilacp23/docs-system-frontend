@@ -71,6 +71,8 @@ describe('S-43b session ended', () => {
     // The page stays behind the dialog.
     expect(router.state.location.pathname).toBe('/variables/4');
     expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
+    // The application stays in the card and the breadcrumb (it is not reloaded for an ended session).
+    expect(screen.getAllByText('SAR').length).toBeGreaterThanOrEqual(2);
     // The dialog is blocking: Escape does not close it.
     fireEvent.keyDown(dialog, { key: 'Escape' });
     expect(screen.getByRole('dialog', { name: 'Your session ended' })).toBeInTheDocument();

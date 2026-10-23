@@ -37,7 +37,7 @@ export function ApplicationCard() {
           </div>
           {currentApplication &&
             (archived ? (
-              <span className="mt-0.5 inline-block rounded-pill border border-warning-border bg-warning-bg px-2 py-px text-micro font-bold text-warning-ink">
+              <span className="mt-0.5 inline-block rounded-pill border border-warning-border bg-warning-bg px-1.5 py-px text-micro font-bold whitespace-nowrap text-warning-ink">
                 Archived · read-only
               </span>
             ) : (

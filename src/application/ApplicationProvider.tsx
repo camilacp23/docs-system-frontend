@@ -39,8 +39,15 @@ function pickDefault(applications: Application[]): Application | null {
 }
 
 export function ApplicationProvider({ children, client = api }: ApplicationProviderProps) {
-  const { status: sessionStatus, phase, user } = useSession();
+  const { status: sessionStatus, phase, user, endReason, lastUser } = useSession();
   const userId = sessionStatus === 'authenticated' && phase !== 'expired' && user ? user.id : null;
+
+  // While the "session ended" dialog is open (S-43b) the page keeps showing what was already loaded.
+  const endedUserId =
+    sessionStatus === 'anonymous' && endReason !== null && endReason !== 'logout'
+      ? (lastUser?.id ?? null)
+      : null;
+  const viewUserId = userId ?? endedUserId;
 
   const [result, setResult] = useState<LoadResult | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
@@ -77,9 +84,9 @@ export function ApplicationProvider({ children, client = api }: ApplicationProvi
   }, []);
 
   const value = useMemo<ApplicationValue>(() => {
-    const own = result !== null && result.userId === userId ? result : null;
+    const own = result !== null && result.userId === viewUserId ? result : null;
     const status: ApplicationValue['status'] =
-      userId === null ? 'idle' : own === null ? 'loading' : own.error ? 'error' : 'ready';
+      viewUserId === null ? 'idle' : own === null ? 'loading' : own.error ? 'error' : 'ready';
     const applications = own?.applications ?? [];
     const current =
       applications.find((a) => a.id === selectedId) ??
@@ -93,7 +100,7 @@ export function ApplicationProvider({ children, client = api }: ApplicationProvi
       selectApplication,
       reload,
     };
-  }, [result, userId, selectedId, selectApplication, reload]);
+  }, [result, viewUserId, selectedId, selectApplication, reload]);
 
   return <ApplicationContext value={value}>{children}</ApplicationContext>;
 }
