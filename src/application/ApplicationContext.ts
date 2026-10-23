@@ -14,8 +14,8 @@ export interface ApplicationValue {
   currentApplication: Application | null;
   /** Id to send as `applicationId` in element listings and creations. */
   currentApplicationId: number | null;
-  selectApplication(id: number): void;
-  reload(): void;
+  selectApplication: (id: number) => void;
+  reload: () => void;
 }
 
 export const ApplicationContext = createContext<ApplicationValue | null>(null);
