@@ -7,9 +7,9 @@ import type { SessionSnapshot } from './SessionManager';
 import type { components } from '../api/schema';
 
 export interface SessionValue extends SessionSnapshot {
-  login(email: string, password: string): Promise<components['schemas']['User']>;
-  logout(): Promise<void>;
-  retryBootstrap(): Promise<void>;
+  login: (email: string, password: string) => Promise<components['schemas']['User']>;
+  logout: () => Promise<void>;
+  retryBootstrap: () => Promise<void>;
 }
 
 export function useSession(): SessionValue {
