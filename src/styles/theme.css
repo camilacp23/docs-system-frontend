@@ -1,0 +1,253 @@
+/*
+ * Design tokens of "Documentación técnica" (SDD §7.3.2 Table 54, docs/design/DESIGN_REFERENCE.md).
+ * Tailwind 4 `@theme`: every color, font, size, radius and shadow used by the UI is defined here.
+ * The default Tailwind palette, shadows, radii and font sizes are cleared on purpose (NFR-07):
+ * a class such as `bg-red-500` or `text-sm` does not exist, so feature code cannot step outside the system.
+ *
+ * Values marked "derived" are not in the Figma file; they are registered in the section
+ * "Derived values (pending design confirmation)" of docs/design/DESIGN_REFERENCE.md.
+ */
+@theme {
+  --color-*: initial;
+  --text-*: initial;
+  --radius-*: initial;
+  --shadow-*: initial;
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+
+  /* ---- Fonts (self-hosted with @fontsource, see index.css) ---- */
+  --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', monospace;
+
+  /* ---- Color: surfaces and ink ---- */
+  --color-canvas: #f2f4f8;
+  --color-surface: #ffffff;
+  --color-navy-900: #0e2041;
+  --color-navy-950: #0a1730;
+  --color-ink-900: #101828;
+  --color-ink-700: #344054;
+  --color-ink-500: #5b6577;
+  --color-on-primary: #ffffff;
+
+  /* ---- Color: borders and fills ---- */
+  --color-border: #d3d9e2;
+  --color-border-subtle: #e4e8ee;
+  --color-divider: #f0f2f6;
+  --color-search-bg: #f4f6fa;
+
+  /* ---- Color: brand ---- */
+  --color-primary: #0e6175;
+  --color-primary-light: #147088;
+  --color-accent: #3d81d9;
+  --color-accent-soft: #e8f1fc;
+  --color-accent-ink: #1f4f8f;
+  --color-identifier: #123b6d;
+
+  /* ---- Color: feedback pairs (ink / bg / border) ---- */
+  --color-danger: #b42318;
+  --color-danger-light: #c42b1f;
+  --color-danger-bg: #fcebe9;
+  --color-danger-border: #f3c4bf;
+  --color-warning-ink: #7a4a00;
+  --color-warning-bg: #fff1d6;
+  --color-warning-border: #f0d9a8;
+  --color-success-ink: #17663a;
+  --color-success-bg: #e3f3e8;
+  --color-success-border: #bfe0cb;
+  --color-info-ink: #1d58a0;
+  --color-info-bg: #e8f0fb;
+  --color-info-border: #c5d7f0;
+
+  /* ---- Color: pills, badges, toast, disabled, skeleton ---- */
+  --color-success: #16a06a;
+  --color-success-pill-ink: #16794a;
+  --color-success-pill-bg: #e7f6ee;
+  --color-badge-warning-bg: #f5a524;
+  --color-badge-warning-ink: #3b2500;
+  --color-toast-bg: #0a1730;
+  --color-toast-ink: #ffffff;
+  --color-toast-link: #9fd3e0;
+  --color-disabled-bg: #eaeef2;
+  --color-disabled-ink: #5b6577;
+  --color-skeleton-base: #eaeef2;
+  --color-skeleton-highlight: #f1f4f7;
+  --color-empty-icon-bg: #e4f1f4;
+  --color-avatar-from: #d7e6fb;
+  --color-avatar-to: #b9d3f6;
+  --color-avatar-ink: #1f4f8f;
+  --color-overlay: rgba(10, 23, 48, 0.45);
+  --color-modal-border: #e3e8ed;
+  --color-modal-footer-bg: #fafbfd;
+
+  /* ---- Color: documentation status. "dot" = chart/legend color (Table 54, fixed per status);
+          ink/bg = tag pair read from the Figma frames (S-18, S-27), AA contrast >= 6:1 ---- */
+  --color-status-undocumented: #a7b0be;
+  --color-status-draft: #5b6b82;
+  --color-status-in-progress: #3d81d9;
+  --color-status-in-review: #e08a1e;
+  --color-status-approved: #16a06a;
+  --color-status-undocumented-ink: #4d5864;
+  --color-status-undocumented-bg: #eef1f4;
+  --color-status-undocumented-border: #d9dee5;
+  --color-status-draft-ink: #3f5468;
+  --color-status-draft-bg: #e3eaf1;
+  --color-status-in-progress-ink: #1d58a0;
+  --color-status-in-progress-bg: #e7effa;
+  --color-status-in-review-ink: #8a4300;
+  --color-status-in-review-bg: #ffe9cf;
+  --color-status-approved-ink: #17663a;
+  --color-status-approved-bg: #e3f3e8;
+
+  /* ---- Color: dark sidebar palette (shell, F-03) ---- */
+  --color-sidebar-text: #c9d4e6;
+  --color-sidebar-label: #7088ac;
+  --color-sidebar-muted: #8ea2c2;
+  --color-sidebar-muted-2: #a9b8d0;
+  --color-sidebar-muted-3: #7f93b4;
+  --color-sidebar-glow: #18366a;
+  --color-sidebar-tile: rgba(255, 255, 255, 0.05);
+  --color-sidebar-card: rgba(255, 255, 255, 0.06);
+  --color-sidebar-card-border: rgba(255, 255, 255, 0.1);
+  --color-sidebar-switch: rgba(255, 255, 255, 0.08);
+  --color-sidebar-divider: rgba(255, 255, 255, 0.08);
+  --color-sidebar-active-indicator: #7fb3ff;
+  --color-sidebar-live-dot: #34d399;
+  --color-topbar: rgba(255, 255, 255, 0.88);
+
+  /* ---- Color: derived interaction states (pending design confirmation) ---- */
+  --color-control-hover: var(--color-search-bg);
+  --color-control-active: var(--color-disabled-bg);
+  --color-border-hover: color-mix(in srgb, var(--color-border) 40%, var(--color-ink-500));
+  --color-focus-ring: var(--color-accent);
+
+  /* ---- Gradients (use with `bg-(image:--gradient-*)`) ---- */
+  --gradient-primary: linear-gradient(180deg, var(--color-primary-light), var(--color-primary));
+  --gradient-danger: linear-gradient(180deg, var(--color-danger-light), var(--color-danger));
+  --gradient-skeleton: linear-gradient(
+    90deg,
+    var(--color-skeleton-base),
+    var(--color-skeleton-highlight) 50%,
+    var(--color-skeleton-base)
+  );
+  --gradient-avatar: linear-gradient(135deg, var(--color-avatar-from), var(--color-avatar-to));
+  --gradient-sidebar:
+    radial-gradient(
+      ellipse 321.6px 540px at 0 0,
+      var(--color-sidebar-glow) 0%,
+      rgb(24 54 106 / 0) 60%
+    ),
+    linear-gradient(180deg, var(--color-navy-900) 0%, var(--color-navy-950) 100%);
+  --gradient-brand-tile: linear-gradient(135deg, #1a86a0, var(--color-accent));
+  --gradient-app-tile: linear-gradient(135deg, var(--color-accent), #2a5fb0);
+  --gradient-nav-active: linear-gradient(90deg, rgb(61 129 217 / 0.3), rgb(61 129 217 / 0.06));
+  /* derived hover / pressed gradients: base stops mixed with navy-950 (primary) or ink-900 (danger) */
+  --gradient-primary-hover: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-primary-light) 88%, var(--color-navy-950)),
+    color-mix(in srgb, var(--color-primary) 88%, var(--color-navy-950))
+  );
+  --gradient-primary-active: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-primary-light) 76%, var(--color-navy-950)),
+    color-mix(in srgb, var(--color-primary) 76%, var(--color-navy-950))
+  );
+  --gradient-danger-hover: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-danger-light) 88%, var(--color-ink-900)),
+    color-mix(in srgb, var(--color-danger) 88%, var(--color-ink-900))
+  );
+  --gradient-danger-active: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-danger-light) 76%, var(--color-ink-900)),
+    color-mix(in srgb, var(--color-danger) 76%, var(--color-ink-900))
+  );
+
+  /* ---- Typography scale: size / line height (+ tracking where the reference gives one) ---- */
+  --text-hero: 32px;
+  --text-hero--line-height: 40px;
+  --text-kpi: 30px;
+  --text-kpi--line-height: 38px;
+  --text-kpi--letter-spacing: -0.6px;
+  --text-page-title: 24px;
+  --text-page-title--line-height: 32px;
+  --text-page-title--letter-spacing: -0.24px;
+  --text-heading: 24px;
+  --text-heading--line-height: 32px;
+  --text-title: 20px;
+  --text-title--line-height: 28px;
+  --text-section: 18px;
+  --text-section--line-height: 28px;
+  --text-subheading: 16px;
+  --text-subheading--line-height: 24px;
+  --text-card-title: 15px;
+  --text-card-title--line-height: 22px;
+  --text-body-lg: 14px;
+  --text-body-lg--line-height: 20px;
+  --text-body: 13.5px;
+  --text-body--line-height: 20px;
+  --text-button: 13.5px;
+  --text-button--line-height: 13.5px;
+  --text-label: 13px;
+  --text-label--line-height: 18px;
+  --text-small: 12px;
+  --text-small--line-height: 16px;
+  --text-tag: 11.5px;
+  --text-tag--line-height: 16px;
+  --text-micro: 11px;
+  --text-micro--line-height: 16px;
+  --text-nav-section: 10.5px;
+  --text-nav-section--line-height: 14px;
+  --text-nav-section--letter-spacing: 0.945px;
+
+  /* ---- Radius ---- */
+  --radius-indicator: 3px;
+  --radius-skeleton: 4px;
+  --radius-keycap: 6px;
+  --radius-chip: 8px;
+  --radius-control: 10px;
+  --radius-card: 12px;
+  --radius-modal: 14px;
+  --radius-pill: 999px;
+
+  /* ---- Elevation ---- */
+  --shadow-card: 0 1px 1px rgb(16 24 40 / 0.05), 0 1px 1.5px rgb(16 24 40 / 0.07);
+  --shadow-button: 0 1px 1px rgb(16 24 40 / 0.1);
+  --shadow-primary-button: 0 1px 1px rgb(16 24 40 / 0.1), inset 0 1px 0 rgb(255 255 255 / 0.15);
+  --shadow-toast: 0 4px 6px rgb(22 33 43 / 0.12);
+  --shadow-modal: 0 12px 32px rgb(22 33 43 / 0.2);
+  --shadow-nav-tile: 0 4px 6px rgb(61 129 217 / 0.5);
+  --shadow-brand-tile: 0 4px 7px rgb(61 129 217 / 0.45);
+  --shadow-field-inset: inset 0 1px 2px 1px rgb(16 24 40 / 0.04);
+  --shadow-live-dot: 0 0 0 3px rgb(52 211 153 / 0.18);
+  --shadow-success-dot: 0 0 0 3px rgb(22 160 106 / 0.15);
+}
+
+@layer base {
+  html {
+    background-color: var(--color-canvas);
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-canvas);
+    color: var(--color-ink-900);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Visible focus for every control: 2 px accent ring with a 2 px gap (WCAG 2.4.7, contrast >= 3:1). */
+  :focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 2px;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+}
