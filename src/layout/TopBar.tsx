@@ -3,14 +3,13 @@
 // Props: user (the signed-in user). The quick search, Jira status pill and help button of the frame arrive with
 // the modules they depend on.
 // Sign out clears the session even if the server cannot be reached; in that case a warning toast says so.
-import { ChevronDown } from 'lucide-react';
 import { useEffect, useId, useRef } from 'react';
 import { useLocation } from 'react-router';
 
 import type { components } from '../api/schema';
 import { findRoute, ROLE_LABEL } from '../app/router/routes';
 import { useApplication } from '../application/useApplication';
-import { Avatar, ICON_STROKE_WIDTH, useToast } from '../components/ui';
+import { Avatar, useToast } from '../components/ui';
 import { useSession } from '../session/useSession';
 
 import { applicationInitials } from './applicationInitials';
@@ -88,12 +87,6 @@ function UserMenu({ user }: { user: components['schemas']['User'] }) {
           <span className="block text-label/5 font-bold text-ink-900">{user.name}</span>
           <span className="block text-tag/5 text-ink-500">{ROLE_LABEL[user.role]}</span>
         </span>
-        <ChevronDown
-          size={16}
-          strokeWidth={ICON_STROKE_WIDTH}
-          aria-hidden="true"
-          className="text-ink-500"
-        />
       </button>
       {open && (
         <div

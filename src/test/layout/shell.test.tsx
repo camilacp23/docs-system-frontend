@@ -102,6 +102,18 @@ describe('top bar and application card', () => {
     expect(localStorage.length).toBeGreaterThan(0); // only the selected id, never a token
   });
 
+  it('the user block is a menu button and shows no chevron', async () => {
+    const user = userEvent.setup();
+    await renderApp();
+    const trigger = await screen.findByRole('button', { name: /Ana Mora/ });
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger.querySelector('svg')).toBeNull();
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+  });
+
   it('Sign out ends the session and goes to /login', async () => {
     const user = userEvent.setup();
     const { router, backend, manager } = await renderApp();
