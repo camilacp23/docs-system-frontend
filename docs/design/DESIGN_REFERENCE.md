@@ -144,3 +144,52 @@ M02–03: S-10 `2:4524` … S-17 `2:7921`, S-14n `38:498`. M04: S-18 `2:8240` �
 M05–06: S-27 `2:12815` … S-30 `2:15357`. M07–08: S-31 `2:15799` … S-32f `2:17457`.
 M09–11: S-33 `2:17743` … S-38c `2:20890`. States: S-39a `2:21215` … S-47 `2:23749`.
 Prototype extras: P-01 `2:23972` … P-06 `2:25452`.
+
+## 8. Values confirmed in Figma during F-01 (differences with the sections above)
+
+Read with `get_design_context` on S-47, S-43b, S-01c, S-41c, S-17 and the status tags of S-27 (file `zZNDo3yEXP6UubLzEWAHe5`).
+These are implemented in `src/styles/theme.css`.
+
+| Item | Figma value | Note |
+|---|---|---|
+| Documentation status **tag** | In progress `#1d58a0` on `#e7effa` · In review `#8a4300` on `#ffe9cf` · Approved `#17663a` on `#e3f3e8` · Draft `#3f5468` on `#e3eaf1` · Undocumented `#4d5864` on `#eef1f4` with 1 px dashed `#d9dee5` border; dot = text color, 11.5 / 700, 22 px high, padding 0/9, gap 4 | The five fixed colors of §1 are the chart / legend colors (dashboard donut). Tags use the darker pairs (AA ≥ 6:1). Draft and Undocumented sampled from the S-18 render (exact match checked on In progress). |
+| S-47 page title | 20 / 28, weight 600 | §2 says page title 24 / 32 / 800 (S-43b uses 24 / 800). Token `title` = 20 / 28; `page-title` = 24 / 32. |
+| Avatar initials color | `#5b6577` (Figma) | §1 says `#1f4f8f`. `#1f4f8f` kept (AA ≥ 5:1 on the gradient; `#5b6577` gives ≈ 3.8:1). |
+| Modal | max width 400, radius 14, overlay `rgba(10,23,48,.45)`, shadow `0 12px 32px rgba(22,33,43,.2)`, header 16/600 padding 16/20 with bottom border `#e3e8ed`, body 14/20 padding 20, footer `#fafbfd` with top border, padding 12/20, gap 8, top offset 120; close button 30 px radius 8 with teal X | Applies to the small size. |
+| Danger button | `linear-gradient(180deg, #c42b1f, #b42318)`, white 13.5 / 700, no shadow | Not in §1. |
+| Secondary button | white, 1 px `#d3d9e2`, text `#101828`, card shadow | |
+| ErrorState (S-41) | circle 64 px `#eaeef2`, icon 30 px `#344054`, title 24 / 32 / 600, text 14 / 20 `#5b6577` (max 460), gap 11.5, "Reference:" 12 + id in IBM Plex Mono 13 | EmptyState differs: circle 56 px `#e4f1f4`, icon 26 px teal, title 16 / 24, padding 56 / 24, gap 10. |
+| Input | 36 px, radius 10, padding 8/12, text 14/regular (13 IBM Plex Mono for identifiers), invalid border `#b42318`, field error = 14 px icon + 12/16 text | |
+| Icons | Lucide, stroke 1.75 (24-unit grid): `CircleAlert` for info, warning, danger, field error and server error; `Check` for success and toast; `Clock` for rate limit and warning toast; `Database`, `Plus`, `X`, `Search`, `Lock` | Info, warning and danger banners share the same glyph; the tone is told by color and the bold lead word. |
+| Element type color | **none defined** | Decision (F-01): shape only, neutral color (`ElementTypeIcon`). |
+| Sidebar glyphs | Not identified (SVG paths are decomposed) | `/dev/ui` mock uses obvious Lucide glyphs; confirm in F-03. |
+
+## 9. Derived values (pending design confirmation)
+
+Not in this document nor in the Figma file; derived from existing tokens in `src/styles/theme.css`.
+Contrast computed per WCAG 2.x (text ≥ 4.5:1, components and focus ≥ 3:1).
+
+| Token | Derivation | Contrast |
+|---|---|---|
+| `--gradient-primary-hover` | each stop of `--gradient-primary` mixed 88 % with `navy-950` | white text 6.6:1 (top) / 8.0:1 (bottom) |
+| `--gradient-primary-active` | same, 76 % | white text 7.6:1 or more |
+| `--gradient-danger-hover` / `-active` | each stop of `--gradient-danger` mixed 88 % / 76 % with `ink-900` | white text 7.7:1 / 8.9:1 on `#b42318` stop; ≥ 5.7:1 on the light stop |
+| `--color-control-hover` | = `search-bg` `#f4f6fa` (secondary and ghost buttons, hover) | `ink-900` 15.2:1 · `primary` text 6.5:1 |
+| `--color-control-active` | = `disabled-bg` `#eaeef2` (secondary and ghost buttons, pressed) | `ink-900` 15.2:1 · `primary` text 6.0:1 |
+| `--color-border-control` | `border` 30 % + `ink-500` 70 % = `#7f8897`; border of form controls only (TextField, PasswordField, secondary Button). Dividers, cards and other decorative borders keep `border` `#d3d9e2`. Derived for accessibility (WCAG 1.4.11), pending confirmation in design | 3.6:1 on white · 3.3:1 on `canvas` (≥ 3:1 required) |
+| `--color-border-control-hover` | = `ink-500` `#5b6577` (control hover) | 5.9:1 on white · 5.3:1 on `canvas` |
+| `--color-focus-ring` | = `accent`; ring 2 px, offset 2 px (approved) | 3.9:1 on white · 3.6:1 on `canvas` · 4.1:1 on `navy-900` |
+| Input focus border | `accent` (seen on the focused field of S-42) | 3.9:1 on white |
+| Disabled secondary / ghost / danger | same flat look and opacity .45 as the disabled primary button (Figma only shows the primary) | exempt (inactive component) |
+| Ghost button | transparent, text `primary`, 1 px transparent border | `primary` on `canvas` 6.4:1 |
+| Modal `md` / `lg` widths | 560 px / 720 px (`sm` = 400 px is from Figma) | n/a |
+| Toast timing | default tone closes after 5 000 ms; warning tone stays until dismissed; both pause while hovered or focused; no cap on stacked toasts | n/a (WCAG 2.2.1: pause on hover / focus) |
+| Spinner | 3 px arc, `currentColor`, 0.25 track; static under `prefers-reduced-motion` | n/a |
+| Skeleton animation | none (the Figma frame is static) | n/a |
+| Text for a failed call with no answer (`NETWORK_ERROR`) | the S-46 offline banner copy: "You're offline. Changes can't be saved until the connection is back." | n/a |
+| Text for `UNEXPECTED_RESPONSE` and for an unknown error code | the `INTERNAL_ERROR` text of Table 59 without the reference sentence when there is no request id: "Something went wrong on our side. Try again in a moment." (with " Reference: <requestId>." when there is one) | n/a |
+| Neutral placeholders when `details` lacks a value | `<element>` → "resource", `<type>` → "item"; `<name>` → "this item", `<application>` → "this application", `<variable>` → "this variable" (a programming error: `console.warn` in development only). Also "its origin screen" (`<screen>` of `CONTEXT_SCREEN_MISMATCH`), "another function" (`<function>`), "a few minutes" (`<n>`); `TEMPLATE_INCOMPLETE` and `JIRA_PARTIAL_FAILURE` drop the missing list / key. `<n>` = 1 reads "1 minute" | n/a |
+| Field-level validation texts (by rule, replacing the server text) | `required` "<Label> is required." · `pattern` / `format` "<Label> isn't in a valid format." · `minLength` "<Label> is too short." · `maxLength` "<Label> is too long." · `enum` / `const` "Choose one of the available options for <Label>." · `minimum` / `maximum` / `range` "<Label> is below / above / outside the allowed range." · `minItems` "Add at least one item to <Label>." · `maxItems` "<Label> has too many items." · `unique` / `uniqueItems` "<Label> has repeated values. Each one must be unique." · `type` "<Label> has an unexpected type of value." · `CHECK` "<Label> doesn't meet the required conditions." · no label "This field" · unknown rule "This value isn't valid." | n/a |
+
+The Figma border of inputs and secondary buttons (`#d3d9e2`, 1.4:1 on white) does not meet WCAG 1.4.11 (3:1 for component
+boundaries); `--color-border-control` replaces it on those controls only. To confirm in design or in SDD v1.1.

@@ -1,0 +1,15 @@
+flowchart TB
+    main[main.tsx] --> prov
+    subgraph prov[Providers]
+        sess[SessionProvider<br/>access token in memory,<br/>single-flight refresh shared across tabs, rule R-4]
+        appc[ApplicationProvider<br/>selected application]
+    end
+    prov --> router[React Router<br/>/login and /apps/:appId/...]
+    router --> guard[RouteGuard<br/>hides what the role cannot do,<br/>the API still enforces it]
+    guard --> layout[Layout<br/>menu of the 11 modules filtered by role]
+    layout --> pages[Module pages, one folder per module<br/>screens, variables, collections, map, search,<br/>dashboard, audit, reports, review, onboarding, users]
+    pages --> ui[Shared UI components<br/>Tailwind]
+    pages --> flow[DependencyMap<br/>React Flow]
+    pages --> client
+    client[apiClient<br/>base /api/v1, Bearer token,<br/>on 401 refresh once and retry,<br/>error code and message to the user]
+    client -->|HTTPS| api[(Express API)]

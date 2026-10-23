@@ -1,0 +1,240 @@
+// messages: the user-facing text of every API error (SDD Table 59, with DUPLICATE_NAME per D-63 and the two
+// CONTEXT_SCREEN_MISMATCH cases per D-64). The server `message` is never shown.
+// getErrorMessage(error, ctx?) -> string | null (null: the code is handled silently, e.g. TOKEN_EXPIRED).
+//   ctx.element / ctx.type: page-provided values for the <element> and <type> placeholders.
+// getFieldErrors(error, fieldLabels?) -> one translated message per field of a VALIDATION_ERROR, by rule
+//   (the server's `details.fields[].message` is ignored). fieldLabels maps a field path to the label the
+//   screen shows; `items[0].name` also matches `items[].name`.
+import { isApiError, type ApiError } from './ApiError';
+
+export interface MessageContext {
+  element?: string;
+  type?: string;
+}
+
+export interface FieldError {
+  field: string;
+  rule: string;
+  message: string;
+}
+
+const UNKNOWN_VALUE_TEXT = "This value isn't valid.";
+const GENERIC_ELEMENT = 'resource';
+const GENERIC_TYPE = 'item';
+
+/** Codes that never reach the user (note of Table 59). */
+const SILENT_CODES: readonly string[] = ['UNAUTHENTICATED', 'TOKEN_EXPIRED', 'INVALID_SIGNATURE'];
+
+/** Static texts: no placeholders. */
+const STATIC_MESSAGES: Record<string, string> = {
+  VALIDATION_ERROR: 'Check the highlighted fields.',
+  INVALID_CREDENTIALS: 'The email or password is incorrect.',
+  REFRESH_INVALID: 'Your session ended. Sign in again to continue.',
+  FORBIDDEN: "Your role doesn't allow this action.",
+  EMAIL_TAKEN: 'A user with this email already exists.',
+  PAYLOAD_TOO_LARGE:
+    'This is too much text to save at once. Shorten the longest fields and try again.',
+  SCOPE_MISMATCH: 'Set applies to global variables and UpdateContext to context variables.',
+  CROSS_APPLICATION: 'You can only link elements of the same application.',
+  INVALID_ORIGIN_SCREEN: 'Context variables are created inside a screen, not in App (OnStart).',
+  LAST_ACTIVE_ADMIN: 'There must be at least one active administrator. Promote another user first.',
+  CANNOT_DEACTIVATE_SELF: "You can't deactivate your own account.",
+  RESERVED_ACCOUNT: "This is a system account and can't be changed.",
+  APPLICATION_ARCHIVED: "This application is archived, so its documentation can't be changed.",
+  REPORT_NOT_READY: 'Only ready reports can be published or downloaded.',
+  INVALID_TRANSITION: 'This screen changed status meanwhile. Reload to see its current status.',
+  NOT_IN_REVIEW: 'This screen is no longer in review. Reload to see its status.',
+  SCREEN_IN_REVIEW:
+    'This screen is in review. Edit it after the review, or withdraw it from review.',
+  COMMENT_REQUIRED: 'Write a comment: it is required to return the documentation.',
+  REVIEW_COMMENT_LOCKED: "Review decisions can't be edited.",
+  APP_CONTEXT_PROTECTED: "The App (OnStart) screen can't be deleted.",
+  STORY_NOT_IN_SCREEN: "That story doesn't belong to this screen. Refresh the list and pick again.",
+  JIRA_UNAVAILABLE: "Jira isn't responding. The to-do wasn't created. Try again in a few minutes.",
+  // Derived texts (DESIGN_REFERENCE.md section 9): the S-46 offline banner copy.
+  NETWORK_ERROR: "You're offline. Changes can't be saved until the connection is back.",
+};
+
+const INTERNAL_ERROR_TEXT = 'Something went wrong on our side. Try again in a moment.';
+
+function warnMissing(code: string, name: string): void {
+  if (import.meta.env.DEV) {
+    // A programming error: the API contract (or the call site) should always provide this value.
+    console.warn(`[messages] ${code}: missing "${name}" in details; using a neutral text.`);
+  }
+}
+
+function str(details: ApiError['details'], key: string): string | null {
+  const value = details?.[key];
+  return typeof value === 'string' && value !== '' ? value : null;
+}
+
+function article(noun: string): string {
+  return /^[aeiou]/i.test(noun) ? 'An' : 'A';
+}
+
+/** Value required by the code: warns in DEV and falls back to a neutral text. */
+function required(error: ApiError, key: string, fallback: string): string {
+  const value = str(error.details, key);
+  if (value !== null) return value;
+  warnMissing(error.code, key);
+  return fallback;
+}
+
+function minutesText(error: ApiError): string {
+  const fromDetails = error.details?.minutes;
+  const minutes =
+    typeof fromDetails === 'number' && fromDetails > 0
+      ? Math.ceil(fromDetails)
+      : error.retryAfterSeconds !== null
+        ? Math.max(1, Math.ceil(error.retryAfterSeconds / 60))
+        : null;
+  if (minutes === null) {
+    warnMissing(error.code, 'minutes');
+    return 'a few minutes';
+  }
+  return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+}
+
+function notFoundElement(error: ApiError, ctx: MessageContext): string {
+  const reason = str(error.details, 'reason');
+  if (reason === 'NOT_IMPLEMENTED' || reason === 'ROUTE_NOT_FOUND') return GENERIC_ELEMENT;
+  return str(error.details, 'element') ?? ctx.element ?? GENERIC_ELEMENT;
+}
+
+function internalErrorText(requestId: string | null): string {
+  return requestId ? `${INTERNAL_ERROR_TEXT} Reference: ${requestId}.` : INTERNAL_ERROR_TEXT;
+}
+
+/** The text for a code with placeholders, filled from `details` (or from the page context). */
+function dynamicMessage(error: ApiError, ctx: MessageContext): string | undefined {
+  switch (error.code) {
+    case 'NOT_FOUND':
+      return `This ${notFoundElement(error, ctx)} doesn't exist. It may have been deleted.`;
+    case 'PRECONDITION_FAILED': {
+      const element = str(error.details, 'element') ?? ctx.element ?? GENERIC_ELEMENT;
+      return `Someone else saved changes to this ${element} after you opened it. Reload to see their version.`;
+    }
+    case 'DUPLICATE_NAME': {
+      const type = str(error.details, 'type') ?? ctx.type ?? GENERIC_TYPE;
+      const name = required(error, 'name', 'this item');
+      const application = required(error, 'application', 'this application');
+      return `${article(type)} ${type} named ${name} already exists in ${application}.`;
+    }
+    case 'SCOPE_CONFLICT': {
+      const fn = required(error, 'function', 'another function');
+      return `You can't change the scope while collections assign this variable with ${fn}. Update those assignments first.`;
+    }
+    case 'CONTEXT_SCREEN_MISMATCH': {
+      const variable = required(error, 'variable', 'this variable');
+      if (error.details !== null && error.details.originScreenId === null) {
+        return `${variable} has no origin screen. Set its origin screen before linking it.`;
+      }
+      const screen = required(error, 'screen', 'its origin screen');
+      return `${variable} belongs to ${screen}. From here you can only write it with Navigate.`;
+    }
+    case 'TEMPLATE_INCOMPLETE': {
+      const fields = error.details?.fields;
+      const list = Array.isArray(fields)
+        ? fields.filter((f): f is string => typeof f === 'string').join(', ')
+        : '';
+      if (list === '') {
+        warnMissing(error.code, 'fields');
+        return 'Complete all seven template fields to submit for review.';
+      }
+      return `Complete all seven template fields to submit for review. Missing: ${list}.`;
+    }
+    case 'JIRA_PARTIAL_FAILURE': {
+      const key = str(error.details, 'key');
+      if (key === null) {
+        warnMissing(error.code, 'key');
+        return "The story was created, but the to-do wasn't. Try again to add it to that story.";
+      }
+      return `The story ${key} was created, but the to-do wasn't. Try again to add it to that story.`;
+    }
+    case 'RATE_LIMITED':
+      return `Too many attempts. Try again in ${minutesText(error)}.`;
+    case 'INTERNAL_ERROR':
+      return internalErrorText(error.requestId);
+    default:
+      return undefined;
+  }
+}
+
+/** User-facing text of an API error, or null when the code is handled silently. */
+export function getErrorMessage(error: ApiError, ctx: MessageContext = {}): string | null {
+  if (SILENT_CODES.includes(error.code)) return null;
+  const fixed = STATIC_MESSAGES[error.code];
+  if (fixed !== undefined) return fixed;
+  const dynamic = dynamicMessage(error, ctx);
+  if (dynamic !== undefined) return dynamic;
+  // UNEXPECTED_RESPONSE and any code this client does not know.
+  return internalErrorText(error.requestId);
+}
+
+/** Text for anything that was thrown: ApiError through the catalog, anything else as an unexpected error. */
+export function getThrownMessage(thrown: unknown, ctx: MessageContext = {}): string {
+  if (isApiError(thrown))
+    return getErrorMessage(thrown, ctx) ?? internalErrorText(thrown.requestId);
+  return INTERNAL_ERROR_TEXT;
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// VALIDATION_ERROR: one message per field, translated by rule (never from the server text).
+// Rules come from the Ajv keywords of the request validator (`details.fields[].rule`), the database rules of the
+// backend (`unique`, `CHECK`), and the pagination / sort checks (`range`, `enum`).
+
+type RuleText = (label: string) => string;
+
+const RULE_MESSAGES: Record<string, RuleText> = {
+  required: (label) => `${label} is required.`,
+  pattern: (label) => `${label} isn't in a valid format.`,
+  format: (label) => `${label} isn't in a valid format.`,
+  minLength: (label) => `${label} is too short.`,
+  maxLength: (label) => `${label} is too long.`,
+  enum: (label) => `Choose one of the available options for ${label}.`,
+  const: (label) => `Choose one of the available options for ${label}.`,
+  minimum: (label) => `${label} is below the allowed range.`,
+  maximum: (label) => `${label} is above the allowed range.`,
+  range: (label) => `${label} is outside the allowed range.`,
+  minItems: (label) => `Add at least one item to ${label}.`,
+  min_items: (label) => `Add at least one item to ${label}.`,
+  maxItems: (label) => `${label} has too many items.`,
+  uniqueItems: (label) => `${label} has repeated values. Each one must be unique.`,
+  unique: (label) => `${label} has repeated values. Each one must be unique.`,
+  type: (label) => `${label} has an unexpected type of value.`,
+  CHECK: (label) => `${label} doesn't meet the required conditions.`,
+};
+
+const DEFAULT_LABEL = 'This field';
+
+function labelFor(field: string, labels: Record<string, string>): string {
+  const exact = labels[field];
+  if (exact !== undefined) return exact;
+  const generic = labels[field.replace(/\[\d+\]/g, '[]')];
+  return generic ?? DEFAULT_LABEL;
+}
+
+/** Translated per-field messages of a VALIDATION_ERROR; empty for any other error. */
+export function getFieldErrors(
+  error: ApiError,
+  fieldLabels: Record<string, string> = {},
+): FieldError[] {
+  if (error.code !== 'VALIDATION_ERROR') return [];
+  const fields = error.details?.fields;
+  if (!Array.isArray(fields)) return [];
+  const result: FieldError[] = [];
+  for (const entry of fields as unknown[]) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const { field, rule } = entry as { field?: unknown; rule?: unknown };
+    if (typeof field !== 'string') continue;
+    const ruleName = typeof rule === 'string' ? rule : '';
+    const text = RULE_MESSAGES[ruleName];
+    result.push({
+      field,
+      rule: ruleName,
+      message: text ? text(labelFor(field, fieldLabels)) : UNKNOWN_VALUE_TEXT,
+    });
+  }
+  return result;
+}
