@@ -30,9 +30,10 @@ Aprobadas por la autora el 18 de octubre de 2026. Deben incorporarse al SDD v1.1
 | Git | `main` / `develop` / `feature/<nombre>`; Claude Code hace commits locales; push y PR los hace la autora. |
 | CI | GitHub Actions en ambos repositorios. |
 | Cuentas | Administrador inicial: `camilacastilloporras23@gmail.com`. Cuenta reservada: `integracion.jira@system.local`. |
+| Vite (D-67) | Vite 8.3.2 → **8.3.5** (patch, versión exacta) por GHSA-9jrq-w75r-8gcw, GHSA-rq7h-c2jc-7f22, GHSA-vfpm-58rq-9qcg y los avisos de `launch-editor` (GHSA-698v-4r3x-3vcv, GHSA-r825-w8mm-5pxw, GHSA-587h-7wmj-h5pm). Solo afectan al servidor de desarrollo, no al bundle de producción. Pendiente reflejarlo en el SDD v1.1 (Tabla 7). |
 
 ## Pendiente para el SDD v1.1
 
-D-60, D-61; Tabla 7 (helmet/cors marcados "Verified" sin estar en la base; Node 22.22); Figura 4
+D-60, D-61, D-67; Tabla 7 (Vite 8.3.5; helmet/cors marcados "Verified" sin estar en la base; Node 22.22); Figura 4
 (rutas `/apps/:appId` → rutas de D-57); §7.3.2 (el archivo de Figma no tiene página "Design system"
 ni variables; los tokens viven en `docs/design/DESIGN_REFERENCE.md` del frontend).
