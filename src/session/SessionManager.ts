@@ -329,6 +329,7 @@ export class SessionManager implements SessionPort {
     this.endReason = null;
     this.bootstrapError = null;
     this.version++;
+    this.generation++;
     this.phase = this.computePhase();
     this.schedule();
     this.emit();
