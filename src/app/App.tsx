@@ -1,8 +1,8 @@
-// Minimal placeholder application; replaced by providers, router and shell in F-03.
+// Application root: mounts the router. Providers and the shell arrive in F-03.
+import { RouterProvider } from 'react-router';
+
+import { router } from './router/router';
+
 export function App() {
-  return (
-    <main>
-      <h1>Documentación técnica</h1>
-    </main>
-  );
+  return <RouterProvider router={router} />;
 }
