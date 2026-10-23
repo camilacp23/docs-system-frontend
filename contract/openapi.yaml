@@ -1,0 +1,2839 @@
+openapi: 3.1.0
+info:
+  title: Technical Documentation System API
+  version: 0.3.2
+  summary: REST API contracts — SDD Interface Viewpoint (Bitácora 3, Activities 5 and 6)
+  description: |
+    Contracts of the eleven modules (41 operations of SRS Table 25), the
+    Applications resource (NFR-16), the saved-reports operations (FR-22), and
+    the Jira Cloud webhook.
+
+    Conventions (SDD Section 7.1):
+    - Base path `/api/v1`, HTTPS only (NFR-04), JSON UTF-8, fields in camelCase.
+    - Collections: `{ data, page, pageSize, total }`. Single resources: `{ data }`.
+    - Errors: `{ code, message, details }` (SRS 3.7).
+    - Element listings require `applicationId`.
+    - PUT replaces the whole editable representation, nested arrays included.
+    - Optional optimistic concurrency: send `If-Match` with the `ETag` of the
+      last read; a mismatch returns 412.
+    - Authorization: every endpoint validates the role (NFR-03); the role and
+      status are read from the database on each request, not trusted from the
+      token, so role changes and deactivations take effect immediately.
+    - Each operation declares `x-capability` (row of SRS Table 26), `x-roles`
+      (empty = no user role: public, session cookie, or Jira signature) and,
+      when a data rule applies, `x-rule`. The authorization middleware is
+      generated from these extensions (SDD Section 11).
+    - Every user-facing `message` is in English (CP-04). Values in `<...>` are
+      filled in from `details`.
+
+    Changes in 0.3.0 (design review of 5 Oct 2026, CP-01 to CP-11; SDD D-47 to D-58):
+    archived applications are read-only (CP-01); `GET /search` without `q` (CP-03);
+    English messages (CP-04); `topComponents` in onboarding (CP-05); reserved
+    integration account (CP-06); context variables belong to their origin screen
+    (CP-07); no editing while in review (CP-08); sort by `pendingSubtasks` (CP-09);
+    report `parameters` in the detail (CP-10); review decision on comments (CP-11).
+    No operation was added or removed (50).
+
+    Changes in 0.3.1 (Phase 3 decisions D-61 and D-64): `SessionResponse.data`
+    gains the required `sessionExpiresIn` (seconds until the absolute end of the
+    12 h session; returned by login and refresh). `CONTEXT_SCREEN_MISMATCH` also
+    covers a context variable that has no origin screen, with its own message and
+    `details`. The `ETag` header is now documented on the 201 of `POST /users` and
+    on the 200 of `PUT /users/{id}/role`. No operation was added or removed (50).
+
+    Changes in 0.3.2 (applications): the `ETag` header is now documented on the
+    201 of `POST /applications`. `GET /applications` states its default order
+    (name ascending, then id). `PUT /applications/{id}` states its full-replacement
+    semantics: an omitted `description` or `jiraProjectKey` is stored as null.
+    No operation was added or removed (50).
+
+    Error catalog (`code` -> HTTP status: `message`):
+
+    | Code | HTTP | Message |
+    |---|---|---|
+    | VALIDATION_ERROR | 400 | Check the highlighted fields. |
+    | INVALID_CREDENTIALS | 401 | The email or password is incorrect. |
+    | UNAUTHENTICATED, TOKEN_EXPIRED | 401 | Your session is not valid. Sign in again. |
+    | REFRESH_INVALID | 401 | Your session ended. Sign in again to continue. |
+    | INVALID_SIGNATURE | 401 | Invalid webhook signature. (Jira only) |
+    | FORBIDDEN | 403 | Your role doesn't allow this action. |
+    | NOT_FOUND | 404 | This <element> doesn't exist. It may have been deleted. |
+    | DUPLICATE_NAME | 409 | A <type> named <name> already exists in <application>. |
+    | EMAIL_TAKEN | 409 | A user with this email already exists. |
+    | REPORT_NOT_READY | 409 | Only ready reports can be published or downloaded. |
+    | PRECONDITION_FAILED | 412 | Someone else saved changes to this <element> after you opened it. Reload to see their version. |
+    | PAYLOAD_TOO_LARGE | 413 | This is too much text to save at once. Shorten the longest fields and try again. |
+    | SCOPE_MISMATCH | 422 | Set applies to global variables and UpdateContext to context variables. |
+    | SCOPE_CONFLICT | 422 | You can't change the scope while collections assign this variable with <function>. Update those assignments first. |
+    | CROSS_APPLICATION | 422 | You can only link elements of the same application. |
+    | INVALID_ORIGIN_SCREEN | 422 | Context variables are created inside a screen, not in App (OnStart). |
+    | CONTEXT_SCREEN_MISMATCH | 422 | <variable> belongs to <screen>. From here you can only write it with Navigate. (`details`: variableId, variable, originScreenId, screen, screenId, targetScreen) |
+    | CONTEXT_SCREEN_MISMATCH (no origin screen) | 422 | <variable> has no origin screen. Set its origin screen before linking it. (`details`: variableId, variable, originScreenId: null, screenId, targetScreen) |
+    | LAST_ACTIVE_ADMIN | 422 | There must be at least one active administrator. Promote another user first. |
+    | CANNOT_DEACTIVATE_SELF | 422 | You can't deactivate your own account. |
+    | RESERVED_ACCOUNT | 422 | This is a system account and can't be changed. |
+    | APPLICATION_ARCHIVED | 422 | This application is archived, so its documentation can't be changed. |
+    | INVALID_TRANSITION | 422 | This screen changed status meanwhile. Reload to see its current status. |
+    | NOT_IN_REVIEW | 422 | This screen is no longer in review. Reload to see its status. |
+    | SCREEN_IN_REVIEW | 422 | This screen is in review. Edit it after the review, or withdraw it from review. |
+    | TEMPLATE_INCOMPLETE | 422 | Complete all seven template fields to submit for review. Missing: <fields>. |
+    | COMMENT_REQUIRED | 422 | Write a comment: it is required to return the documentation. |
+    | REVIEW_COMMENT_LOCKED | 422 | Review decisions can't be edited. |
+    | APP_CONTEXT_PROTECTED | 422 | The App (OnStart) screen can't be deleted. |
+    | STORY_NOT_IN_SCREEN | 422 | That story doesn't belong to this screen. Refresh the list and pick again. |
+    | RATE_LIMITED | 429 | Too many attempts. Try again in <n> minutes. |
+    | INTERNAL_ERROR | 500 | Something went wrong on our side. Try again in a moment. Reference: <requestId>. |
+    | JIRA_UNAVAILABLE | 502 | Jira isn't responding. The to-do wasn't created. Try again in a few minutes. |
+    | JIRA_PARTIAL_FAILURE | 502 | The story <key> was created, but the to-do wasn't. Try again to add it to that story. |
+
+    Each operation that can answer 422 lists its possible codes in `x-error-codes`.
+  contact:
+    name: Enterprise Architecture Department
+  license:
+    name: Internal use - Enterprise Architecture Department, Universidad Latina de Costa Rica
+    identifier: LicenseRef-Internal-Use
+servers:
+  - url: https://{host}/api/v1
+    variables:
+      host:
+        default: localhost:3000
+security:
+  - bearerAuth: []
+tags:
+  - name: Auth
+    description: Module 1 — authentication (FR-01, NFR-01)
+  - name: Users
+    description: Module 1 — user administration (FR-02 to FR-04)
+  - name: Applications
+    description: Documented applications (NFR-16; proposed FR-27)
+  - name: Variables
+    description: Module 2 — variables (FR-05 to FR-07)
+  - name: Collections
+    description: Module 3 — collections (FR-08, FR-09)
+  - name: Screens
+    description: Module 4 — screens, documentation workflow, Jira tickets (FR-10 to FR-14)
+  - name: Dependencies
+    description: Module 5 — dependency map (FR-15, FR-16)
+  - name: Search
+    description: Module 6 — advanced search (FR-17, FR-18)
+  - name: Dashboard
+    description: Module 7 — indicators (FR-19)
+  - name: Audit
+    description: Module 8 — audit history (FR-20, FR-21)
+  - name: Reports
+    description: Module 9 — reports (FR-22, NFR-12)
+  - name: Comments
+    description: Module 10 — comments and review (FR-23, FR-24)
+  - name: Onboarding
+    description: Module 11 — onboarding (FR-25)
+  - name: Integrations
+    description: Jira Cloud webhook (FR-12, NFR-14)
+
+paths:
+  # ------------------------------------------------------------------ Auth
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      x-capability: 'Authentication (public)'
+      x-roles: []
+      summary: Log in with e-mail and password
+      description: |
+        Issues an access token (JWT, 8 h, NFR-01) in the body and a refresh token
+        in an HttpOnly, Secure, SameSite=Strict cookie scoped to `/api/v1/auth`.
+        The session ends 12 hours after login; refreshing never extends it.
+        Invalid credentials and inactive accounts return the same 401, so the
+        response does not reveal which e-mails exist. The reserved integration
+        account (the e-mail in `INTEGRATION_USER_EMAIL`, CP-06) always receives
+        that same 401 INVALID_CREDENTIALS, before the password is compared;
+        bcrypt still runs so the response time does not reveal it.
+        Rate limited per IP and e-mail.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+            example: { email: ana.mora@dept.local, password: 'S3gura!Clave2026' }
+      responses:
+        '200':
+          description: Authenticated
+          headers:
+            Set-Cookie:
+              description: Refresh token cookie
+              schema: { type: string, example: 'rt=<opaque>; Path=/api/v1/auth; HttpOnly; Secure; SameSite=Strict; Expires=<login + 12 h>' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/InvalidCredentials' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refreshSession
+      x-capability: 'Authentication (public)'
+      x-roles: []
+      summary: Renew the access token with the refresh-token cookie
+      description: |
+        Rotates the refresh token (the old one is revoked). Presenting a refresh
+        token that was already rotated revokes its whole family and returns 401.
+      security: [{ refreshCookie: [] }]
+      responses:
+        '200':
+          description: New access token; rotated cookie
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      x-capability: 'Authentication (public)'
+      x-roles: []
+      summary: End the session
+      description: Revokes the refresh token and clears the cookie. Idempotent.
+      security: [{ refreshCookie: [] }, {}]
+      responses:
+        '204': { description: Session closed }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # ----------------------------------------------------------------- Users
+  /users:
+    get:
+      tags: [Users]
+      operationId: listUsers
+      x-capability: 'User management and role assignment'
+      x-roles: [ADMINISTRATOR]
+      summary: List users
+      description: |
+        Roles: Administrator. The reserved integration account (CP-06) is never
+        listed, and `total` does not count it. The user screen opens filtered by
+        `status=ACTIVE`.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Query'
+        - name: role
+          in: query
+          schema: { $ref: '#/components/schemas/UserRole' }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/UserStatus' }
+        - name: sort
+          in: query
+          description: 'Allowed: name, email, createdAt, lastLoginAt; prefix - for descending.'
+          schema: { type: string, default: name, example: '-lastLoginAt' }
+      responses:
+        '200':
+          description: Page of users
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    required: [data]
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/User' } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Users]
+      operationId: createUser
+      x-capability: 'User management and role assignment'
+      x-roles: [ADMINISTRATOR]
+      summary: Register a user (FR-02)
+      description: 'Roles: Administrator.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserCreate' }
+            example: { name: Ana Mora, email: ana.mora@dept.local, password: 'S3gura!Clave2026', role: DEVELOPER }
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /users/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Users]
+      operationId: getUser
+      x-capability: 'User management and role assignment'
+      x-roles: [ADMINISTRATOR]
+      x-rule: SELF_OR_ROLE
+      summary: Get a user
+      description: |
+        Roles: Administrator, or any authenticated user for their own id.
+        The reserved integration account (CP-06) answers 404, as if it did not exist.
+      responses:
+        '200':
+          description: The user
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Users]
+      operationId: updateUser
+      x-capability: 'User management and role assignment'
+      x-roles: [ADMINISTRATOR]
+      summary: Update a user's data, status, or password
+      x-error-codes: [CANNOT_DEACTIVATE_SELF, LAST_ACTIVE_ADMIN, RESERVED_ACCOUNT]
+      description: |
+        Roles: Administrator. The role is changed only through `PUT /users/{id}/role`.
+        An administrator cannot deactivate themself, and the last active
+        administrator cannot be deactivated.
+        The reserved integration account (CP-06) cannot be changed: 422
+        RESERVED_ACCOUNT.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserUpdate' }
+      responses:
+        '200':
+          description: Updated
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/RuleViolation' }
+    delete:
+      tags: [Users]
+      operationId: deactivateUser
+      x-capability: 'User management and role assignment'
+      x-roles: [ADMINISTRATOR]
+      summary: Deactivate a user (logical deletion)
+      x-error-codes: [CANNOT_DEACTIVATE_SELF, LAST_ACTIVE_ADMIN, RESERVED_ACCOUNT]
+      description: |
+        Roles: Administrator. Sets status INACTIVE and revokes all the user's
+        refresh tokens; the row is never physically deleted, so authorship and
+        audit history remain intact (SDD D-09). Idempotent.
+        The reserved integration account (CP-06) cannot be changed: 422
+        RESERVED_ACCOUNT.
+      responses:
+        '204': { description: Deactivated }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/RuleViolation' }
+  /users/{id}/role:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    put:
+      tags: [Users]
+      operationId: changeUserRole
+      x-capability: 'User management and role assignment'
+      x-roles: [ADMINISTRATOR]
+      summary: Assign or change a user's role (FR-03)
+      x-error-codes: [LAST_ACTIVE_ADMIN, RESERVED_ACCOUNT]
+      description: |
+        Roles: Administrator. The last active administrator cannot be demoted. The
+        reserved integration account (CP-06) cannot be changed: 422 RESERVED_ACCOUNT.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              additionalProperties: false
+              properties:
+                role: { $ref: '#/components/schemas/UserRole' }
+            example: { role: READER }
+      responses:
+        '200':
+          description: Role changed
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/RuleViolation' }
+
+  # ---------------------------------------------------------- Applications
+  /applications:
+    get:
+      tags: [Applications]
+      operationId: listApplications
+      x-capability: 'Manage applications (proposed row)'
+      x-roles: [ADMINISTRATOR, DEVELOPER, READER]
+      summary: List documented applications
+      description: 'Roles: all. Ordered by name ascending (then id); there is no `sort` parameter.'
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Query'
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/ApplicationStatus' }
+      responses:
+        '200':
+          description: Page of applications
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    required: [data]
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/Application' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      tags: [Applications]
+      operationId: createApplication
+      x-capability: 'Manage applications (proposed row)'
+      x-roles: [ADMINISTRATOR]
+      summary: Register an application
+      description: 'Roles: Administrator. The App (OnStart) screen is created automatically.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ApplicationCreate' }
+            example: { name: SAR, description: Sistema de Administración de Requerimientos, platform: Power Apps, jiraProjectKey: TECHEA }
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApplicationEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /applications/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Applications]
+      operationId: getApplication
+      x-capability: 'Manage applications (proposed row)'
+      x-roles: [ADMINISTRATOR, DEVELOPER, READER]
+      summary: Get an application
+      description: 'Roles: all.'
+      responses:
+        '200':
+          description: The application
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApplicationEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Applications]
+      operationId: updateApplication
+      x-capability: 'Manage applications (proposed row)'
+      x-roles: [ADMINISTRATOR]
+      summary: Update or archive an application
+      description: |
+        Roles: Administrator. Applications are archived (status ARCHIVED), never deleted.
+        The body replaces the whole editable representation: an omitted `description`
+        or `jiraProjectKey` is stored as null (null `jiraProjectKey` = the department
+        default project, TECHEA).
+        `status: ARCHIVED` makes the application's documentation read-only for every
+        role (CP-01): writes on its variables, collections, screens, status, Jira
+        tickets, review and comments return 422 APPLICATION_ARCHIVED. Reports can
+        still be generated and downloaded. `status: ACTIVE` restores editing; this
+        operation is the only write accepted on an archived application.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/ApplicationWrite'
+                - type: object
+                  required: [status]
+                  properties:
+                    status: { $ref: '#/components/schemas/ApplicationStatus' }
+              unevaluatedProperties: false
+      responses:
+        '200':
+          description: Updated
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApplicationEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+
+  # ------------------------------------------------------------- Variables
+  /variables:
+    get:
+      tags: [Variables]
+      operationId: listVariables
+      x-capability: 'CRUD of variables and collections'
+      x-roles: [ADMINISTRATOR, DEVELOPER, READER]
+      summary: List variables of an application
+      description: 'Roles: all.'
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Query'
+        - $ref: '#/components/parameters/EnvironmentFilter'
+        - name: scope
+          in: query
+          schema: { $ref: '#/components/schemas/VariableScope' }
+        - name: dataType
+          in: query
+          schema: { $ref: '#/components/schemas/DataType' }
+        - name: originScreenId
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: untraced
+          in: query
+          description: true = only variables without an origin screen (FR-19 indicator)
+          schema: { type: boolean }
+        - name: sort
+          in: query
+          description: 'Allowed: name, scope, dataType, updatedAt; prefix - for descending.'
+          schema: { type: string, default: name }
+      responses:
+        '200':
+          description: Page of variables
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    required: [data]
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/VariableSummary' } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      tags: [Variables]
+      operationId: createVariable
+      x-capability: 'CRUD of variables and collections'
+      x-roles: [ADMINISTRATOR, DEVELOPER]
+      summary: Register a variable (FR-05, FR-07)
+      x-error-codes: [APPLICATION_ARCHIVED, CROSS_APPLICATION, INVALID_ORIGIN_SCREEN]
+      description: |
+        Roles: Administrator, Developer. The variable is linked to the dependency
+        map automatically (FR-06): it becomes a node, and its origin screen gets a
+        WRITE link with `usedIn = origin`.
+        When the application is archived it is read-only (CP-01): this operation
+        returns 422 APPLICATION_ARCHIVED for every role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VariableCreate' }
+            example:
+              applicationId: 1
+              name: gUsuarioActual
+              dataType: RECORD
+              scope: GLOBAL
+              description: Usuario autenticado; se carga al iniciar la aplicación.
+              originScreenId: 1
+              environments: [{ environment: DEV }, { environment: PROD }]
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VariableEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/RuleViolation' }
+  /variables/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Variables]
+      operationId: getVariable
+      x-capability: 'CRUD of variables and collections'
+      x-roles: [ADMINISTRATOR, DEVELOPER, READER]
+      summary: Get a variable with its links
+      description: 'Roles: all.'
+      responses:
+        '200':
+          description: The variable
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VariableEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Variables]
+      operationId: updateVariable
+      x-capability: 'CRUD of variables and collections'
+      x-roles: [ADMINISTRATOR, DEVELOPER]
+      summary: Replace a variable's editable data
+      x-error-codes: [APPLICATION_ARCHIVED, CROSS_APPLICATION, INVALID_ORIGIN_SCREEN, SCOPE_CONFLICT, CONTEXT_SCREEN_MISMATCH]
+      description: |
+        Roles: Administrator, Developer. `applicationId` cannot change.
+        Changing `scope` is rejected (422 SCOPE_CONFLICT) while Set/UpdateContext
+        links incompatible with the new scope exist.
+        When the application is archived it is read-only (CP-01): this operation
+        returns 422 APPLICATION_ARCHIVED for every role.
+        Context variables belong to their origin screen (CP-07): from any other screen
+        a context variable can only be written (WRITE, as Navigate does);
+        READ/READ_WRITE links and UpdateContext assignments elsewhere, and any link to
+        a context variable without origin, return 422 CONTEXT_SCREEN_MISMATCH.
+        Enforced by the database at commit (migration context_screen_rule).
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VariableUpdate' }
+      responses:
+        '200':
+          description: Updated
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VariableEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/RuleViolation' }
+    delete:
+      tags: [Variables]
+      operationId: deleteVariable
+      x-capability: 'CRUD of variables and collections'
+      x-roles: [ADMINISTRATOR, DEVELOPER]
+      summary: Delete a variable
+      x-error-codes: [APPLICATION_ARCHIVED]
+      description: |
+        Roles: Administrator, Developer. Its links and dependencies are deleted in
+        cascade; the audit log keeps every deleted row (NFR-20).
+        When the application is archived it is read-only (CP-01): this operation
+        returns 422 APPLICATION_ARCHIVED for every role.
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/RuleViolation' }
+  /variables/{id}/dependencies:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Variables]
+      operationId: getVariableDependencies
+      x-capability: 'CRUD of variables and collections'
+      x-roles: [ADMINISTRATOR, DEVELOPER, READER]
+      summary: Where a variable is created and used (FR-06)
+      description: 'Roles: all. Bounded result (one node and its neighbors), so it is not paginated.'
+      responses:
+        '200':
+          description: Usage of the variable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VariableDependenciesEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ----------------------------------------------------------- Collections
+  /collections:
+    get:
+      tags: [Collections]
+      operationId: listCollections
+      x-capability: 'CRUD of variables and collections'
+      x-roles: [ADMINISTRATOR, DEVELOPER, READER]
+      summary: List collections of an application
+      description: 'Roles: all.'
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Query'
+        - $ref: '#/components/parameters/EnvironmentFilter'
+        - name: undocumented
+          in: query
+          description: true = only collections not linked to any screen (FR-19 definition, SDD D-14)
+          schema: { type: boolean }
+        - name: sort
+          in: query
+          description: 'Allowed: name, updatedAt; prefix - for descending.'
+          schema: { type: string, default: name }
+      responses:
+        '200':
+          description: Page of collections
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    required: [data]
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/CollectionSummary' } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      tags: [Collections]
+      operationId: createCollection
+      x-capability: 'CRUD of variables and collections'
+      x-roles: [ADMINISTRATOR, DEVELOPER]
+      summary: Register a collection with its fields and assignments (FR-08, FR-09)
+      x-error-codes: [APPLICATION_ARCHIVED, SCOPE_MISMATCH, CROSS_APPLICATION, CONTEXT_SCREEN_MISMATCH]
+      description: |
+        Roles: Administrator, Developer. When the application is archived it is
+        read-only (CP-01): this operation returns 422 APPLICATION_ARCHIVED for every
+        role.
+        Context variables belong to their origin screen (CP-07): from any other screen
+        a context variable can only be written (WRITE, as Navigate does);
+        READ/READ_WRITE links and UpdateContext assignments elsewhere, and any link to
+        a context variable without origin, return 422 CONTEXT_SCREEN_MISMATCH.
+        Enforced by the database at commit (migration context_screen_rule).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CollectionCreate' }
+            example:
+              applicationId: 1
+              name: colSolicitudes
+              creationCondition: ClearCollect al entrar a la pantalla, filtrando por el usuario actual
+              environments: [{ environment: DEV }]
+              fields:
+                - { name: Id, dataType: NUMBER, position: 0 }
+                - { name: Estado, dataType: TEXT, description: Estado de la solicitud, position: 1 }
+              variableAssignments:
+                - { variableId: 12, screenId: 3, assignmentFunction: SET, tableFunction: CountRows, usedIn: OnVisible }
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CollectionEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/RuleViolation' }
+  /collections/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Collections]
+      operationId: getCollection
+      x-capability: 'CRUD of variables and collections'
+      x-roles: [ADMINISTRATOR, DEVELOPER, READER]
+      summary: Get a collection with fields and assignments
+      description: 'Roles: all.'
+      responses:
+        '200':
+          description: The collection
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CollectionEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Collections]
+      operationId: updateCollection
+      x-capability: 'CRUD of variables and collections'
+      x-roles: [ADMINISTRATOR, DEVELOPER]
+      summary: Replace a collection, its fields and its assignments
+      x-error-codes: [APPLICATION_ARCHIVED, SCOPE_MISMATCH, CROSS_APPLICATION, CONTEXT_SCREEN_MISMATCH]
+      description: |
+        Roles: Administrator, Developer. Nested items are matched by `id`: items
+        with an id are updated, items without one are created, and existing items
+        left out are deleted, so the audit log keeps one history per field.
+        When the application is archived it is read-only (CP-01): this operation
+        returns 422 APPLICATION_ARCHIVED for every role.
+        Context variables belong to their origin screen (CP-07): from any other screen
+        a context variable can only be written (WRITE, as Navigate does);
+        READ/READ_WRITE links and UpdateContext assignments elsewhere, and any link to
+        a context variable without origin, return 422 CONTEXT_SCREEN_MISMATCH.
+        Enforced by the database at commit (migration context_screen_rule).
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CollectionUpdate' }
+      responses:
+        '200':
+          description: Updated
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CollectionEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/RuleViolation' }
+    delete:
+      tags: [Collections]
+      operationId: deleteCollection
+      x-capability: 'CRUD of variables and collections'
+      x-roles: [ADMINISTRATOR, DEVELOPER]
+      summary: Delete a collection
+      x-error-codes: [APPLICATION_ARCHIVED]
+      description: |
+        Roles: Administrator, Developer. Fields, links and dependencies are deleted in
+        cascade; the audit log keeps them. When the application is archived it is
+        read-only (CP-01): this operation returns 422 APPLICATION_ARCHIVED for every
+        role.
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/RuleViolation' }
+  /collections/{id}/fields:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Collections]
+      operationId: listCollectionFields
+      x-capability: 'CRUD of variables and collections'
+      x-roles: [ADMINISTRATOR, DEVELOPER, READER]
+      summary: Field structure of a collection (FR-08)
+      description: 'Roles: all. Ordered by position.'
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 100 }
+      responses:
+        '200':
+          description: Fields
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    required: [data]
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/CollectionField' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # --------------------------------------------------------------- Screens
+  /screens:
+    get:
+      tags: [Screens]
+      operationId: listScreens
+      x-capability: 'Create and edit screens (template)'
+      x-roles: [ADMINISTRATOR, DEVELOPER, READER]
+      summary: List screens of an application (FR-10, FR-14)
+      description: 'Roles: all.'
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Query'
+        - name: documentationStatus
+          in: query
+          schema: { $ref: '#/components/schemas/DocumentationStatus' }
+        - name: authorId
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: sort
+          in: query
+          description: 'Allowed: name, documentationStatus, updatedAt, pendingSubtasks; prefix - for descending. The App (OnStart) screen is always listed first.'
+          schema: { type: string, default: name }
+      responses:
+        '200':
+          description: Page of screens
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    required: [data]
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/ScreenSummary' } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      tags: [Screens]
+      operationId: createScreen
+      x-capability: 'Create and edit screens (template)'
+      x-roles: [ADMINISTRATOR, DEVELOPER]
+      summary: Document a new screen with the standard template (FR-10, FR-11, FR-13)
+      x-error-codes: [APPLICATION_ARCHIVED, CROSS_APPLICATION, CONTEXT_SCREEN_MISMATCH]
+      description: |
+        Roles: Administrator, Developer. The caller becomes the author. The screen
+        starts as UNDOCUMENTED, or DRAFT when any template field has content.
+        Components, their uses (component -> variable/collection), variable and
+        collection links, and navigations are written in the same request (SDD D-29).
+        When the application is archived it is read-only (CP-01): this operation
+        returns 422 APPLICATION_ARCHIVED for every role.
+        Context variables belong to their origin screen (CP-07): from any other screen
+        a context variable can only be written (WRITE, as Navigate does);
+        READ/READ_WRITE links and UpdateContext assignments elsewhere, and any link to
+        a context variable without origin, return 422 CONTEXT_SCREEN_MISMATCH.
+        Enforced by the database at commit (migration context_screen_rule).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ScreenCreate' }
+            example:
+              applicationId: 1
+              name: Solicitudes
+              miroLink: https://miro.com/app/board/uXjVHm4trbw=/
+              template: { onStart: null, workingProcess: Lista las solicitudes del usuario y permite filtrarlas por estado., architecture: null, dataModel: null, requirements: null, knownIssues: null, risks: null }
+              components:
+                - name: btnFiltrar
+                  type: Button
+                  onSelect: 'UpdateContext({locFiltro: drpEstado.Selected.Value})'
+                  uses: [{ targetType: VARIABLE, targetId: 15 }]
+              variableLinks: [{ variableId: 15, accessMode: WRITE, usedIn: btnFiltrar.OnSelect }]
+              collectionLinks: [{ collectionId: 20, accessMode: READ, usedIn: galSolicitudes.Items }]
+              navigations: [{ targetScreenId: 4, description: Al seleccionar una solicitud }]
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScreenEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/RuleViolation' }
+  /screens/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Screens]
+      operationId: getScreen
+      x-capability: 'Create and edit screens (template)'
+      x-roles: [ADMINISTRATOR, DEVELOPER, READER]
+      summary: Get a screen with its template, components and links
+      description: 'Roles: all.'
+      responses:
+        '200':
+          description: The screen
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScreenEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Screens]
+      operationId: updateScreen
+      x-capability: 'Create and edit screens (template)'
+      x-roles: [ADMINISTRATOR, DEVELOPER]
+      summary: Replace a screen's documentation
+      x-error-codes: [APPLICATION_ARCHIVED, CROSS_APPLICATION, CONTEXT_SCREEN_MISMATCH, SCREEN_IN_REVIEW]
+      description: |
+        Roles: Administrator, Developer. Nested arrays are matched by `id`
+        (update / create / delete). Links with `usedIn = origin` are maintained by
+        the variables module and are neither required nor deletable here.
+        Editing the template of an APPROVED screen returns it to IN_PROGRESS; an
+        UNDOCUMENTED screen that receives content becomes DRAFT. Status itself is
+        changed only through `/status` and `/review`.
+        When the application is archived it is read-only (CP-01): this operation
+        returns 422 APPLICATION_ARCHIVED for every role.
+        Context variables belong to their origin screen (CP-07): from any other screen
+        a context variable can only be written (WRITE, as Navigate does);
+        READ/READ_WRITE links and UpdateContext assignments elsewhere, and any link to
+        a context variable without origin, return 422 CONTEXT_SCREEN_MISMATCH.
+        Enforced by the database at commit (migration context_screen_rule).
+        A screen IN_REVIEW cannot be edited (CP-08): 422 SCREEN_IN_REVIEW. Withdraw it
+        from review (PUT /screens/{id}/status, IN_PROGRESS) or wait for the decision.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ScreenUpdate' }
+      responses:
+        '200':
+          description: Updated (the response shows the resulting status)
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScreenEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/RuleViolation' }
+    delete:
+      tags: [Screens]
+      operationId: deleteScreen
+      x-capability: 'Create and edit screens (template)'
+      x-roles: [ADMINISTRATOR, DEVELOPER]
+      summary: Delete a screen
+      x-error-codes: [APPLICATION_ARCHIVED, APP_CONTEXT_PROTECTED]
+      description: |
+        Roles: Administrator, Developer. Components, links, comments and local
+        ticket records are deleted in cascade (the Jira issues stay in Jira);
+        variables created in it keep existing without origin. The App (OnStart)
+        screen cannot be deleted (422 APP_CONTEXT_PROTECTED).
+        When the application is archived it is read-only (CP-01): this operation
+        returns 422 APPLICATION_ARCHIVED for every role.
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/RuleViolation' }
+  /screens/{id}/status:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    put:
+      tags: [Screens]
+      operationId: changeScreenStatus
+      x-capability: 'Create and edit screens (template)'
+      x-roles: [ADMINISTRATOR, DEVELOPER]
+      summary: Move a screen through the documentation workflow (FR-14, FR-24)
+      x-error-codes: [APPLICATION_ARCHIVED, INVALID_TRANSITION, TEMPLATE_INCOMPLETE]
+      description: |
+        Roles: Administrator, Developer. Allowed transitions (SDD Section 9):
+        UNDOCUMENTED <-> DRAFT <-> IN_PROGRESS -> IN_REVIEW (submit),
+        IN_REVIEW -> IN_PROGRESS (withdraw), APPROVED -> IN_PROGRESS (reopen).
+        APPROVED is reached only through `POST /screens/{id}/review`.
+        Submitting requires the seven template fields to have content.
+        When the application is archived it is read-only (CP-01): this operation
+        returns 422 APPLICATION_ARCHIVED for every role.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              additionalProperties: false
+              properties:
+                status: { type: string, enum: [UNDOCUMENTED, DRAFT, IN_PROGRESS, IN_REVIEW] }
+            example: { status: IN_REVIEW }
+      responses:
+        '200':
+          description: New status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScreenEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/RuleViolation' }
+  /screens/{id}/jira-ticket:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Screens]
+      operationId: createJiraTicket
+      x-capability: 'Create and query Jira tickets'
+      x-roles: [ADMINISTRATOR, DEVELOPER]
+      summary: Create a "future to do" item as a Jira Subtask (FR-12)
+      x-error-codes: [APPLICATION_ARCHIVED, STORY_NOT_IN_SCREEN]
+      description: |
+        Roles: Administrator, Developer. Hierarchy Epic (one per screen) -> Story
+        -> Subtask (SDD D-06, D-15). In one request the server:
+        1. creates the screen's Epic in Jira if it does not exist yet;
+        2. uses the Story given by `storyId`, or creates `newStory` under the Epic;
+        3. creates the Subtask under that Story.
+        Each issue is saved locally as soon as Jira confirms it. If Jira fails
+        midway, the response is 502 JIRA_PARTIAL_FAILURE with the issues already
+        created in `details`; retrying with the returned `storyId` never
+        duplicates them.
+        When the application is archived it is read-only (CP-01): this operation
+        returns 422 APPLICATION_ARCHIVED for every role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/JiraTicketCreate' }
+            example:
+              newStory: { summary: Mejoras de la pantalla Solicitudes }
+              subtask: { summary: Validar el formato del correo antes de guardar, description: Hoy se guarda sin validar (ver Known issues). }
+      responses:
+        '201':
+          description: Subtask created (and Epic/Story when they were missing)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JiraTicketCreatedEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/RuleViolation' }
+        '502': { $ref: '#/components/responses/JiraError' }
+  /screens/{id}/jira-tickets:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Screens]
+      operationId: listJiraTickets
+      x-capability: 'Create and query Jira tickets'
+      x-roles: [ADMINISTRATOR, DEVELOPER, READER]
+      summary: Jira tickets of a screen as a tree (FR-12)
+      description: |
+        Roles: all (Reader: query only). Served from the local copy kept up to
+        date by the webhook. `refresh=true` also queries Jira (JQL search); if
+        Jira is unavailable the local copy is returned with `sync.stale = true`
+        instead of failing (NFR-14).
+      parameters:
+        - name: refresh
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Ticket tree
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JiraTreeEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ------------------------------------------------- Comments and review
+  /screens/{id}/comments:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Comments]
+      operationId: listComments
+      x-capability: 'Comment on screens'
+      x-roles: [ADMINISTRATOR, DEVELOPER, READER]
+      summary: Comments of a screen, oldest first (FR-23)
+      description: 'Roles: all.'
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Page of comments
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    required: [data]
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/Comment' } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Comments]
+      operationId: createComment
+      x-capability: 'Comment on screens'
+      x-roles: [ADMINISTRATOR, DEVELOPER, READER]
+      summary: Comment on a screen (FR-23)
+      x-error-codes: [APPLICATION_ARCHIVED]
+      description: |
+        Roles: all. When the application is archived it is read-only (CP-01): this
+        operation returns 422 APPLICATION_ARCHIVED for every role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CommentWrite' }
+            example: { text: El filtro por estado no considera las solicitudes anuladas. }
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CommentEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/RuleViolation' }
+  /comments/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    put:
+      tags: [Comments]
+      operationId: updateComment
+      x-capability: 'Comment on screens'
+      x-roles: [ADMINISTRATOR, DEVELOPER, READER]
+      x-rule: AUTHOR_ONLY
+      summary: Edit a comment
+      x-error-codes: [APPLICATION_ARCHIVED, REVIEW_COMMENT_LOCKED]
+      description: |
+        Roles: the comment's author only. The previous text remains in the audit log.
+        When the application is archived it is read-only (CP-01): this operation
+        returns 422 APPLICATION_ARCHIVED for every role.
+        Review comments (reviewDecision not null, CP-11) are the record of the
+        decision and cannot be edited: 422 REVIEW_COMMENT_LOCKED.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CommentWrite' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CommentEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/RuleViolation' }
+  /screens/{id}/review:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Comments]
+      operationId: reviewScreen
+      x-capability: 'Approve documentation (review workflow)'
+      x-roles: [ADMINISTRATOR]
+      summary: Approve or return a screen in review (FR-24)
+      x-error-codes: [APPLICATION_ARCHIVED, NOT_IN_REVIEW, COMMENT_REQUIRED]
+      description: |
+        Roles: Administrator. Requires status IN_REVIEW. APPROVE -> APPROVED;
+        RETURN -> IN_PROGRESS and requires a comment. The decision's comment is
+        stored as a review comment on the screen, with `reviewDecision` = the
+        decision (CP-11): RETURN always creates one; APPROVE creates one only when
+        a non-empty comment is sent. Only this operation writes `reviewDecision`.
+        Each decision is recorded as a business event
+        (DOCUMENTATION_APPROVED / DOCUMENTATION_RETURNED).
+        When the application is archived it is read-only (CP-01): this operation
+        returns 422 APPLICATION_ARCHIVED for every role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewRequest' }
+            example: { decision: RETURN, comment: Falta documentar los riesgos de la galería. }
+      responses:
+        '200':
+          description: Decision applied
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScreenEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/RuleViolation' }
+
+  # -------------------------------------------------------- Dependencies
+  /dependencies/graph:
+    get:
+      tags: [Dependencies]
+      operationId: getDependencyGraph
+      x-capability: 'View dependency map'
+      x-roles: [ADMINISTRATOR, DEVELOPER, READER]
+      summary: Dependency graph of an application (FR-15)
+      description: |
+        Roles: all. Built by joining the associative entities, the origin column,
+        `component.screen_id`, and `dependency` (SDD Section 10). A graph is one
+        resource, so it is not paginated; department scale is hundreds of nodes
+        (NFR-11). Optional filters reduce it.
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+        - name: types
+          in: query
+          description: Node types to include (comma-separated)
+          style: form
+          explode: false
+          schema: { type: array, items: { $ref: '#/components/schemas/ElementType' } }
+        - $ref: '#/components/parameters/EnvironmentFilter'
+      responses:
+        '200':
+          description: Nodes and edges
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GraphEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /dependencies/{type}/{id}:
+    get:
+      tags: [Dependencies]
+      operationId: getNodeNeighborhood
+      x-capability: 'View dependency map'
+      x-roles: [ADMINISTRATOR, DEVELOPER, READER]
+      summary: Neighborhood of one element (FR-15, FR-16)
+      description: 'Roles: all. Same shape as the graph, centered on one node.'
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema: { type: string, enum: [screens, variables, collections, components] }
+        - $ref: '#/components/parameters/Id'
+        - name: depth
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 3, default: 1 }
+      responses:
+        '200':
+          description: Nodes and edges around the element
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GraphEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # -------------------------------------------------------------- Search
+  /search:
+    get:
+      tags: [Search]
+      operationId: search
+      x-capability: 'Advanced search'
+      x-roles: [ADMINISTRATOR, DEVELOPER, READER]
+      summary: Advanced search across documented elements (FR-17, FR-18)
+      description: |
+        Roles: all. The `query` and `filters` of SRS Table 25 are expressed as
+        `q` plus one parameter per filter, consistent with the other listings.
+        `q` is optional (CP-03): a request may use filters only, but a request
+        without `q` and without any filter (`types`, `environment`,
+        `documentationStatus`, `scope`) returns 400 VALIDATION_ERROR (service rule).
+        Filters that apply only to some element types do not exclude the others:
+        `environment` applies to variables and collections, `documentationStatus`
+        to screens, and `scope` to variables.
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+        - name: q
+          in: query
+          required: false
+          description: Text to search (2 to 100 characters). Optional when at least one filter is sent.
+          schema: { type: string, minLength: 2, maxLength: 100 }
+        - name: types
+          in: query
+          style: form
+          explode: false
+          schema: { type: array, items: { $ref: '#/components/schemas/ElementType' } }
+        - $ref: '#/components/parameters/EnvironmentFilter'
+        - name: documentationStatus
+          in: query
+          schema: { $ref: '#/components/schemas/DocumentationStatus' }
+        - name: scope
+          in: query
+          schema: { $ref: '#/components/schemas/VariableScope' }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Page of results, exact name matches first
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    required: [data]
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/SearchResult' } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  # ----------------------------------------------------------- Dashboard
+  /dashboard/indicators:
+    get:
+      tags: [Dashboard]
+      operationId: getIndicators
+      x-capability: 'Indicator dashboard'
+      x-roles: [ADMINISTRATOR, DEVELOPER, READER]
+      x-rule: READER_OVERVIEW
+      summary: Documentation indicators (FR-19)
+      description: |
+        Roles: all. Readers get the overview (aggregates only): `recentActivity`
+        is omitted for them, as SRS Table 26 grants Readers no audit access.
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      responses:
+        '200':
+          description: Indicators
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IndicatorsEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  # --------------------------------------------------------------- Audit
+  /audit-log:
+    get:
+      tags: [Audit]
+      operationId: listAuditLog
+      x-capability: 'Query audit history'
+      x-roles: [ADMINISTRATOR, DEVELOPER]
+      x-rule: DEVELOPER_OWN_ACTIONS
+      summary: Query the audit history (FR-21)
+      description: |
+        Roles: Administrator (all records); Developer (own actions only: the
+        server forces `actorUserId` to the caller, and asking for another user
+        returns 403). Readers have no access. Newest first.
+      parameters:
+        - name: applicationId
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: entityType
+          in: query
+          schema: { type: string, enum: [app_user, application, screen, variable, collection, collection_field, component, element_environment, screen_variable, screen_collection, variable_collection, dependency, jira_ticket, comment, report] }
+        - name: entityId
+          in: query
+          schema: { type: string, maxLength: 50 }
+        - name: actorUserId
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: action
+          in: query
+          schema: { type: string, enum: [CREATE, UPDATE, DELETE, EVENT] }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Page of audit records
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    required: [data]
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/AuditEntry' } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ------------------------------------------------------------- Reports
+  /reports/pdf:
+    post:
+      tags: [Reports]
+      operationId: generatePdfReport
+      x-capability: 'Generate and export reports'
+      x-roles: [ADMINISTRATOR, DEVELOPER]
+      summary: Request a PDF report (FR-22)
+      description: |
+        Roles: Administrator, Developer. Generation is asynchronous (NFR-12): the
+        report is saved with status PENDING and the client polls
+        `GET /reports/{id}` until READY or FAILED.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReportRequest' }
+            example: { applicationId: 1, title: Documentación de SAR - octubre 2026, scope: { elementTypes: [SCREEN, VARIABLE, COLLECTION], documentationStatus: [APPROVED], includeDependencies: true }, publish: true }
+      responses:
+        '202': { $ref: '#/components/responses/ReportAccepted' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /reports/excel:
+    post:
+      tags: [Reports]
+      operationId: generateExcelReport
+      x-capability: 'Generate and export reports'
+      x-roles: [ADMINISTRATOR, DEVELOPER]
+      summary: Request an Excel (.xlsx) report (FR-22)
+      description: 'Roles: Administrator, Developer. Same behavior as the PDF report.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReportRequest' }
+      responses:
+        '202': { $ref: '#/components/responses/ReportAccepted' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /reports:
+    get:
+      tags: [Reports]
+      operationId: listReports
+      x-capability: 'Generate and export reports'
+      x-roles: [ADMINISTRATOR, DEVELOPER, READER]
+      x-rule: READER_PUBLISHED_ONLY
+      summary: Saved reports
+      description: 'Roles: Administrator, Developer (all); Reader (published only, enforced by the server).'
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+        - name: published
+          in: query
+          schema: { type: boolean }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Page of reports, newest first
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    required: [data]
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/Report' } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /reports/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Reports]
+      operationId: getReport
+      x-capability: 'Generate and export reports'
+      x-roles: [ADMINISTRATOR, DEVELOPER, READER]
+      x-rule: READER_PUBLISHED_ONLY
+      summary: Report status, metadata and generation parameters
+      description: |
+        Roles: Administrator, Developer; Reader only if published (otherwise 404).
+        The detail includes `parameters` (format, scope, publish), stored in
+        `report.parameters` (CP-10), so "Generate again" can request a new report
+        with the same configuration. The list (`GET /reports`) does not include them.
+      responses:
+        '200':
+          description: The report
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReportDetailEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /reports/{id}/file:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Reports]
+      operationId: downloadReport
+      x-capability: 'Generate and export reports'
+      x-roles: [ADMINISTRATOR, DEVELOPER, READER]
+      x-rule: READER_PUBLISHED_ONLY
+      summary: Download the generated file
+      description: 'Roles: as GET /reports/{id}. 409 REPORT_NOT_READY while PENDING or FAILED.'
+      responses:
+        '200':
+          description: File
+          headers:
+            Content-Disposition:
+              schema: { type: string, example: 'attachment; filename="documentacion-sar-2026-10.pdf"' }
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /reports/{id}/publication:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    put:
+      tags: [Reports]
+      operationId: setReportPublication
+      x-capability: 'Generate and export reports'
+      x-roles: [ADMINISTRATOR, DEVELOPER]
+      summary: Publish or unpublish a saved report
+      description: 'Roles: Administrator, Developer. Only READY reports can be published.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [isPublished]
+              additionalProperties: false
+              properties:
+                isPublished: { type: boolean }
+            example: { isPublished: true }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReportEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: The report is not READY
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { code: REPORT_NOT_READY, message: "Only ready reports can be published or downloaded.", details: { status: PENDING } }
+
+  # ----------------------------------------------------------- Onboarding
+  /onboarding/summary:
+    get:
+      tags: [Onboarding]
+      operationId: getOnboardingSummary
+      x-capability: 'Onboarding (FR-25, no row in Table 26)'
+      x-roles: [ADMINISTRATOR, DEVELOPER, READER]
+      summary: Guided overview of an application for new developers (FR-25)
+      description: 'Roles: all.'
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      responses:
+        '200':
+          description: Summary
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OnboardingEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  # ---------------------------------------------------------- Jira webhook
+  /integrations/jira/webhook:
+    post:
+      tags: [Integrations]
+      operationId: receiveJiraWebhook
+      x-capability: 'Jira integration (signed webhook)'
+      x-roles: []
+      x-rule: JIRA_SIGNATURE
+      summary: Receive issue events from Jira Cloud (FR-12, NFR-14)
+      description: |
+        Called by Jira, not by users. Registered as an admin webhook on project
+        TECHEA (JQL `project = TECHEA`, events issue updated and issue deleted)
+        with a secret. The server verifies `X-Hub-Signature` (HMAC-SHA256 of the
+        raw body, timing-safe comparison) before parsing; ignores issues not
+        tracked locally; ignores events older than the local copy (`timestamp`
+        earlier than `last_synced_at`), which makes repeated and out-of-order
+        deliveries harmless; and updates status, status category, summary, key,
+        and parent, or deletes the local record when the issue was deleted.
+        `X-Atlassian-Webhook-Identifier` is only logged for tracing.
+        Writes are attributed to the reserved integration account (SDD D-31): the
+        user whose e-mail is `INTEGRATION_USER_EMAIL` (CP-06; READER, INACTIVE).
+        It always answers quickly; heavy work is never done inline.
+      security: [{ jiraSignature: [] }]
+      parameters:
+        - name: X-Hub-Signature
+          in: header
+          required: true
+          schema: { type: string, pattern: '^sha256=[0-9a-f]{64}$' }
+        - name: X-Atlassian-Webhook-Identifier
+          in: header
+          required: false
+          schema: { type: string, maxLength: 100 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/JiraWebhookEvent' }
+            example:
+              webhookEvent: 'jira:issue_updated'
+              timestamp: 1727548800123
+              issue:
+                id: '10003'
+                key: TECHEA-3
+                fields:
+                  summary: Validar el formato del correo antes de guardar
+                  status: { name: En curso, statusCategory: { key: indeterminate } }
+                  issuetype: { name: Subtask, hierarchyLevel: -1 }
+                  parent: { id: '10002', key: TECHEA-2 }
+      responses:
+        '204': { description: 'Processed, ignored, or duplicate' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401':
+          description: Missing or invalid signature
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { code: INVALID_SIGNATURE, message: "Invalid webhook signature.", details: null }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token (8 h). Claims and rotation are specified in the Security viewpoint (SDD Section 11).
+    refreshCookie:
+      type: apiKey
+      in: cookie
+      name: rt
+      description: Opaque refresh token (HttpOnly, Secure, SameSite=Strict, Path=/api/v1/auth).
+    jiraSignature:
+      type: apiKey
+      in: header
+      name: X-Hub-Signature
+      description: 'HMAC-SHA256 of the raw body with the webhook secret (environment variable), format sha256=<hex>.'
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    ApplicationId:
+      name: applicationId
+      in: query
+      required: true
+      description: Application whose elements are listed (NFR-16).
+      schema: { type: integer, minimum: 1 }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      name: pageSize
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    Query:
+      name: q
+      in: query
+      description: Case-insensitive text contained in the name (and e-mail for users).
+      schema: { type: string, minLength: 1, maxLength: 100 }
+    EnvironmentFilter:
+      name: environment
+      in: query
+      description: Only elements present in this environment.
+      schema: { $ref: '#/components/schemas/Environment' }
+    IfMatch:
+      name: If-Match
+      in: header
+      required: false
+      description: ETag from the last GET; if the resource changed since, the update is rejected with 412.
+      schema: { type: string, example: 'W/"1727548800123"' }
+
+  headers:
+    Location:
+      description: URL of the created resource
+      schema: { type: string, example: /api/v1/variables/42 }
+    ETag:
+      description: Weak validator derived from updatedAt
+      schema: { type: string, example: 'W/"1727548800123"' }
+
+  responses:
+    ValidationError:
+      description: Malformed request or invalid fields
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            code: VALIDATION_ERROR
+            message: Check the highlighted fields.
+            details:
+              fields:
+                - { field: environments, issue: min_items, message: Select at least one environment (DEV or PROD). }
+    InvalidCredentials:
+      description: Wrong e-mail/password or inactive account (same response for both)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { code: INVALID_CREDENTIALS, message: "The email or password is incorrect.", details: null }
+    Unauthenticated:
+      description: Missing, invalid, or expired token
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { code: TOKEN_EXPIRED, message: "Your session is not valid. Sign in again.", details: null }
+    Forbidden:
+      description: Authenticated but the role does not allow the operation (NFR-03)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { code: FORBIDDEN, message: "Your role doesn't allow this action.", details: { requiredRoles: [ADMINISTRATOR] } }
+    NotFound:
+      description: The resource does not exist
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { code: NOT_FOUND, message: "This variable doesn't exist. It may have been deleted.", details: { element: variable, id: 42 } }
+    Conflict:
+      description: Uniqueness conflict (duplicate name or e-mail)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { code: DUPLICATE_NAME, message: "A global variable named gUsuarioActual already exists in SAR.", details: { field: name, type: global variable, name: gUsuarioActual, application: SAR } }
+    PreconditionFailed:
+      description: The resource changed since it was read (If-Match mismatch)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { code: PRECONDITION_FAILED, message: "Someone else saved changes to this screen after you opened it. Reload to see their version.", details: { element: screen, currentETag: 'W/"1727548900456"' } }
+    RuleViolation:
+      description: Well-formed request that breaks a business or integrity rule
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          examples:
+            SCOPE_MISMATCH:
+              value: { code: SCOPE_MISMATCH, message: "Set applies to global variables and UpdateContext to context variables.", details: { field: 'variableAssignments[0].assignmentFunction' } }
+            SCOPE_CONFLICT:
+              value: { code: SCOPE_CONFLICT, message: "You can't change the scope while collections assign this variable with Set. Update those assignments first.", details: { function: Set } }
+            CROSS_APPLICATION:
+              value: { code: CROSS_APPLICATION, message: "You can only link elements of the same application.", details: null }
+            INVALID_ORIGIN_SCREEN:
+              value: { code: INVALID_ORIGIN_SCREEN, message: "Context variables are created inside a screen, not in App (OnStart).", details: { field: originScreenId } }
+            CONTEXT_SCREEN_MISMATCH:
+              value: { code: CONTEXT_SCREEN_MISMATCH, message: "locFiltro belongs to Solicitudes. From here you can only write it with Navigate.", details: { variableId: 15, variable: locFiltro, originScreenId: 3, screen: Solicitudes, screenId: 4, targetScreen: Detalle } }
+            CONTEXT_SCREEN_MISMATCH_NO_ORIGIN:
+              value: { code: CONTEXT_SCREEN_MISMATCH, message: "locFiltro has no origin screen. Set its origin screen before linking it.", details: { variableId: 15, variable: locFiltro, originScreenId: null, screenId: 4, targetScreen: Detalle } }
+            LAST_ACTIVE_ADMIN:
+              value: { code: LAST_ACTIVE_ADMIN, message: "There must be at least one active administrator. Promote another user first.", details: null }
+            CANNOT_DEACTIVATE_SELF:
+              value: { code: CANNOT_DEACTIVATE_SELF, message: "You can't deactivate your own account.", details: null }
+            RESERVED_ACCOUNT:
+              value: { code: RESERVED_ACCOUNT, message: "This is a system account and can't be changed.", details: null }
+            APPLICATION_ARCHIVED:
+              value: { code: APPLICATION_ARCHIVED, message: "This application is archived, so its documentation can't be changed.", details: { applicationId: 1 } }
+            INVALID_TRANSITION:
+              value: { code: INVALID_TRANSITION, message: "This screen changed status meanwhile. Reload to see its current status.", details: { from: DRAFT, to: IN_REVIEW } }
+            NOT_IN_REVIEW:
+              value: { code: NOT_IN_REVIEW, message: "This screen is no longer in review. Reload to see its status.", details: null }
+            SCREEN_IN_REVIEW:
+              value: { code: SCREEN_IN_REVIEW, message: "This screen is in review. Edit it after the review, or withdraw it from review.", details: null }
+            TEMPLATE_INCOMPLETE:
+              value: { code: TEMPLATE_INCOMPLETE, message: "Complete all seven template fields to submit for review. Missing: risks, knownIssues.", details: { fields: [risks, knownIssues] } }
+            COMMENT_REQUIRED:
+              value: { code: COMMENT_REQUIRED, message: "Write a comment: it is required to return the documentation.", details: null }
+            REVIEW_COMMENT_LOCKED:
+              value: { code: REVIEW_COMMENT_LOCKED, message: "Review decisions can't be edited.", details: null }
+            APP_CONTEXT_PROTECTED:
+              value: { code: APP_CONTEXT_PROTECTED, message: "The App (OnStart) screen can't be deleted.", details: null }
+            STORY_NOT_IN_SCREEN:
+              value: { code: STORY_NOT_IN_SCREEN, message: "That story doesn't belong to this screen. Refresh the list and pick again.", details: { storyId: 7 } }
+    RateLimited:
+      description: Too many requests
+      headers:
+        Retry-After:
+          schema: { type: integer, example: 60 }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { code: RATE_LIMITED, message: "Too many attempts. Try again in 15 minutes.", details: { minutes: 15 } }
+    InternalError:
+      description: Unexpected error (no internal details are exposed)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { code: INTERNAL_ERROR, message: 'Something went wrong on our side. Try again in a moment. Reference: 7f3c2a.', details: { requestId: 7f3c2a } }
+
+    JiraError:
+      description: Jira Cloud unavailable or failed (NFR-14). The rest of the system keeps working.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          examples:
+            unavailable:
+              value: { code: JIRA_UNAVAILABLE, message: "Jira isn't responding. The to-do wasn't created. Try again in a few minutes.", details: null }
+            partial:
+              value: { code: JIRA_PARTIAL_FAILURE, message: "The story TECHEA-2 was created, but the to-do wasn't. Try again to add it to that story.", details: { key: TECHEA-2, created: { epic: TECHEA-1, story: TECHEA-2 }, storyId: 2 } }
+    ReportAccepted:
+      description: Report accepted and queued (NFR-12)
+      headers:
+        Location: { $ref: '#/components/headers/Location' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ReportEnvelope' }
+    PayloadTooLarge:
+      description: Request body larger than allowed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { code: PAYLOAD_TOO_LARGE, message: "This is too much text to save at once. Shorten the longest fields and try again.", details: null }
+
+  schemas:
+    # ------------------------------------------------------------ common
+    Error:
+      type: object
+      description: Uniform error format (SRS 3.7)
+      required: [code, message, details]
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable code (error catalog in the API description; SDD Section 7.1)
+          enum: [VALIDATION_ERROR, INVALID_CREDENTIALS, UNAUTHENTICATED, TOKEN_EXPIRED, REFRESH_INVALID, INVALID_SIGNATURE,
+                 FORBIDDEN, NOT_FOUND, DUPLICATE_NAME, EMAIL_TAKEN, REPORT_NOT_READY, PRECONDITION_FAILED, PAYLOAD_TOO_LARGE,
+                 SCOPE_MISMATCH, SCOPE_CONFLICT, CROSS_APPLICATION, INVALID_ORIGIN_SCREEN, CONTEXT_SCREEN_MISMATCH,
+                 LAST_ACTIVE_ADMIN, CANNOT_DEACTIVATE_SELF, RESERVED_ACCOUNT, APPLICATION_ARCHIVED, INVALID_TRANSITION,
+                 NOT_IN_REVIEW, SCREEN_IN_REVIEW, TEMPLATE_INCOMPLETE, COMMENT_REQUIRED, REVIEW_COMMENT_LOCKED,
+                 APP_CONTEXT_PROTECTED, STORY_NOT_IN_SCREEN, RATE_LIMITED, INTERNAL_ERROR, JIRA_UNAVAILABLE, JIRA_PARTIAL_FAILURE]
+          example: NOT_FOUND
+        message: { type: string, description: 'Clear, action-oriented message for the user, in English (NFR-08, CP-04)' }
+        details: { type: [object, 'null'] }
+    PageMeta:
+      type: object
+      required: [page, pageSize, total]
+      properties:
+        page: { type: integer, minimum: 1 }
+        pageSize: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0, description: Total matching items }
+    Timestamps:
+      type: object
+      required: [createdAt, updatedAt]
+      properties:
+        createdAt: { type: string, format: date-time, readOnly: true }
+        updatedAt: { type: string, format: date-time, readOnly: true }
+    Ref:
+      type: object
+      description: Compact reference to another resource
+      required: [id, name]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+    UserRole: { type: string, enum: [ADMINISTRATOR, DEVELOPER, READER] }
+    UserStatus: { type: string, enum: [ACTIVE, INACTIVE] }
+    ApplicationStatus: { type: string, enum: [ACTIVE, ARCHIVED] }
+    Environment: { type: string, enum: [DEV, PROD] }
+    VariableScope: { type: string, enum: [GLOBAL, CONTEXT] }
+    AccessMode: { type: string, enum: [READ, WRITE, READ_WRITE] }
+    AssignmentFunction: { type: string, enum: [SET, UPDATE_CONTEXT] }
+    DataType:
+      type: string
+      description: Power Fx data types (SDD D-05)
+      enum: [BOOLEAN, CHOICE, COLOR, CURRENCY, DATE, DATE_TIME, DECIMAL, DYNAMIC, FLOAT, GUID, HYPERLINK, IMAGE, MEDIA, NUMBER, RECORD, RECORD_REFERENCE, TABLE, TEXT, TIME, YES_NO]
+    UsedIn:
+      type: string
+      description: Exact Power Apps event or property inside the screen (e.g. OnVisible, btnGuardar.OnSelect). `origin` is reserved.
+      minLength: 1
+      maxLength: 200
+      pattern: '^(?!origin$)[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$'
+    EnvironmentPresence:
+      type: object
+      required: [environment]
+      additionalProperties: false
+      properties:
+        environment: { $ref: '#/components/schemas/Environment' }
+        notes: { type: [string, 'null'], maxLength: 2000, description: Known differences in this environment }
+
+    # ------------------------------------------------------------- auth
+    LoginRequest:
+      type: object
+      required: [email, password]
+      additionalProperties: false
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, minLength: 1, maxLength: 128, writeOnly: true }
+    SessionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [accessToken, tokenType, expiresIn, sessionExpiresIn, user]
+          properties:
+            accessToken: { type: string, description: JWT }
+            tokenType: { type: string, const: Bearer }
+            expiresIn: { type: integer, description: Seconds, example: 28800 }
+            sessionExpiresIn:
+              type: integer
+              description: >-
+                Seconds left until the absolute end of the session (12 hours after login,
+                never extended by refresh). Relative, so it does not depend on the client clock.
+                The frontend uses it to warn before the session ends.
+              example: 39600
+            user: { $ref: '#/components/schemas/User' }
+
+    # ------------------------------------------------------------ users
+    Password:
+      type: string
+      writeOnly: true
+      minLength: 12
+      maxLength: 128
+      description: 'Policy confirmed by the department: at least 12 characters with letters and digits; hashed with bcrypt (NFR-02).'
+      pattern: '^(?=.*[A-Za-z])(?=.*\d).{12,128}$'
+    User:
+      allOf:
+        - type: object
+          required: [id, name, email, role, status, lastLoginAt]
+          properties:
+            id: { type: integer, readOnly: true }
+            name: { type: string }
+            email: { type: string, format: email }
+            role: { $ref: '#/components/schemas/UserRole' }
+            status: { $ref: '#/components/schemas/UserStatus' }
+            lastLoginAt: { type: [string, 'null'], format: date-time }
+        - $ref: '#/components/schemas/Timestamps'
+    UserEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/User' }
+    UserCreate:
+      type: object
+      required: [name, email, password, role]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        email: { type: string, format: email, maxLength: 254, description: Stored in lowercase }
+        password: { $ref: '#/components/schemas/Password' }
+        role: { $ref: '#/components/schemas/UserRole' }
+    UserUpdate:
+      type: object
+      required: [name, email, status]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        email: { type: string, format: email, maxLength: 254 }
+        status: { $ref: '#/components/schemas/UserStatus' }
+        password: { $ref: '#/components/schemas/Password' }
+
+    # ----------------------------------------------------- applications
+    ApplicationWrite:
+      type: object
+      required: [name, platform]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: [string, 'null'], maxLength: 4000 }
+        platform: { type: string, minLength: 1, maxLength: 60 }
+        jiraProjectKey: { type: [string, 'null'], pattern: '^[A-Z][A-Z0-9_]{1,19}$', description: NULL = department default (TECHEA) }
+    Application:
+      allOf:
+        - $ref: '#/components/schemas/ApplicationWrite'
+        - type: object
+          required: [id, status, appContextScreen, createdBy]
+          properties:
+            id: { type: integer, readOnly: true }
+            status: { $ref: '#/components/schemas/ApplicationStatus' }
+            appContextScreen: { $ref: '#/components/schemas/Ref' }
+            createdBy: { $ref: '#/components/schemas/Ref' }
+        - $ref: '#/components/schemas/Timestamps'
+    ApplicationEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/Application' }
+
+    # -------------------------------------------------------- variables
+    VariableWrite:
+      type: object
+      required: [name, dataType, scope, environments]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 150, pattern: '^[A-Za-z_][A-Za-z0-9_]*$' }
+        dataType: { $ref: '#/components/schemas/DataType' }
+        scope: { $ref: '#/components/schemas/VariableScope' }
+        description: { type: [string, 'null'], maxLength: 4000 }
+        originScreenId:
+          type: [integer, 'null']
+          minimum: 1
+          description: Screen where the variable is created; null = without full traceability. A CONTEXT variable cannot originate in the App (OnStart) screen.
+        environments:
+          type: array
+          minItems: 1
+          maxItems: 2
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/EnvironmentPresence' }
+    VariableCreate:
+      allOf:
+        - type: object
+          required: [applicationId]
+          properties:
+            applicationId: { type: integer, minimum: 1 }
+        - $ref: '#/components/schemas/VariableWrite'
+      unevaluatedProperties: false
+    VariableUpdate:
+      allOf:
+        - $ref: '#/components/schemas/VariableWrite'
+      unevaluatedProperties: false
+    VariableSummary:
+      allOf:
+        - type: object
+          required: [id, applicationId, name, dataType, scope, originScreen, fullTraceability, environments]
+          properties:
+            id: { type: integer, readOnly: true }
+            applicationId: { type: integer }
+            name: { type: string }
+            dataType: { $ref: '#/components/schemas/DataType' }
+            scope: { $ref: '#/components/schemas/VariableScope' }
+            originScreen: { oneOf: [{ $ref: '#/components/schemas/Ref' }, { type: 'null' }] }
+            fullTraceability: { type: boolean, description: true when originScreen is set (FR-19) }
+            environments: { type: array, items: { $ref: '#/components/schemas/Environment' } }
+        - $ref: '#/components/schemas/Timestamps'
+    Variable:
+      allOf:
+        - $ref: '#/components/schemas/VariableSummary'
+        - type: object
+          required: [description, environmentDetails]
+          properties:
+            description: { type: [string, 'null'] }
+            environmentDetails: { type: array, items: { $ref: '#/components/schemas/EnvironmentPresence' } }
+    VariableEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/Variable' }
+    VariableDependenciesEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [variable, originScreen, screens, collections, components]
+          properties:
+            variable: { $ref: '#/components/schemas/Ref' }
+            originScreen: { oneOf: [{ $ref: '#/components/schemas/Ref' }, { type: 'null' }] }
+            screens:
+              type: array
+              description: Screen links (screen_variable), including the origin row
+              items:
+                type: object
+                required: [screen, accessMode, usedIn]
+                properties:
+                  screen: { $ref: '#/components/schemas/Ref' }
+                  accessMode: { $ref: '#/components/schemas/AccessMode' }
+                  usedIn: { type: string }
+            collections:
+              type: array
+              description: Collections that feed the variable (variable_collection)
+              items: { $ref: '#/components/schemas/VariableAssignment' }
+            components:
+              type: array
+              description: Components that use the variable (dependency COMPONENT -> VARIABLE)
+              items:
+                type: object
+                required: [component, screen]
+                properties:
+                  component: { $ref: '#/components/schemas/Ref' }
+                  screen: { $ref: '#/components/schemas/Ref' }
+                  description: { type: [string, 'null'] }
+
+    # ------------------------------------------------------ collections
+    CollectionFieldWrite:
+      type: object
+      required: [name, dataType]
+      additionalProperties: false
+      properties:
+        id: { type: integer, minimum: 1, description: Present = update this field; absent = create }
+        name: { type: string, minLength: 1, maxLength: 150 }
+        dataType: { $ref: '#/components/schemas/DataType' }
+        description: { type: [string, 'null'], maxLength: 2000 }
+        position: { type: integer, minimum: 0, maximum: 32767, description: Defaults to array order }
+    CollectionField:
+      type: object
+      required: [id, name, dataType, description, position]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        dataType: { $ref: '#/components/schemas/DataType' }
+        description: { type: [string, 'null'] }
+        position: { type: integer }
+    VariableAssignmentWrite:
+      type: object
+      description: How a variable is fed from this collection (FR-09). The variable's scope is taken from the variable itself.
+      required: [variableId, screenId, assignmentFunction, usedIn]
+      additionalProperties: false
+      properties:
+        id: { type: integer, minimum: 1 }
+        variableId: { type: integer, minimum: 1 }
+        screenId: { type: integer, minimum: 1, description: Screen where the assignment fires (App (OnStart) screen for App.OnStart) }
+        assignmentFunction: { $ref: '#/components/schemas/AssignmentFunction' }
+        tableFunction: { type: [string, 'null'], maxLength: 200, description: 'Aggregation or table-selection function, e.g. CountRows, First, LookUp' }
+        usedIn: { $ref: '#/components/schemas/UsedIn' }
+    VariableAssignment:
+      type: object
+      required: [id, variable, collection, screen, assignmentFunction, tableFunction, usedIn]
+      properties:
+        id: { type: integer }
+        variable: { $ref: '#/components/schemas/Ref' }
+        collection: { $ref: '#/components/schemas/Ref' }
+        screen: { $ref: '#/components/schemas/Ref' }
+        assignmentFunction: { $ref: '#/components/schemas/AssignmentFunction' }
+        tableFunction: { type: [string, 'null'] }
+        usedIn: { type: string }
+    CollectionWrite:
+      type: object
+      required: [name, environments]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 150, pattern: '^[A-Za-z_][A-Za-z0-9_]*$' }
+        creationCondition: { type: [string, 'null'], maxLength: 4000 }
+        description: { type: [string, 'null'], maxLength: 4000 }
+        environments:
+          type: array
+          minItems: 1
+          maxItems: 2
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/EnvironmentPresence' }
+        fields:
+          type: array
+          maxItems: 200
+          items: { $ref: '#/components/schemas/CollectionFieldWrite' }
+        variableAssignments:
+          type: array
+          maxItems: 200
+          items: { $ref: '#/components/schemas/VariableAssignmentWrite' }
+        derivedFrom:
+          type: array
+          description: Collections this one is built from (dependency DERIVES_FROM, SDD D-29)
+          maxItems: 50
+          uniqueItems: true
+          items: { type: integer, minimum: 1 }
+    CollectionCreate:
+      allOf:
+        - type: object
+          required: [applicationId]
+          properties:
+            applicationId: { type: integer, minimum: 1 }
+        - $ref: '#/components/schemas/CollectionWrite'
+      unevaluatedProperties: false
+    CollectionUpdate:
+      allOf:
+        - $ref: '#/components/schemas/CollectionWrite'
+      unevaluatedProperties: false
+    CollectionSummary:
+      allOf:
+        - type: object
+          required: [id, applicationId, name, environments, documented, fieldCount]
+          properties:
+            id: { type: integer, readOnly: true }
+            applicationId: { type: integer }
+            name: { type: string }
+            environments: { type: array, items: { $ref: '#/components/schemas/Environment' } }
+            documented: { type: boolean, description: true when linked to at least one screen (FR-19) }
+            fieldCount: { type: integer }
+        - $ref: '#/components/schemas/Timestamps'
+    Collection:
+      allOf:
+        - $ref: '#/components/schemas/CollectionSummary'
+        - type: object
+          required: [creationCondition, description, environmentDetails, fields, variableAssignments, derivedFrom]
+          properties:
+            derivedFrom: { type: array, items: { $ref: '#/components/schemas/Ref' } }
+            creationCondition: { type: [string, 'null'] }
+            description: { type: [string, 'null'] }
+            environmentDetails: { type: array, items: { $ref: '#/components/schemas/EnvironmentPresence' } }
+            fields: { type: array, items: { $ref: '#/components/schemas/CollectionField' } }
+            variableAssignments: { type: array, items: { $ref: '#/components/schemas/VariableAssignment' } }
+    CollectionEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/Collection' }
+
+    # ---------------------------------------------------- shared (M4-M11)
+    DocumentationStatus: { type: string, enum: [UNDOCUMENTED, DRAFT, IN_PROGRESS, IN_REVIEW, APPROVED] }
+    ElementType: { type: string, enum: [SCREEN, VARIABLE, COLLECTION, COMPONENT] }
+    JiraHierarchyLevel: { type: string, enum: [EPIC, STANDARD, SUBTASK] }
+    JiraStatusCategory: { type: string, enum: [TO_DO, IN_PROGRESS, DONE] }
+    ReportFormat: { type: string, enum: [PDF, XLSX] }
+    ReportStatus: { type: string, enum: [PENDING, READY, FAILED] }
+    ReviewDecision:
+      type: string
+      enum: [APPROVE, RETURN]
+      description: Decision of a review comment (CP-11); mirrors the database enum review_decision
+    LongText: { type: [string, 'null'], maxLength: 20000 }
+
+    # ------------------------------------------------------------ screens
+    ScreenTemplate:
+      type: object
+      description: Seven text fields of the standard template (SRS 3.8). The eighth, future to do, is the screen's Jira Subtasks.
+      required: [onStart, workingProcess, architecture, dataModel, requirements, knownIssues, risks]
+      additionalProperties: false
+      properties:
+        onStart: { $ref: '#/components/schemas/LongText' }
+        workingProcess: { $ref: '#/components/schemas/LongText' }
+        architecture: { $ref: '#/components/schemas/LongText' }
+        dataModel: { $ref: '#/components/schemas/LongText' }
+        requirements: { $ref: '#/components/schemas/LongText' }
+        knownIssues: { $ref: '#/components/schemas/LongText' }
+        risks: { $ref: '#/components/schemas/LongText' }
+    ComponentUseWrite:
+      type: object
+      required: [targetType, targetId]
+      additionalProperties: false
+      properties:
+        id: { type: integer, minimum: 1 }
+        targetType: { type: string, enum: [VARIABLE, COLLECTION] }
+        targetId: { type: integer, minimum: 1 }
+        description: { type: [string, 'null'], maxLength: 2000 }
+    ComponentWrite:
+      type: object
+      required: [name, type]
+      additionalProperties: false
+      properties:
+        id: { type: integer, minimum: 1 }
+        name: { type: string, minLength: 1, maxLength: 150, pattern: '^[A-Za-z_][A-Za-z0-9_]*$' }
+        type: { type: string, minLength: 1, maxLength: 60, description: 'Power Apps control type, free text (Button, Gallery, Text input...)' }
+        onSelect: { $ref: '#/components/schemas/LongText' }
+        description: { type: [string, 'null'], maxLength: 4000 }
+        uses: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/ComponentUseWrite' } }
+    VariableLinkWrite:
+      type: object
+      required: [variableId, accessMode, usedIn]
+      additionalProperties: false
+      properties:
+        id: { type: integer, minimum: 1 }
+        variableId: { type: integer, minimum: 1 }
+        accessMode: { $ref: '#/components/schemas/AccessMode' }
+        usedIn: { $ref: '#/components/schemas/UsedIn' }
+    CollectionLinkWrite:
+      type: object
+      required: [collectionId, accessMode, usedIn]
+      additionalProperties: false
+      properties:
+        id: { type: integer, minimum: 1 }
+        collectionId: { type: integer, minimum: 1 }
+        accessMode: { $ref: '#/components/schemas/AccessMode' }
+        usedIn: { $ref: '#/components/schemas/UsedIn' }
+    NavigationWrite:
+      type: object
+      required: [targetScreenId]
+      additionalProperties: false
+      properties:
+        id: { type: integer, minimum: 1 }
+        targetScreenId: { type: integer, minimum: 1 }
+        description: { type: [string, 'null'], maxLength: 2000 }
+    ScreenWrite:
+      type: object
+      required: [name, template, components, variableLinks, collectionLinks, navigations]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 150 }
+        miroLink: { type: [string, 'null'], maxLength: 2048, pattern: '^https://', description: FR-13 }
+        template: { $ref: '#/components/schemas/ScreenTemplate' }
+        components: { type: array, maxItems: 300, items: { $ref: '#/components/schemas/ComponentWrite' } }
+        variableLinks: { type: array, maxItems: 500, items: { $ref: '#/components/schemas/VariableLinkWrite' } }
+        collectionLinks: { type: array, maxItems: 500, items: { $ref: '#/components/schemas/CollectionLinkWrite' } }
+        navigations: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/NavigationWrite' } }
+    ScreenCreate:
+      allOf:
+        - type: object
+          required: [applicationId]
+          properties:
+            applicationId: { type: integer, minimum: 1 }
+        - $ref: '#/components/schemas/ScreenWrite'
+      unevaluatedProperties: false
+    ScreenUpdate:
+      allOf:
+        - $ref: '#/components/schemas/ScreenWrite'
+      unevaluatedProperties: false
+    ApplicationCreate:
+      allOf:
+        - $ref: '#/components/schemas/ApplicationWrite'
+      unevaluatedProperties: false
+    ScreenSummary:
+      allOf:
+        - type: object
+          required: [id, applicationId, name, isAppContext, documentationStatus, author, pendingSubtasks, commentCount]
+          properties:
+            id: { type: integer, readOnly: true }
+            applicationId: { type: integer }
+            name: { type: string }
+            isAppContext: { type: boolean, description: true for the reserved App (OnStart) screen }
+            documentationStatus: { $ref: '#/components/schemas/DocumentationStatus' }
+            author: { $ref: '#/components/schemas/Ref' }
+            pendingSubtasks: { type: integer, description: Subtasks not DONE (FR-19) }
+            commentCount: { type: integer }
+        - $ref: '#/components/schemas/Timestamps'
+    Screen:
+      allOf:
+        - $ref: '#/components/schemas/ScreenSummary'
+        - type: object
+          required: [miroLink, template, components, variableLinks, collectionLinks, navigations]
+          properties:
+            miroLink: { type: [string, 'null'] }
+            template: { $ref: '#/components/schemas/ScreenTemplate' }
+            components:
+              type: array
+              items:
+                allOf:
+                  - $ref: '#/components/schemas/ComponentWrite'
+                  - type: object
+                    required: [id]
+                    properties:
+                      uses:
+                        type: array
+                        items:
+                          type: object
+                          required: [id, targetType, target]
+                          properties:
+                            id: { type: integer }
+                            targetType: { type: string, enum: [VARIABLE, COLLECTION] }
+                            target: { $ref: '#/components/schemas/Ref' }
+                            description: { type: [string, 'null'] }
+            variableLinks:
+              type: array
+              items:
+                type: object
+                required: [id, variable, accessMode, usedIn, isOrigin]
+                properties:
+                  id: { type: integer }
+                  variable: { $ref: '#/components/schemas/Ref' }
+                  accessMode: { $ref: '#/components/schemas/AccessMode' }
+                  usedIn: { type: string }
+                  isOrigin: { type: boolean, description: Row maintained by the variables module (read-only here) }
+            collectionLinks:
+              type: array
+              items:
+                type: object
+                required: [id, collection, accessMode, usedIn]
+                properties:
+                  id: { type: integer }
+                  collection: { $ref: '#/components/schemas/Ref' }
+                  accessMode: { $ref: '#/components/schemas/AccessMode' }
+                  usedIn: { type: string }
+            navigations:
+              type: array
+              items:
+                type: object
+                required: [id, targetScreen]
+                properties:
+                  id: { type: integer }
+                  targetScreen: { $ref: '#/components/schemas/Ref' }
+                  description: { type: [string, 'null'] }
+    ScreenEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/Screen' }
+
+    # --------------------------------------------------------------- jira
+    JiraIssueText:
+      type: object
+      required: [summary]
+      additionalProperties: false
+      properties:
+        summary: { type: string, minLength: 1, maxLength: 255 }
+        description: { type: [string, 'null'], maxLength: 10000, description: Plain text; converted to Atlassian Document Format by the server }
+    JiraTicketCreate:
+      type: object
+      description: Exactly one of storyId (an existing Story of this screen) or newStory.
+      required: [subtask]
+      additionalProperties: false
+      properties:
+        storyId: { type: integer, minimum: 1, description: Local id of an existing Story of this screen }
+        newStory: { $ref: '#/components/schemas/JiraIssueText' }
+        subtask: { $ref: '#/components/schemas/JiraIssueText' }
+      oneOf:
+        - required: [storyId]
+        - required: [newStory]
+    JiraTicket:
+      type: object
+      required: [id, jiraIssueKey, hierarchyLevel, issueType, summary, status, statusCategory, url, lastSyncedAt]
+      properties:
+        id: { type: integer }
+        jiraIssueKey: { type: string, example: TECHEA-3 }
+        hierarchyLevel: { $ref: '#/components/schemas/JiraHierarchyLevel' }
+        issueType: { type: string }
+        summary: { type: string }
+        status: { type: string }
+        statusCategory: { $ref: '#/components/schemas/JiraStatusCategory' }
+        url: { type: string, format: uri, description: Link to the issue in Jira Cloud }
+        lastSyncedAt: { type: string, format: date-time }
+    JiraTicketCreatedEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [epic, story, subtask, created]
+          properties:
+            epic: { $ref: '#/components/schemas/JiraTicket' }
+            story: { $ref: '#/components/schemas/JiraTicket' }
+            subtask: { $ref: '#/components/schemas/JiraTicket' }
+            created: { type: array, description: Levels created by this request, items: { $ref: '#/components/schemas/JiraHierarchyLevel' } }
+    JiraTreeEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [epic, stories, sync]
+          properties:
+            epic: { oneOf: [{ $ref: '#/components/schemas/JiraTicket' }, { type: 'null' }] }
+            stories:
+              type: array
+              items:
+                allOf:
+                  - $ref: '#/components/schemas/JiraTicket'
+                  - type: object
+                    required: [subtasks]
+                    properties:
+                      subtasks: { type: array, items: { $ref: '#/components/schemas/JiraTicket' } }
+            sync:
+              type: object
+              required: [jiraAvailable, stale, lastSyncedAt]
+              properties:
+                jiraAvailable: { type: boolean }
+                stale: { type: boolean, description: true when Jira could not be reached and the local copy is shown (NFR-14) }
+                lastSyncedAt: { type: [string, 'null'], format: date-time }
+    JiraWebhookEvent:
+      type: object
+      description: Subset of the Jira Cloud webhook payload that the server reads; other properties are ignored.
+      required: [webhookEvent, issue]
+      properties:
+        webhookEvent: { type: string, enum: ['jira:issue_updated', 'jira:issue_deleted', 'jira:issue_created'] }
+        timestamp: { type: integer }
+        issue:
+          type: object
+          required: [id, key]
+          properties:
+            id: { type: string }
+            key: { type: string }
+            fields:
+              type: object
+              properties:
+                summary: { type: string }
+                status:
+                  type: object
+                  properties:
+                    name: { type: string }
+                    statusCategory:
+                      type: object
+                      properties:
+                        key: { type: string, enum: [new, indeterminate, done], description: 'Mapped to TO_DO, IN_PROGRESS, DONE' }
+                issuetype:
+                  type: object
+                  properties:
+                    name: { type: string }
+                    hierarchyLevel: { type: integer, enum: [1, 0, -1] }
+                parent:
+                  type: object
+                  properties:
+                    id: { type: string }
+                    key: { type: string }
+
+    # ---------------------------------------------------- comments/review
+    CommentWrite:
+      type: object
+      required: [text]
+      additionalProperties: false
+      properties:
+        text: { type: string, minLength: 1, maxLength: 4000 }
+    Comment:
+      type: object
+      required: [id, screenId, author, text, reviewDecision, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        screenId: { type: integer }
+        author: { $ref: '#/components/schemas/Ref' }
+        text: { type: string }
+        reviewDecision:
+          oneOf: [{ $ref: '#/components/schemas/ReviewDecision' }, { type: 'null' }]
+          readOnly: true
+          description: 'null = ordinary comment; APPROVE/RETURN = written by POST /screens/{id}/review (CP-11). Not accepted in CommentWrite.'
+
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: [string, 'null'], format: date-time, description: null = never edited }
+    CommentEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/Comment' }
+    ReviewRequest:
+      oneOf:
+        - type: object
+          required: [decision]
+          additionalProperties: false
+          properties:
+            decision: { const: APPROVE }
+            comment: { type: [string, 'null'], maxLength: 4000 }
+        - type: object
+          required: [decision, comment]
+          additionalProperties: false
+          properties:
+            decision: { const: RETURN }
+            comment: { type: string, minLength: 1, maxLength: 4000, description: Required when returning }
+
+    # -------------------------------------------------------------- graph
+    GraphNode:
+      type: object
+      required: [key, id, type, name]
+      properties:
+        key: { type: string, description: 'Stable node key, e.g. screen:12', example: 'screen:12' }
+        id: { type: integer }
+        type: { $ref: '#/components/schemas/ElementType' }
+        name: { type: string }
+        screenId: { type: [integer, 'null'], description: Owning screen for components }
+        documentationStatus: { $ref: '#/components/schemas/DocumentationStatus' }
+        isAppContext: { type: boolean }
+        scope: { $ref: '#/components/schemas/VariableScope' }
+        untraced: { type: boolean, description: Variable without origin screen }
+        miroLink: { type: [string, 'null'], description: Screens only (FR-16) }
+    GraphEdge:
+      type: object
+      required: [id, source, target, kind]
+      properties:
+        id: { type: string, example: 'sv:45' }
+        source: { type: string, description: Node key }
+        target: { type: string, description: Node key }
+        kind:
+          type: string
+          enum: [CONTAINS, CREATES, ACCESSES, FEEDS, USES, DERIVES_FROM, NAVIGATES_TO]
+          description: 'CONTAINS screen->component; CREATES origin screen->variable; ACCESSES screen->variable/collection; FEEDS collection->variable; USES component->variable/collection; DERIVES_FROM collection->collection; NAVIGATES_TO screen->screen'
+        accessMode: { $ref: '#/components/schemas/AccessMode' }
+        usedIn: { type: string }
+        assignmentFunction: { $ref: '#/components/schemas/AssignmentFunction' }
+        tableFunction: { type: [string, 'null'] }
+    GraphEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [nodes, edges]
+          properties:
+            nodes: { type: array, items: { $ref: '#/components/schemas/GraphNode' } }
+            edges: { type: array, items: { $ref: '#/components/schemas/GraphEdge' } }
+
+    # ------------------------------------------------- search / dashboard
+    SearchResult:
+      type: object
+      required: [type, id, name, matchedIn]
+      properties:
+        type: { $ref: '#/components/schemas/ElementType' }
+        id: { type: integer }
+        name: { type: string }
+        screen: { oneOf: [{ $ref: '#/components/schemas/Ref' }, { type: 'null' }], description: Owning screen (components) or origin screen (variables) }
+        matchedIn: { type: string, enum: [name, description, template, usedIn], description: Where the text was found }
+        snippet: { type: [string, 'null'], maxLength: 300 }
+        documentationStatus: { $ref: '#/components/schemas/DocumentationStatus' }
+        environments: { type: array, items: { $ref: '#/components/schemas/Environment' } }
+    IndicatorsEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [documentation, variables, collections, jira]
+          properties:
+            documentation:
+              type: object
+              required: [totalScreens, byStatus, approvedPercent]
+              properties:
+                totalScreens: { type: integer }
+                byStatus:
+                  type: object
+                  required: [UNDOCUMENTED, DRAFT, IN_PROGRESS, IN_REVIEW, APPROVED]
+                  properties:
+                    UNDOCUMENTED: { type: integer }
+                    DRAFT: { type: integer }
+                    IN_PROGRESS: { type: integer }
+                    IN_REVIEW: { type: integer }
+                    APPROVED: { type: integer }
+                approvedPercent: { type: number, minimum: 0, maximum: 100, description: Includes the App (OnStart) screen }
+            variables:
+              type: object
+              required: [total, untraced]
+              properties:
+                total: { type: integer }
+                untraced: { type: integer, description: Without origin screen }
+            collections:
+              type: object
+              required: [total, undocumented]
+              properties:
+                total: { type: integer }
+                undocumented: { type: integer, description: Not linked to any screen }
+            jira:
+              type: object
+              required: [pendingSubtasks, jiraAvailable]
+              properties:
+                pendingSubtasks: { type: integer }
+                jiraAvailable: { type: boolean }
+            recentActivity:
+              type: array
+              description: Last 10 audit records; omitted for Readers
+              maxItems: 10
+              items: { $ref: '#/components/schemas/AuditEntry' }
+
+    # -------------------------------------------------------------- audit
+    AuditEntry:
+      type: object
+      required: [id, action, entityType, entityId, actor, changedFields, createdAt]
+      properties:
+        id: { type: string, description: BIGINT serialized as text }
+        action: { type: string, enum: [CREATE, UPDATE, DELETE, EVENT] }
+        eventName: { type: [string, 'null'] }
+        entityType: { type: string }
+        entityId: { type: string }
+        entityLabel: { type: [string, 'null'] }
+        applicationId: { type: [integer, 'null'] }
+        actor: { oneOf: [{ $ref: '#/components/schemas/Ref' }, { type: 'null' }], description: null = write outside the API }
+        dbRole: { type: string, description: Administrator only }
+        changedFields: { type: array, items: { type: string } }
+        oldValue: { type: [object, 'null'] }
+        newValue: { type: [object, 'null'] }
+        createdAt: { type: string, format: date-time }
+
+    # ------------------------------------------------------------ reports
+    ReportScope:
+      type: object
+      required: [elementTypes]
+      additionalProperties: false
+      properties:
+        elementTypes: { type: array, minItems: 1, uniqueItems: true, items: { $ref: '#/components/schemas/ElementType' } }
+        screenIds: { type: array, items: { type: integer, minimum: 1 }, description: Empty = all screens }
+        documentationStatus: { type: array, items: { $ref: '#/components/schemas/DocumentationStatus' } }
+        includeDependencies: { type: boolean, default: false }
+    ReportRequest:
+      type: object
+      required: [applicationId, title, scope, publish]
+      additionalProperties: false
+      properties:
+        applicationId: { type: integer, minimum: 1 }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        scope: { $ref: '#/components/schemas/ReportScope' }
+        publish: { type: boolean, description: Publish automatically when READY }
+    Report:
+      type: object
+      required: [id, applicationId, title, format, status, isPublished, generatedBy, createdAt]
+      properties:
+        id: { type: integer }
+        applicationId: { type: integer }
+        title: { type: string }
+        format: { $ref: '#/components/schemas/ReportFormat' }
+        status: { $ref: '#/components/schemas/ReportStatus' }
+        isPublished: { type: boolean }
+        fileName: { type: [string, 'null'] }
+        fileSize: { type: [integer, 'null'] }
+        errorMessage: { type: [string, 'null'] }
+        generatedBy: { $ref: '#/components/schemas/Ref' }
+        createdAt: { type: string, format: date-time }
+        completedAt: { type: [string, 'null'], format: date-time }
+        publishedAt: { type: [string, 'null'], format: date-time }
+    ReportEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/Report' }
+    ReportParameters:
+      type: object
+      description: Generation parameters stored in report.parameters (CP-10)
+      required: [format, scope, publish]
+      properties:
+        format: { $ref: '#/components/schemas/ReportFormat' }
+        scope: { $ref: '#/components/schemas/ReportScope' }
+        publish: { type: boolean }
+    ReportDetail:
+      allOf:
+        - $ref: '#/components/schemas/Report'
+        - type: object
+          required: [parameters]
+          properties:
+            parameters: { $ref: '#/components/schemas/ReportParameters' }
+    ReportDetailEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/ReportDetail' }
+
+    # --------------------------------------------------------- onboarding
+    OnboardingEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [application, counts, approvedPercent, appContextScreen, keyScreens, globalVariables, topComponents]
+          properties:
+            application: { $ref: '#/components/schemas/Ref' }
+            counts:
+              type: object
+              required: [screens, variables, collections, components]
+              properties:
+                screens: { type: integer }
+                variables: { type: integer }
+                collections: { type: integer }
+                components: { type: integer }
+            approvedPercent: { type: number }
+            appContextScreen: { $ref: '#/components/schemas/Ref' }
+            keyScreens:
+              type: array
+              description: Screens with most connections, approved first (suggested reading order)
+              maxItems: 10
+              items:
+                type: object
+                required: [screen, documentationStatus, connections]
+                properties:
+                  screen: { $ref: '#/components/schemas/Ref' }
+                  documentationStatus: { $ref: '#/components/schemas/DocumentationStatus' }
+                  connections: { type: integer }
+                  miroLink: { type: [string, 'null'] }
+            globalVariables:
+              type: array
+              maxItems: 20
+              items:
+                type: object
+                required: [variable, dataType, originScreen]
+                properties:
+                  variable: { $ref: '#/components/schemas/Ref' }
+                  dataType: { $ref: '#/components/schemas/DataType' }
+                  originScreen: { oneOf: [{ $ref: '#/components/schemas/Ref' }, { type: 'null' }] }
+            topComponents:
+              type: array
+              description: |
+                CP-05: components that use the most variables and collections, by `uses`
+                descending. `uses` = number of USES rows of `dependency` whose source is
+                the component (component -> variable / collection).
+              maxItems: 10
+              items:
+                type: object
+                required: [component, screen, uses]
+                properties:
+                  component: { $ref: '#/components/schemas/Ref' }
+                  screen: { $ref: '#/components/schemas/Ref' }
+                  uses: { type: integer, minimum: 0 }
