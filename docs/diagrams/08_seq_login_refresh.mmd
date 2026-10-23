@@ -1,0 +1,20 @@
+sequenceDiagram
+    actor U as User
+    participant S as React SPA
+    participant A as Express API
+    participant D as PostgreSQL
+    U->>S: e-mail and password
+    S->>A: POST /auth/login
+    A->>D: user by e-mail, bcrypt verify (cost 12)
+    A->>D: refresh_token (hash, new family, ends at login + 12 h)
+    A-->>S: 200 accessToken (8 h) and cookie rt (HttpOnly)
+    S->>S: keep the access token in memory only
+    Note over S,A: Page reload: the access token is lost
+    S->>A: POST /auth/refresh (cookie rt, Origin checked)
+    A->>D: consume token once, issue next one, same family and same end
+    A-->>S: 200 new accessToken and rotated cookie
+    Note over S,A: Reusing a rotated token revokes the family
+    U->>S: log out
+    S->>A: POST /auth/logout
+    A->>D: revoke family
+    A-->>S: 204, cookie cleared
