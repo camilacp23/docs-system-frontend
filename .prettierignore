@@ -1,0 +1,9 @@
+dist
+coverage
+node_modules
+package-lock.json
+src/api/schema.d.ts
+contract/openapi.yaml
+docs
+01_PROMPTS_CLAUDE_CODE.md
+CLAUDE.md

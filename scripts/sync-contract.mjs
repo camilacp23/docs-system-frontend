@@ -44,7 +44,9 @@ if (branch !== PUBLISHED_BRANCH) {
   fail(`backend is on "${branch}", not "${PUBLISHED_BRANCH}"; not copying an unpublished contract`);
 }
 if (dirty) {
-  fail(`${basename(source)} has uncommitted changes in the backend; commit them first, not copying`);
+  fail(
+    `${basename(source)} has uncommitted changes in the backend; commit them first, not copying`,
+  );
 }
 
 const version = parse(readFileSync(source, 'utf8'))?.info?.version;

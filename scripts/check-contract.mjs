@@ -18,7 +18,9 @@ try {
   });
   const normalize = (file) => readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
   if (normalize(generated) !== normalize(resolve(root, 'src/api/schema.d.ts'))) {
-    console.error('contract:check — src/api/schema.d.ts is out of date; run `npm run contract:types`');
+    console.error(
+      'contract:check — src/api/schema.d.ts is out of date; run `npm run contract:types`',
+    );
     process.exitCode = 1;
   } else {
     console.log('contract:check — src/api/schema.d.ts matches contract/openapi.yaml');
