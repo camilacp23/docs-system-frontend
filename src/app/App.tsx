@@ -1,6 +1,7 @@
-// Application root: providers (session, then selected application) around the router. The shell arrives in F-03.
+// Application root: providers (session, selected application, toasts) around the router.
 import { RouterProvider } from 'react-router';
 
+import { ToastProvider } from '../components/ui';
 import { ApplicationProvider } from '../application/ApplicationProvider';
 import { SessionProvider } from '../session/SessionProvider';
 
@@ -10,7 +11,9 @@ export function App() {
   return (
     <SessionProvider>
       <ApplicationProvider>
-        <RouterProvider router={router} />
+        <ToastProvider>
+          <RouterProvider router={router} />
+        </ToastProvider>
       </ApplicationProvider>
     </SessionProvider>
   );
