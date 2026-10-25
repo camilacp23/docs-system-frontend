@@ -4,18 +4,10 @@
 // applicationName ("Unique in <application>"), disabled (while saving), nameRef (first field, for the focus).
 // A context variable cannot use App (OnStart) as origin: the option is disabled and the field says why.
 // Identifiers (the name) are in IBM Plex Mono. Every control has a label; errors are linked with aria-describedby.
-import { useId } from 'react';
-import type { ReactNode, RefObject } from 'react';
+import type { RefObject } from 'react';
 
-import {
-  Checkbox,
-  FormField,
-  SegmentedControl,
-  Select,
-  Textarea,
-  TextField,
-  cx,
-} from '../../components/ui';
+import { FormField, SegmentedControl, Select, Textarea, TextField } from '../../components/ui';
+import { EnvironmentsGroup, FieldGroup } from '../shared/EnvironmentsGroup';
 
 import { FIELD_LABEL, NAME_MAX_LENGTH, withScope } from './variableForm';
 import type { VariableFormErrors, VariableFormValues } from './variableForm';
@@ -23,7 +15,6 @@ import {
   APP_SCREEN_LABEL,
   DATA_TYPES,
   DATA_TYPE_LABEL,
-  ENVIRONMENTS,
   SCOPE_FUNCTION,
   SCOPE_LABEL,
   SCOPES,
@@ -44,49 +35,6 @@ interface VariableFieldsProps {
   applicationName: string;
   disabled?: boolean;
   nameRef?: RefObject<HTMLInputElement | null>;
-}
-
-/** A group of related controls (scope, environments): a fieldset with its legend, help and error. */
-function Group({
-  legend,
-  required,
-  help,
-  error,
-  children,
-}: {
-  legend: string;
-  required?: boolean;
-  help?: ReactNode;
-  error?: string;
-  children: (describedBy: string | undefined) => ReactNode;
-}) {
-  const id = useId();
-  const describedBy = [help ? `${id}-help` : null, error ? `${id}-error` : null]
-    .filter(Boolean)
-    .join(' ');
-  return (
-    <fieldset className="flex min-w-0 flex-col gap-1.5">
-      <legend className="mb-1.5 flex gap-0.5 text-label font-medium text-ink-700">
-        {legend}
-        {required && (
-          <span aria-hidden="true" className="text-danger">
-            *
-          </span>
-        )}
-      </legend>
-      {children(describedBy || undefined)}
-      {help && (
-        <p id={`${id}-help`} className="text-small text-ink-500">
-          {help}
-        </p>
-      )}
-      {error && (
-        <p id={`${id}-error`} className="text-small text-danger">
-          {error}
-        </p>
-      )}
-    </fieldset>
-  );
 }
 
 export function VariableFields({
@@ -159,7 +107,7 @@ export function VariableFields({
   );
 
   const scope = (
-    <Group
+    <FieldGroup
       legend={FIELD_LABEL.scope}
       required
       help={isContext ? CONTEXT_SCOPE_HELP : undefined}
@@ -182,7 +130,7 @@ export function VariableFields({
           }))}
         />
       )}
-    </Group>
+    </FieldGroup>
   );
 
   const origin = (
@@ -225,79 +173,16 @@ export function VariableFields({
   );
 
   const environments = (
-    <Group legend={FIELD_LABEL.environments} required error={errors.environments}>
-      {() => (
-        <div className={cx('grid gap-3', page ? 'grid-cols-1' : 'grid-cols-2')}>
-          {ENVIRONMENTS.map((environment) => {
-            const row = values.environments[environment];
-            const rowError = errors.environmentRows?.[environment];
-            const notesLabel = `Notes for ${environment}`;
-            return (
-              <div
-                key={environment}
-                className={cx(
-                  'flex flex-col gap-2 rounded-control border p-3',
-                  row.enabled ? 'border-primary bg-search-bg' : 'border-border-subtle',
-                )}
-              >
-                <Checkbox
-                  label={environment}
-                  checked={row.enabled}
-                  disabled={disabled}
-                  invalid={Boolean(errors.environments)}
-                  onChange={(event) => {
-                    set({
-                      environments: {
-                        ...values.environments,
-                        [environment]: { ...row, enabled: event.target.checked },
-                      },
-                    });
-                  }}
-                />
-                <FormField
-                  label={<span className={page ? undefined : 'sr-only'}>{notesLabel}</span>}
-                  error={rowError}
-                >
-                  {(control) =>
-                    page ? (
-                      <Textarea
-                        {...control}
-                        rows={2}
-                        disabled={disabled || !row.enabled}
-                        value={row.notes}
-                        onChange={(event) => {
-                          set({
-                            environments: {
-                              ...values.environments,
-                              [environment]: { ...row, notes: event.target.value },
-                            },
-                          });
-                        }}
-                      />
-                    ) : (
-                      <TextField
-                        {...control}
-                        placeholder={`${notesLabel} (optional)`}
-                        disabled={disabled || !row.enabled}
-                        value={row.notes}
-                        onChange={(event) => {
-                          set({
-                            environments: {
-                              ...values.environments,
-                              [environment]: { ...row, notes: event.target.value },
-                            },
-                          });
-                        }}
-                      />
-                    )
-                  }
-                </FormField>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </Group>
+    <EnvironmentsGroup
+      layout={layout}
+      values={values.environments}
+      onChange={(next) => {
+        set({ environments: next });
+      }}
+      error={errors.environments}
+      rowErrors={errors.environmentRows}
+      disabled={disabled}
+    />
   );
 
   const description = (

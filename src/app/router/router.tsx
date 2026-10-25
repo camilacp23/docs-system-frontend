@@ -9,6 +9,7 @@ import { AppShell } from '../../layout/AppShell';
 import { LoginPage } from '../../modules/auth/LoginPage';
 import { NotFoundPage, ServerErrorPage } from '../../modules/errors/ErrorPages';
 import { ModulePlaceholder } from '../../modules/ModulePlaceholder';
+import { CollectionsListPage } from '../../modules/collections/CollectionsListPage';
 import { VariableEditPage } from '../../modules/variables/VariableEditPage';
 import { VariableDetailPage } from '../../modules/variables/VariableDetailPage';
 import { VariablesListPage } from '../../modules/variables/VariablesListPage';
@@ -23,6 +24,7 @@ const PAGES: Record<string, ReactNode> = {
   '/variables': <VariablesListPage />,
   '/variables/:id': <VariableDetailPage />,
   '/variables/:id/edit': <VariableEditPage />,
+  '/collections': <CollectionsListPage />,
 };
 
 const pageRoutes: RouteObject[] = APP_ROUTES.map((route) => ({

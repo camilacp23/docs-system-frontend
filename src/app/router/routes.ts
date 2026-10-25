@@ -39,6 +39,8 @@ export const APP_ROUTES: readonly AppRoute[] = [
   { path: '/variables/:id/edit', title: 'Variables', roles: NOT_READER },
   { path: '/collections', title: 'Collections', roles: EVERY_ROLE },
   { path: '/collections/:id', title: 'Collections', roles: EVERY_ROLE },
+  // The edit page has its own route (D-57). Writing is not for the Reader (Table 56): S-41b.
+  { path: '/collections/:id/edit', title: 'Collections', roles: NOT_READER },
   { path: '/dependency-map', title: 'Dependency map', roles: EVERY_ROLE },
   { path: '/search', title: 'Advanced search', roles: EVERY_ROLE },
   { path: '/reports', title: 'Reports', roles: EVERY_ROLE },

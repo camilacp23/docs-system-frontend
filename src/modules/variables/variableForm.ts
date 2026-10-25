@@ -5,8 +5,14 @@
 //                                                   (required, length, pattern, at least one environment); every
 //                                                   other rule is decided by the server and shown on its field.
 import { getRuleMessage } from '../../api/messages';
+import {
+  emptyEnvironments,
+  environmentsFromDetails,
+  environmentsToWrite,
+  validateEnvironments,
+  type EnvironmentValues,
+} from '../shared/environmentForm';
 
-import { ENVIRONMENTS } from './variableLabels';
 import type {
   DataType,
   Environment,
@@ -16,18 +22,13 @@ import type {
   VariableWrite,
 } from './variableTypes';
 
-export interface EnvironmentValue {
-  enabled: boolean;
-  notes: string;
-}
-
 export interface VariableFormValues {
   name: string;
   dataType: DataType | '';
   scope: VariableScope;
   /** Id of the origin screen as text; '' = none (the variable is then untraced). */
   originScreenId: string;
-  environments: Record<Environment, EnvironmentValue>;
+  environments: EnvironmentValues;
   description: string;
 }
 
@@ -35,7 +36,6 @@ export interface VariableFormValues {
 export const NAME_MAX_LENGTH = 150;
 export const NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export const DESCRIPTION_MAX_LENGTH = 4000;
-export const NOTES_MAX_LENGTH = 2000;
 
 export const FIELD_LABEL = {
   name: 'Name',
@@ -53,26 +53,18 @@ export function emptyValues(): VariableFormValues {
     dataType: 'TEXT',
     scope: 'GLOBAL',
     originScreenId: '',
-    environments: {
-      DEV: { enabled: true, notes: '' },
-      PROD: { enabled: false, notes: '' },
-    },
+    environments: emptyEnvironments(),
     description: '',
   };
 }
 
 export function valuesFromVariable(variable: Variable): VariableFormValues {
-  const byEnvironment = new Map(variable.environmentDetails.map((e) => [e.environment, e]));
-  const entry = (environment: Environment): EnvironmentValue => {
-    const found = byEnvironment.get(environment);
-    return { enabled: found !== undefined, notes: found?.notes ?? '' };
-  };
   return {
     name: variable.name,
     dataType: variable.dataType,
     scope: variable.scope,
     originScreenId: variable.originScreen === null ? '' : String(variable.originScreen.id),
-    environments: { DEV: entry('DEV'), PROD: entry('PROD') },
+    environments: environmentsFromDetails(variable.environmentDetails),
     description: variable.description ?? '',
   };
 }
@@ -86,13 +78,7 @@ export function toVariableWrite(values: VariableFormValues): VariableWrite {
     scope: values.scope,
     description: values.description === '' ? null : values.description,
     originScreenId: values.originScreenId === '' ? null : Number(values.originScreenId),
-    environments: ENVIRONMENTS.filter((e) => values.environments[e].enabled).map((environment) => ({
-      environment,
-      notes:
-        values.environments[environment].notes === ''
-          ? null
-          : values.environments[environment].notes,
-    })),
+    environments: environmentsToWrite(values.environments),
   };
 }
 
@@ -131,15 +117,9 @@ export function validateVariable(values: VariableFormValues): VariableFormErrors
   if (values.description.length > DESCRIPTION_MAX_LENGTH)
     errors.description = getRuleMessage('maxLength', FIELD_LABEL.description);
 
-  const enabled = ENVIRONMENTS.filter((e) => values.environments[e].enabled);
-  if (enabled.length === 0)
-    errors.environments = getRuleMessage('minItems', FIELD_LABEL.environments);
-  const rows: Partial<Record<Environment, string>> = {};
-  for (const environment of enabled) {
-    if (values.environments[environment].notes.length > NOTES_MAX_LENGTH)
-      rows[environment] = getRuleMessage('maxLength', FIELD_LABEL.notes);
-  }
-  if (Object.keys(rows).length > 0) errors.environmentRows = rows;
+  const environments = validateEnvironments(values.environments);
+  if (environments.group) errors.environments = environments.group;
+  if (environments.rows) errors.environmentRows = environments.rows;
   return errors;
 }
 

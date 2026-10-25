@@ -1,9 +1,9 @@
-// VariableFilters: the filter bar of the variable list (S-10): scope tabs, search by name (the URL changes 300 ms
-// after the user stops typing), data type, environment and origin screen, and "Clear filters" when any is set.
+// VariableFilters: the filter bar of the variable list (S-10): scope tabs, search by name (the URL changes after the
+// user stops typing, useSearchDraft), data type, environment and origin screen, and "Clear filters" when any is set.
 // Props: params (current filters), setParams (writes the URL), screens (origin screen options), hasFilters,
 // onClear. Every control has an accessible name; the changes reach the URL, never a local copy.
 import { Search } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback } from 'react';
 
 import {
   Button,
@@ -12,12 +12,11 @@ import {
   Select,
   TextField,
 } from '../../components/ui';
+import { useSearchDraft } from '../../hooks/useSearchDraft';
 
 import type { VariableListParams } from './useVariableListParams';
 import { DATA_TYPES, DATA_TYPE_LABEL, ENVIRONMENTS } from './variableLabels';
 import type { DataType, Environment, ScreenSummary, VariableScope } from './variableTypes';
-
-export const SEARCH_DEBOUNCE_MS = 300;
 
 interface VariableFiltersProps {
   params: VariableListParams;
@@ -36,22 +35,15 @@ export function VariableFilters({
   hasFilters,
   onClear,
 }: VariableFiltersProps) {
-  // What the user has typed, tagged with the URL value it started from, so a change of the URL (clear filters,
-  // browser back) replaces the text without an effect that copies state.
-  const [draft, setDraft] = useState<{ base: string; text: string } | null>(null);
-  const text = draft !== null && draft.base === params.q ? draft.text : params.q;
-
-  useEffect(() => {
-    if (draft === null || draft.base !== params.q) return;
-    const wanted = draft.text.trim();
-    if (wanted === params.q) return;
-    const timer = setTimeout(() => {
-      setParams({ q: wanted }, { replace: true });
-    }, SEARCH_DEBOUNCE_MS);
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [draft, params.q, setParams]);
+  const [text, setText] = useSearchDraft(
+    params.q,
+    useCallback(
+      (q: string) => {
+        setParams({ q }, { replace: true });
+      },
+      [setParams],
+    ),
+  );
 
   return (
     <div className="flex flex-wrap items-center gap-3 p-4">
@@ -83,7 +75,7 @@ export function VariableFilters({
           className="pl-9"
           value={text}
           onChange={(event) => {
-            setDraft({ base: params.q, text: event.target.value });
+            setText(event.target.value);
           }}
         />
       </div>

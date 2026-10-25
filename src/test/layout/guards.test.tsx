@@ -12,11 +12,19 @@ const NO_ACCESS = "You don't have access to this page";
 const FORBIDDEN: Record<Role, string[]> = {
   ADMINISTRATOR: [],
   DEVELOPER: ['/admin/users', '/admin/applications'],
-  READER: ['/review', '/audit', '/admin/users', '/admin/applications', '/variables/5/edit'],
+  READER: [
+    '/review',
+    '/audit',
+    '/admin/users',
+    '/admin/applications',
+    '/variables/5/edit',
+    '/collections/5/edit',
+  ],
 };
 
 /** Modules that already have their own pages: the placeholder text no longer applies to them. */
-const hasOwnPage = (path: string) => path.startsWith('/variables');
+const hasOwnPage = (path: string) =>
+  path.startsWith('/variables') || path.startsWith('/collections');
 
 const PROTECTED_PATHS = APP_ROUTES.map((route) => route.path.replace(':id', '5'));
 
