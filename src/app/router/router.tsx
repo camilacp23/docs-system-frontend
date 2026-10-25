@@ -2,25 +2,28 @@
 // /login is outside the shell. Everything else needs a session (RequireAuth), is drawn inside AppShell and is
 // checked against the role of the user (RoleGate -> S-41b). "/" goes to /dashboard; an unknown path shows S-41a.
 // Modules that do not exist yet are ModulePlaceholder pages. appRoutes is exported so tests can build a memory router.
+import type { ReactNode } from 'react';
 import { createBrowserRouter, Navigate, type RouteObject } from 'react-router';
 
 import { AppShell } from '../../layout/AppShell';
 import { LoginPage } from '../../modules/auth/LoginPage';
 import { NotFoundPage, ServerErrorPage } from '../../modules/errors/ErrorPages';
 import { ModulePlaceholder } from '../../modules/ModulePlaceholder';
+import { VariablesListPage } from '../../modules/variables/VariablesListPage';
 import { RootError, RootLayout } from './RootLayout';
 
 import { devRoutes } from './devRoutes';
 import { GuestOnly, RequireAuth, RoleGate } from './guards';
 import { APP_ROUTES, HOME_PATH, LOGIN_PATH } from './routes';
 
+/** The pages that already exist, by route path; every other route shows the placeholder of its module. */
+const PAGES: Record<string, ReactNode> = {
+  '/variables': <VariablesListPage />,
+};
+
 const pageRoutes: RouteObject[] = APP_ROUTES.map((route) => ({
   path: route.path,
-  element: (
-    <RoleGate>
-      <ModulePlaceholder title={route.title} />
-    </RoleGate>
-  ),
+  element: <RoleGate>{PAGES[route.path] ?? <ModulePlaceholder title={route.title} />}</RoleGate>,
 }));
 
 export const appRoutes: RouteObject[] = [
