@@ -1,7 +1,8 @@
 // routes: the route table of D-57 with the roles that may open each one (SDD Table 56) and the page title shown in
 // the breadcrumb. This is for usability only: the API enforces every permission (NFR-03).
 // canAccessPath(role, pathname) -> true | false | null (null: not a known route, the "not found" page applies).
-// Detail routes (/screens/:id ...) share the title of their list: the breadcrumb shows only the section.
+// Detail routes (/screens/:id ...) share the title of their list; a page may replace the breadcrumb text with
+// useBreadcrumbLabel (e.g. "Variables / gUsuario").
 import { matchPath } from 'react-router';
 
 import type { components } from '../../api/schema';
@@ -34,8 +35,12 @@ export const APP_ROUTES: readonly AppRoute[] = [
   { path: '/screens/:id', title: 'Screens', roles: EVERY_ROLE },
   { path: '/variables', title: 'Variables', roles: EVERY_ROLE },
   { path: '/variables/:id', title: 'Variables', roles: EVERY_ROLE },
+  // The edit page has its own route (D-57). Writing is not for the Reader (Table 56): S-41b.
+  { path: '/variables/:id/edit', title: 'Variables', roles: NOT_READER },
   { path: '/collections', title: 'Collections', roles: EVERY_ROLE },
   { path: '/collections/:id', title: 'Collections', roles: EVERY_ROLE },
+  // The edit page has its own route (D-57). Writing is not for the Reader (Table 56): S-41b.
+  { path: '/collections/:id/edit', title: 'Collections', roles: NOT_READER },
   { path: '/dependency-map', title: 'Dependency map', roles: EVERY_ROLE },
   { path: '/search', title: 'Advanced search', roles: EVERY_ROLE },
   { path: '/reports', title: 'Reports', roles: EVERY_ROLE },

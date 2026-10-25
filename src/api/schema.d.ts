@@ -45,6 +45,8 @@ export interface paths {
          * Renew the access token with the refresh-token cookie
          * @description Rotates the refresh token (the old one is revoked). Presenting a refresh
          *     token that was already rotated revokes its whole family and returns 401.
+         *     The request must carry the frontend's `Origin` header (CSRF defense):
+         *     otherwise 403 FORBIDDEN with `details.reason = ORIGIN`.
          */
         post: operations["refreshSession"];
         delete?: never;
@@ -64,7 +66,9 @@ export interface paths {
         put?: never;
         /**
          * End the session
-         * @description Revokes the refresh token and clears the cookie. Idempotent.
+         * @description Revokes the refresh token and clears the cookie. Idempotent. The request must
+         *     carry the frontend's `Origin` header (CSRF defense): otherwise 403 FORBIDDEN
+         *     with `details.reason = ORIGIN`.
          */
         post: operations["logout"];
         delete?: never;
@@ -228,7 +232,9 @@ export interface paths {
         };
         /**
          * List variables of an application
-         * @description Roles: all.
+         * @description Roles: all. An `applicationId` that does not exist (or is larger than an
+         *     integer can hold) answers 404. A filter by an id that does not exist
+         *     (`originScreenId`) is not an error: the page is empty.
          */
         get: operations["listVariables"];
         put?: never;
@@ -239,6 +245,12 @@ export interface paths {
          *     WRITE link with `usedIn = origin`.
          *     When the application is archived it is read-only (CP-01): this operation
          *     returns 422 APPLICATION_ARCHIVED for every role.
+         *     404 when `applicationId` or `originScreenId` does not exist. 422
+         *     INVALID_ORIGIN_SCREEN when the origin screen of a context variable is App
+         *     (OnStart), or when the origin screen belongs to another application. The
+         *     name must be free where DUPLICATE_NAME says (global variable: in the
+         *     application; context variable: in its origin screen, or in the application
+         *     when it has none); a repeated environment is a 400 with its position.
          */
         post: operations["createVariable"];
         delete?: never;
@@ -273,6 +285,13 @@ export interface paths {
          *     READ/READ_WRITE links and UpdateContext assignments elsewhere, and any link to
          *     a context variable without origin, return 422 CONTEXT_SCREEN_MISMATCH.
          *     Enforced by the database at commit (migration context_screen_rule).
+         *     `If-Match` is always checked when sent, also when the body changes nothing.
+         *     An update that changes nothing writes nothing: it answers 200 with the same
+         *     `ETag` and `updatedAt`. The business rules are applied in this order:
+         *     INVALID_ORIGIN_SCREEN (the origin screen follows the same rules as in
+         *     `POST /variables`), SCOPE_CONFLICT, CONTEXT_SCREEN_MISMATCH. The name must be
+         *     free where DUPLICATE_NAME says (409). The environments are replaced by
+         *     difference, and a change in them also moves the `ETag`.
          */
         put: operations["updateVariable"];
         post?: never;
@@ -320,7 +339,8 @@ export interface paths {
         };
         /**
          * List collections of an application
-         * @description Roles: all.
+         * @description Roles: all. An `applicationId` that does not exist (or is larger than an
+         *     integer can hold) answers 404.
          */
         get: operations["listCollections"];
         put?: never;
@@ -329,6 +349,18 @@ export interface paths {
          * @description Roles: Administrator, Developer. When the application is archived it is
          *     read-only (CP-01): this operation returns 422 APPLICATION_ARCHIVED for every
          *     role.
+         *     404 when `applicationId`, or a variable, screen or collection referenced by
+         *     the body, does not exist; `details.field` gives the position of the
+         *     reference. The name must be free in the application: 409 DUPLICATE_NAME with
+         *     `details.container = application`. A repeated field name, assignment or
+         *     `derivedFrom` item is a 400 with its position, not DUPLICATE_NAME.
+         *     The 422 rules on `variableAssignments` are applied one rule at a time, each
+         *     one from the first item to the last, and the first item that fails in the
+         *     first rule that fails is reported, with its position in `details.field`.
+         *     Order: CROSS_APPLICATION (the variable, then the screen of each assignment,
+         *     then the collections of `derivedFrom`), SCOPE_MISMATCH,
+         *     CONTEXT_SCREEN_MISMATCH. The scope of a variable is read from the database,
+         *     never from the request.
          *     Context variables belong to their origin screen (CP-07): from any other screen
          *     a context variable can only be written (WRITE, as Navigate does);
          *     READ/READ_WRITE links and UpdateContext assignments elsewhere, and any link to
@@ -358,9 +390,21 @@ export interface paths {
         get: operations["getCollection"];
         /**
          * Replace a collection, its fields and its assignments
-         * @description Roles: Administrator, Developer. Nested items are matched by `id`: items
-         *     with an id are updated, items without one are created, and existing items
-         *     left out are deleted, so the audit log keeps one history per field.
+         * @description Roles: Administrator, Developer. The body replaces the whole editable
+         *     representation: an omitted `fields`, `variableAssignments` or `derivedFrom`
+         *     is the same as an empty array and deletes the existing items.
+         *     Nested items are matched by `id`: items with an id are updated, items
+         *     without one are created, and existing items left out are deleted, so the
+         *     audit log keeps one history per field. An `id` that does not belong to this
+         *     collection (it belongs to another one, or does not exist) is 404 with
+         *     `details { element, id, field }`, for example `fields[2].id`; the same id
+         *     twice in the body is a 400 with its position. `derivedFrom` has no ids: it
+         *     is a set of collection ids that is compared with the existing one.
+         *     `If-Match` is always checked when sent, also when the body changes nothing.
+         *     An update that changes nothing writes nothing: it answers 200 with the same
+         *     `ETag` and `updatedAt`. A change in any nested array also moves the `ETag`
+         *     of the collection. The name must be free in the application: 409
+         *     DUPLICATE_NAME with `details.container = application`.
          *     When the application is archived it is read-only (CP-01): this operation
          *     returns 422 APPLICATION_ARCHIVED for every role.
          *     Context variables belong to their origin screen (CP-07): from any other screen
@@ -368,6 +412,13 @@ export interface paths {
          *     READ/READ_WRITE links and UpdateContext assignments elsewhere, and any link to
          *     a context variable without origin, return 422 CONTEXT_SCREEN_MISMATCH.
          *     Enforced by the database at commit (migration context_screen_rule).
+         *     The 422 rules on `variableAssignments` are applied one rule at a time, each
+         *     one from the first item to the last, and the first item that fails in the
+         *     first rule that fails is reported, with its position in `details.field`.
+         *     Order: CROSS_APPLICATION (the variable, then the screen of each assignment,
+         *     then the collections of `derivedFrom`), SCOPE_MISMATCH,
+         *     CONTEXT_SCREEN_MISMATCH. The scope of a variable is read from the database,
+         *     never from the request.
          */
         put: operations["updateCollection"];
         post?: never;
@@ -415,7 +466,9 @@ export interface paths {
         };
         /**
          * List screens of an application (FR-10, FR-14)
-         * @description Roles: all.
+         * @description Roles: all. An `applicationId` that does not exist (or is larger than an
+         *     integer can hold) answers 404. A filter by an id that does not exist
+         *     (`authorId`) is not an error: the page is empty.
          */
         get: operations["listScreens"];
         put?: never;
@@ -1090,6 +1143,7 @@ export interface components {
             description?: string | null;
             /** @description Screen where the variable is created; null = without full traceability. A CONTEXT variable cannot originate in the App (OnStart) screen. */
             originScreenId?: number | null;
+            /** @description At most one entry per environment. A repeated environment (even with different notes) is a 400 that names its position, for example `environments[1].environment`. */
             environments: components["schemas"]["EnvironmentPresence"][];
         };
         VariableCreate: {
@@ -1118,7 +1172,7 @@ export interface components {
             data: {
                 variable: components["schemas"]["Ref"];
                 originScreen: components["schemas"]["Ref"] | null;
-                /** @description Screen links (screen_variable), including the origin row */
+                /** @description Screen links (screen_variable) other than the origin row, which is reported in `originScreen` */
                 screens: {
                     screen: components["schemas"]["Ref"];
                     accessMode: components["schemas"]["AccessMode"];
@@ -1174,10 +1228,22 @@ export interface components {
             name: string;
             creationCondition?: string | null;
             description?: string | null;
+            /** @description At most one entry per environment. A repeated environment (even with different notes) is a 400 that names its position, for example `environments[1].environment`. */
             environments: components["schemas"]["EnvironmentPresence"][];
+            /** @description A repeated field `name` or `id` is a 400 that names its position, for example `fields[1].name`. Omitted = empty (PUT deletes the existing fields). */
             fields?: components["schemas"]["CollectionFieldWrite"][];
+            /** @description A repeated `id`, or a repeated combination of `variableId`, `screenId` and `usedIn`, is a 400 that names its position. Omitted = empty (PUT deletes the existing assignments). */
             variableAssignments?: components["schemas"]["VariableAssignmentWrite"][];
-            /** @description Collections this one is built from (dependency DERIVES_FROM, SDD D-29) */
+            /**
+             * @description Ids of the collections this one is built from (dependency DERIVES_FROM, SDD D-29). The
+             *     collection being written is the source and each id is a target: `colActivos` is built from
+             *     `colClientes`. It is a set, so a repeated id is a 400 that names its position
+             *     (`derivedFrom[1]`, rule `unique`), and a collection that lists itself is a 400 on
+             *     `derivedFrom[i]` with rule `self` ("A collection cannot derive from itself."; PUT only).
+             *     Cycles between two or more collections are allowed. A collection of another application is
+             *     422 CROSS_APPLICATION and one that does not exist is 404, both with `details.field`.
+             *     Omitted = empty (PUT deletes the existing derivations).
+             */
             derivedFrom?: number[];
         };
         CollectionCreate: {
@@ -1637,9 +1703,14 @@ export interface components {
         };
     };
     responses: {
-        /** @description Malformed request or invalid fields */
+        /**
+         * @description Malformed request or invalid fields. `details.fields` lists every invalid field as
+         *     `{ field, rule, message }`; `field` includes the position inside arrays
+         *     (`environments[1].environment`) and `rule` is `unique` for a repeated value.
+         */
         ValidationError: {
             headers: {
+                "X-Request-Id": components["headers"]["XRequestId"];
                 [name: string]: unknown;
             };
             content: {
@@ -1651,8 +1722,8 @@ export interface components {
                  *         "fields": [
                  *           {
                  *             "field": "environments",
-                 *             "issue": "min_items",
-                 *             "message": "Select at least one environment (DEV or PROD)."
+                 *             "rule": "minItems",
+                 *             "message": "must NOT have fewer than 1 items"
                  *           }
                  *         ]
                  *       }
@@ -1661,9 +1732,55 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description Missing, expired, revoked or already rotated refresh token, or the account is no longer active */
+        RefreshInvalid: {
+            headers: {
+                "X-Request-Id": components["headers"]["XRequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "REFRESH_INVALID",
+                 *       "message": "Your session ended. Sign in again to continue.",
+                 *       "details": null
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The request does not come from the frontend's Origin (cookie endpoints only) */
+        OriginRejected: {
+            headers: {
+                "X-Request-Id": components["headers"]["XRequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "FORBIDDEN",
+                 *       "message": "This request's origin isn't allowed.",
+                 *       "details": {
+                 *         "reason": "ORIGIN"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The resource did not change since the `If-None-Match` value (no body) */
+        NotModified: {
+            headers: {
+                ETag: components["headers"]["ETag"];
+                "X-Request-Id": components["headers"]["XRequestId"];
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
         /** @description Wrong e-mail/password or inactive account (same response for both) */
         InvalidCredentials: {
             headers: {
+                "X-Request-Id": components["headers"]["XRequestId"];
                 [name: string]: unknown;
             };
             content: {
@@ -1680,6 +1797,7 @@ export interface components {
         /** @description Missing, invalid, or expired token */
         Unauthenticated: {
             headers: {
+                "X-Request-Id": components["headers"]["XRequestId"];
                 [name: string]: unknown;
             };
             content: {
@@ -1696,6 +1814,7 @@ export interface components {
         /** @description Authenticated but the role does not allow the operation (NFR-03) */
         Forbidden: {
             headers: {
+                "X-Request-Id": components["headers"]["XRequestId"];
                 [name: string]: unknown;
             };
             content: {
@@ -1713,49 +1832,38 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description The resource does not exist */
+        /**
+         * @description The resource does not exist. It may be the one in the path, the application of a listing
+         *     (`applicationId`), or one referenced by the body; in that last case `details.field`
+         *     gives its position in the body (for example `variableAssignments[1].variableId`).
+         */
         NotFound: {
             headers: {
+                "X-Request-Id": components["headers"]["XRequestId"];
                 [name: string]: unknown;
             };
             content: {
-                /**
-                 * @example {
-                 *       "code": "NOT_FOUND",
-                 *       "message": "This variable doesn't exist. It may have been deleted.",
-                 *       "details": {
-                 *         "element": "variable",
-                 *         "id": 42
-                 *       }
-                 *     }
-                 */
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Uniqueness conflict (duplicate name or e-mail) */
+        /**
+         * @description Uniqueness conflict (duplicate name or e-mail). For `DUPLICATE_NAME`, `details.application`
+         *     is the place where the name must be unique and `details.container` says which one it is:
+         *     `application`, `screen` or `system` (see the error catalog).
+         */
         Conflict: {
             headers: {
+                "X-Request-Id": components["headers"]["XRequestId"];
                 [name: string]: unknown;
             };
             content: {
-                /**
-                 * @example {
-                 *       "code": "DUPLICATE_NAME",
-                 *       "message": "A global variable named gUsuarioActual already exists in SAR.",
-                 *       "details": {
-                 *         "field": "name",
-                 *         "type": "global variable",
-                 *         "name": "gUsuarioActual",
-                 *         "application": "SAR"
-                 *       }
-                 *     }
-                 */
                 "application/json": components["schemas"]["Error"];
             };
         };
         /** @description The resource changed since it was read (If-Match mismatch) */
         PreconditionFailed: {
             headers: {
+                "X-Request-Id": components["headers"]["XRequestId"];
                 [name: string]: unknown;
             };
             content: {
@@ -1775,6 +1883,7 @@ export interface components {
         /** @description Well-formed request that breaks a business or integrity rule */
         RuleViolation: {
             headers: {
+                "X-Request-Id": components["headers"]["XRequestId"];
                 [name: string]: unknown;
             };
             content: {
@@ -1785,6 +1894,7 @@ export interface components {
         RateLimited: {
             headers: {
                 "Retry-After"?: number;
+                "X-Request-Id": components["headers"]["XRequestId"];
                 [name: string]: unknown;
             };
             content: {
@@ -1803,6 +1913,7 @@ export interface components {
         /** @description Unexpected error (no internal details are exposed) */
         InternalError: {
             headers: {
+                "X-Request-Id": components["headers"]["XRequestId"];
                 [name: string]: unknown;
             };
             content: {
@@ -1821,6 +1932,7 @@ export interface components {
         /** @description Jira Cloud unavailable or failed (NFR-14). The rest of the system keeps working. */
         JiraError: {
             headers: {
+                "X-Request-Id": components["headers"]["XRequestId"];
                 [name: string]: unknown;
             };
             content: {
@@ -1831,6 +1943,7 @@ export interface components {
         ReportAccepted: {
             headers: {
                 Location: components["headers"]["Location"];
+                "X-Request-Id": components["headers"]["XRequestId"];
                 [name: string]: unknown;
             };
             content: {
@@ -1840,6 +1953,7 @@ export interface components {
         /** @description Request body larger than allowed */
         PayloadTooLarge: {
             headers: {
+                "X-Request-Id": components["headers"]["XRequestId"];
                 [name: string]: unknown;
             };
             content: {
@@ -1866,13 +1980,17 @@ export interface components {
         EnvironmentFilter: components["schemas"]["Environment"];
         /** @description ETag from the last GET; if the resource changed since, the update is rejected with 412. */
         IfMatch: string;
+        /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
+        IfNoneMatch: string;
     };
     requestBodies: never;
     headers: {
         /** @description URL of the created resource */
         Location: string;
-        /** @description Weak validator derived from updatedAt */
+        /** @description Weak validator. A single resource with `updatedAt` sends one derived from it; listings and other responses send a weak hash of the body. */
         ETag: string;
+        /** @description Identifier of the request, also written in the server log. Quote it when reporting a problem. */
+        XRequestId: string;
     };
     pathItems: never;
 }
@@ -1902,6 +2020,7 @@ export interface operations {
                 headers: {
                     /** @description Refresh token cookie */
                     "Set-Cookie"?: string;
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -1927,13 +2046,15 @@ export interface operations {
             200: {
                 headers: {
                     "Set-Cookie"?: string;
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["SessionResponse"];
                 };
             };
-            401: components["responses"]["Unauthenticated"];
+            401: components["responses"]["RefreshInvalid"];
+            403: components["responses"]["OriginRejected"];
             429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
         };
@@ -1950,10 +2071,12 @@ export interface operations {
             /** @description Session closed */
             204: {
                 headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content?: never;
             };
+            403: components["responses"]["OriginRejected"];
             429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
         };
@@ -1970,7 +2093,10 @@ export interface operations {
                 /** @description Allowed: name, email, createdAt, lastLoginAt; prefix - for descending. */
                 sort?: string;
             };
-            header?: never;
+            header?: {
+                /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -1979,6 +2105,8 @@ export interface operations {
             /** @description Page of users */
             200: {
                 headers: {
+                    ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -1987,6 +2115,7 @@ export interface operations {
                     };
                 };
             };
+            304: components["responses"]["NotModified"];
             400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
@@ -2018,6 +2147,7 @@ export interface operations {
                 headers: {
                     Location: components["headers"]["Location"];
                     ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2033,7 +2163,10 @@ export interface operations {
     getUser: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
             path: {
                 id: components["parameters"]["Id"];
             };
@@ -2045,12 +2178,14 @@ export interface operations {
             200: {
                 headers: {
                     ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["UserEnvelope"];
                 };
             };
+            304: components["responses"]["NotModified"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -2078,6 +2213,7 @@ export interface operations {
             200: {
                 headers: {
                     ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2107,6 +2243,7 @@ export interface operations {
             /** @description Deactivated */
             204: {
                 headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -2143,6 +2280,7 @@ export interface operations {
             200: {
                 headers: {
                     ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2165,7 +2303,10 @@ export interface operations {
                 q?: components["parameters"]["Query"];
                 status?: components["schemas"]["ApplicationStatus"];
             };
-            header?: never;
+            header?: {
+                /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -2174,6 +2315,8 @@ export interface operations {
             /** @description Page of applications */
             200: {
                 headers: {
+                    ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2182,6 +2325,7 @@ export interface operations {
                     };
                 };
             };
+            304: components["responses"]["NotModified"];
             401: components["responses"]["Unauthenticated"];
         };
     };
@@ -2211,6 +2355,7 @@ export interface operations {
                 headers: {
                     Location: components["headers"]["Location"];
                     ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2226,7 +2371,10 @@ export interface operations {
     getApplication: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
             path: {
                 id: components["parameters"]["Id"];
             };
@@ -2238,12 +2386,14 @@ export interface operations {
             200: {
                 headers: {
                     ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["ApplicationEnvelope"];
                 };
             };
+            304: components["responses"]["NotModified"];
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
         };
@@ -2272,6 +2422,7 @@ export interface operations {
             200: {
                 headers: {
                     ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2300,12 +2451,15 @@ export interface operations {
                 scope?: components["schemas"]["VariableScope"];
                 dataType?: components["schemas"]["DataType"];
                 originScreenId?: number;
-                /** @description true = only variables without an origin screen (FR-19 indicator) */
+                /** @description true = only variables without an origin screen (FR-19 indicator). false is the same as omitting the parameter (no filter). */
                 untraced?: boolean;
                 /** @description Allowed: name, scope, dataType, updatedAt; prefix - for descending. */
                 sort?: string;
             };
-            header?: never;
+            header?: {
+                /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -2314,6 +2468,8 @@ export interface operations {
             /** @description Page of variables */
             200: {
                 headers: {
+                    ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2322,8 +2478,10 @@ export interface operations {
                     };
                 };
             };
+            304: components["responses"]["NotModified"];
             400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
         };
     };
     createVariable: {
@@ -2361,6 +2519,8 @@ export interface operations {
             201: {
                 headers: {
                     Location: components["headers"]["Location"];
+                    ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2370,6 +2530,7 @@ export interface operations {
             400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["RuleViolation"];
         };
@@ -2377,7 +2538,10 @@ export interface operations {
     getVariable: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
             path: {
                 id: components["parameters"]["Id"];
             };
@@ -2389,12 +2553,14 @@ export interface operations {
             200: {
                 headers: {
                     ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["VariableEnvelope"];
                 };
             };
+            304: components["responses"]["NotModified"];
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
         };
@@ -2421,6 +2587,7 @@ export interface operations {
             200: {
                 headers: {
                     ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2450,6 +2617,7 @@ export interface operations {
             /** @description Deleted */
             204: {
                 headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -2463,7 +2631,10 @@ export interface operations {
     getVariableDependencies: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
             path: {
                 id: components["parameters"]["Id"];
             };
@@ -2474,12 +2645,15 @@ export interface operations {
             /** @description Usage of the variable */
             200: {
                 headers: {
+                    ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["VariableDependenciesEnvelope"];
                 };
             };
+            304: components["responses"]["NotModified"];
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
         };
@@ -2495,12 +2669,15 @@ export interface operations {
                 q?: components["parameters"]["Query"];
                 /** @description Only elements present in this environment. */
                 environment?: components["parameters"]["EnvironmentFilter"];
-                /** @description true = only collections not linked to any screen (FR-19 definition, SDD D-14) */
+                /** @description true = only collections not linked to any screen (FR-19 definition, SDD D-14). false is the same as omitting the parameter (no filter). */
                 undocumented?: boolean;
                 /** @description Allowed: name, updatedAt; prefix - for descending. */
                 sort?: string;
             };
-            header?: never;
+            header?: {
+                /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -2509,6 +2686,8 @@ export interface operations {
             /** @description Page of collections */
             200: {
                 headers: {
+                    ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2517,8 +2696,10 @@ export interface operations {
                     };
                 };
             };
+            304: components["responses"]["NotModified"];
             400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
         };
     };
     createCollection: {
@@ -2572,6 +2753,8 @@ export interface operations {
             201: {
                 headers: {
                     Location: components["headers"]["Location"];
+                    ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2581,6 +2764,7 @@ export interface operations {
             400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["RuleViolation"];
         };
@@ -2588,7 +2772,10 @@ export interface operations {
     getCollection: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
             path: {
                 id: components["parameters"]["Id"];
             };
@@ -2600,12 +2787,14 @@ export interface operations {
             200: {
                 headers: {
                     ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["CollectionEnvelope"];
                 };
             };
+            304: components["responses"]["NotModified"];
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
         };
@@ -2632,6 +2821,7 @@ export interface operations {
             200: {
                 headers: {
                     ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2661,6 +2851,7 @@ export interface operations {
             /** @description Deleted */
             204: {
                 headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -2677,7 +2868,10 @@ export interface operations {
                 page?: components["parameters"]["Page"];
                 pageSize?: number;
             };
-            header?: never;
+            header?: {
+                /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
             path: {
                 id: components["parameters"]["Id"];
             };
@@ -2688,6 +2882,8 @@ export interface operations {
             /** @description Fields */
             200: {
                 headers: {
+                    ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2696,6 +2892,7 @@ export interface operations {
                     };
                 };
             };
+            304: components["responses"]["NotModified"];
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
         };
@@ -2714,7 +2911,10 @@ export interface operations {
                 /** @description Allowed: name, documentationStatus, updatedAt, pendingSubtasks; prefix - for descending. The App (OnStart) screen is always listed first. */
                 sort?: string;
             };
-            header?: never;
+            header?: {
+                /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -2723,6 +2923,8 @@ export interface operations {
             /** @description Page of screens */
             200: {
                 headers: {
+                    ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2731,8 +2933,10 @@ export interface operations {
                     };
                 };
             };
+            304: components["responses"]["NotModified"];
             400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
         };
     };
     createScreen: {
@@ -2801,6 +3005,7 @@ export interface operations {
             201: {
                 headers: {
                     Location: components["headers"]["Location"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2818,7 +3023,10 @@ export interface operations {
     getScreen: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
             path: {
                 id: components["parameters"]["Id"];
             };
@@ -2830,12 +3038,14 @@ export interface operations {
             200: {
                 headers: {
                     ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["ScreenEnvelope"];
                 };
             };
+            304: components["responses"]["NotModified"];
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
         };
@@ -2862,6 +3072,7 @@ export interface operations {
             200: {
                 headers: {
                     ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2891,6 +3102,7 @@ export interface operations {
             /** @description Deleted */
             204: {
                 headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -2930,6 +3142,7 @@ export interface operations {
             /** @description New status */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2973,6 +3186,7 @@ export interface operations {
             /** @description Subtask created (and Epic/Story when they were missing) */
             201: {
                 headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2992,7 +3206,10 @@ export interface operations {
             query?: {
                 refresh?: boolean;
             };
-            header?: never;
+            header?: {
+                /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
             path: {
                 id: components["parameters"]["Id"];
             };
@@ -3003,12 +3220,15 @@ export interface operations {
             /** @description Ticket tree */
             200: {
                 headers: {
+                    ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["JiraTreeEnvelope"];
                 };
             };
+            304: components["responses"]["NotModified"];
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
         };
@@ -3019,7 +3239,10 @@ export interface operations {
                 page?: components["parameters"]["Page"];
                 pageSize?: components["parameters"]["PageSize"];
             };
-            header?: never;
+            header?: {
+                /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
             path: {
                 id: components["parameters"]["Id"];
             };
@@ -3030,6 +3253,8 @@ export interface operations {
             /** @description Page of comments */
             200: {
                 headers: {
+                    ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3038,6 +3263,7 @@ export interface operations {
                     };
                 };
             };
+            304: components["responses"]["NotModified"];
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
         };
@@ -3066,6 +3292,7 @@ export interface operations {
             201: {
                 headers: {
                     Location: components["headers"]["Location"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3096,6 +3323,7 @@ export interface operations {
             /** @description Updated */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3133,6 +3361,7 @@ export interface operations {
             /** @description Decision applied */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3156,7 +3385,10 @@ export interface operations {
                 /** @description Only elements present in this environment. */
                 environment?: components["parameters"]["EnvironmentFilter"];
             };
-            header?: never;
+            header?: {
+                /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -3165,12 +3397,15 @@ export interface operations {
             /** @description Nodes and edges */
             200: {
                 headers: {
+                    ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["GraphEnvelope"];
                 };
             };
+            304: components["responses"]["NotModified"];
             400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthenticated"];
         };
@@ -3180,7 +3415,10 @@ export interface operations {
             query?: {
                 depth?: number;
             };
-            header?: never;
+            header?: {
+                /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
             path: {
                 type: "screens" | "variables" | "collections" | "components";
                 id: components["parameters"]["Id"];
@@ -3192,12 +3430,15 @@ export interface operations {
             /** @description Nodes and edges around the element */
             200: {
                 headers: {
+                    ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["GraphEnvelope"];
                 };
             };
+            304: components["responses"]["NotModified"];
             400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
@@ -3218,7 +3459,10 @@ export interface operations {
                 page?: components["parameters"]["Page"];
                 pageSize?: components["parameters"]["PageSize"];
             };
-            header?: never;
+            header?: {
+                /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -3227,6 +3471,8 @@ export interface operations {
             /** @description Page of results, exact name matches first */
             200: {
                 headers: {
+                    ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3235,6 +3481,7 @@ export interface operations {
                     };
                 };
             };
+            304: components["responses"]["NotModified"];
             400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthenticated"];
         };
@@ -3245,7 +3492,10 @@ export interface operations {
                 /** @description Application whose elements are listed (NFR-16). */
                 applicationId: components["parameters"]["ApplicationId"];
             };
-            header?: never;
+            header?: {
+                /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -3254,12 +3504,15 @@ export interface operations {
             /** @description Indicators */
             200: {
                 headers: {
+                    ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["IndicatorsEnvelope"];
                 };
             };
+            304: components["responses"]["NotModified"];
             400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthenticated"];
         };
@@ -3277,7 +3530,10 @@ export interface operations {
                 page?: components["parameters"]["Page"];
                 pageSize?: components["parameters"]["PageSize"];
             };
-            header?: never;
+            header?: {
+                /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -3286,6 +3542,8 @@ export interface operations {
             /** @description Page of audit records */
             200: {
                 headers: {
+                    ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3294,6 +3552,7 @@ export interface operations {
                     };
                 };
             };
+            304: components["responses"]["NotModified"];
             400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
@@ -3364,7 +3623,10 @@ export interface operations {
                 page?: components["parameters"]["Page"];
                 pageSize?: components["parameters"]["PageSize"];
             };
-            header?: never;
+            header?: {
+                /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -3373,6 +3635,8 @@ export interface operations {
             /** @description Page of reports, newest first */
             200: {
                 headers: {
+                    ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3381,6 +3645,7 @@ export interface operations {
                     };
                 };
             };
+            304: components["responses"]["NotModified"];
             400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthenticated"];
         };
@@ -3388,7 +3653,10 @@ export interface operations {
     getReport: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
             path: {
                 id: components["parameters"]["Id"];
             };
@@ -3399,12 +3667,15 @@ export interface operations {
             /** @description The report */
             200: {
                 headers: {
+                    ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["ReportDetailEnvelope"];
                 };
             };
+            304: components["responses"]["NotModified"];
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
         };
@@ -3412,7 +3683,10 @@ export interface operations {
     downloadReport: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
             path: {
                 id: components["parameters"]["Id"];
             };
@@ -3424,6 +3698,8 @@ export interface operations {
             200: {
                 headers: {
                     "Content-Disposition"?: string;
+                    ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3431,6 +3707,7 @@ export interface operations {
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
                 };
             };
+            304: components["responses"]["NotModified"];
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
@@ -3461,6 +3738,7 @@ export interface operations {
             /** @description Updated */
             200: {
                 headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3474,6 +3752,7 @@ export interface operations {
             /** @description The report is not READY */
             409: {
                 headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -3497,7 +3776,10 @@ export interface operations {
                 /** @description Application whose elements are listed (NFR-16). */
                 applicationId: components["parameters"]["ApplicationId"];
             };
-            header?: never;
+            header?: {
+                /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -3506,12 +3788,15 @@ export interface operations {
             /** @description Summary */
             200: {
                 headers: {
+                    ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["OnboardingEnvelope"];
                 };
             };
+            304: components["responses"]["NotModified"];
             400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthenticated"];
         };
@@ -3562,6 +3847,7 @@ export interface operations {
             /** @description Processed, ignored, or duplicate */
             204: {
                 headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -3570,6 +3856,7 @@ export interface operations {
             /** @description Missing or invalid signature */
             401: {
                 headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {

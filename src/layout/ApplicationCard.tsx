@@ -10,7 +10,7 @@ import { useApplication } from '../application/useApplication';
 import { cx, ICON_STROKE_WIDTH } from '../components/ui';
 
 import { applicationInitials } from './applicationInitials';
-import { usePopover } from './usePopover';
+import { usePopover } from '../hooks/usePopover';
 
 export function ApplicationCard() {
   const { currentApplication, applications, selectApplication } = useApplication();

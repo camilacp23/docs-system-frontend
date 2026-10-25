@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Technical Documentation System API
-  version: 0.3.2
+  version: 0.3.3
   summary: REST API contracts — SDD Interface Viewpoint (Bitácora 3, Activities 5 and 6)
   description: |
     Contracts of the eleven modules (41 operations of SRS Table 25), the
@@ -16,6 +16,16 @@ info:
     - PUT replaces the whole editable representation, nested arrays included.
     - Optional optimistic concurrency: send `If-Match` with the `ETag` of the
       last read; a mismatch returns 412.
+    - Every GET returns an `ETag`. Send it back in `If-None-Match`: when nothing
+      changed the answer is 304 with no body.
+    - Every response, success or error, carries the `X-Request-Id` header. A
+      value sent by the client is kept when it has 8 to 64 characters among
+      letters, digits, `.`, `_` and `-`; otherwise the server generates one.
+      `INTERNAL_ERROR` repeats it in `details.requestId`.
+    - Writes on variables and collections check, in this order: the shape of the request (400), that the
+      referenced resources exist (404), that the application is not archived
+      (422 `APPLICATION_ARCHIVED`), `If-Match` (412), the business rules (422)
+      and the name (409 `DUPLICATE_NAME`).
     - Authorization: every endpoint validates the role (NFR-03); the role and
       status are read from the database on each request, not trusted from the
       token, so role changes and deactivations take effect immediately.
@@ -47,6 +57,35 @@ info:
     semantics: an omitted `description` or `jiraProjectKey` is stored as null.
     No operation was added or removed (50).
 
+    Changes in 0.3.3 (variables and collections): every response documents the
+    `X-Request-Id` header, and every GET documents the `ETag` header, the
+    `If-None-Match` parameter and the 304 response. The 401 of
+    `POST /auth/refresh` is `REFRESH_INVALID`, and `POST /auth/refresh` and
+    `POST /auth/logout` declare the 403 FORBIDDEN (`details.reason = ORIGIN`) they
+    return when the request does not come from the frontend's Origin. Listings answer 404 for an
+    `applicationId` that does not exist, and `POST /variables` and
+    `POST /collections` answer 404 for a referenced resource that does not exist
+    and send the `ETag` of the created resource. `DUPLICATE_NAME` states the
+    scope where a name must be unique and its `details.container`.
+    `INVALID_ORIGIN_SCREEN` has a second message for an origin screen of another
+    application, which replaces `CROSS_APPLICATION` in `POST /variables`.
+    `CROSS_APPLICATION`, `SCOPE_MISMATCH` and `CONTEXT_SCREEN_MISMATCH` on
+    collections name the failing item in `details.field`, and the order in which
+    the rules are applied is documented. `PUT /variables/{id}` and
+    `PUT /collections/{id}` document `If-Match` and the update that changes
+    nothing; `PUT /collections/{id}` documents that omitted arrays are emptied,
+    and its nested ids answer 404 `details.field` when they are not found.
+    `derivedFrom` states its direction, that a collection cannot derive from
+    itself (400, rule `self`) and that cycles are allowed. A repeated environment
+    or `derivedFrom` item is a 400 with its position: `uniqueItems` was removed
+    from those three arrays so that the server reports them all the same way.
+    `untraced=false` and `undocumented=false` are the same as omitting them, and
+    a filter by an id that does not exist returns an empty page. The `screens`
+    of `GET /variables/{id}/dependencies` no longer say they include the origin
+    row. `x-error-codes` now lists `DUPLICATE_NAME` on the operations that can
+    return it and no longer lists `CROSS_APPLICATION` on `PUT /variables/{id}`.
+    No operation was added or removed (50).
+
     Error catalog (`code` -> HTTP status: `message`):
 
     | Code | HTTP | Message |
@@ -56,9 +95,10 @@ info:
     | UNAUTHENTICATED, TOKEN_EXPIRED | 401 | Your session is not valid. Sign in again. |
     | REFRESH_INVALID | 401 | Your session ended. Sign in again to continue. |
     | INVALID_SIGNATURE | 401 | Invalid webhook signature. (Jira only) |
-    | FORBIDDEN | 403 | Your role doesn't allow this action. |
+    | FORBIDDEN | 403 | Your role doesn't allow this action. (`details`: requiredRoles) |
+    | FORBIDDEN (origin) | 403 | This request's origin isn't allowed. (`details`: reason = ORIGIN; refresh and logout only) |
     | NOT_FOUND | 404 | This <element> doesn't exist. It may have been deleted. |
-    | DUPLICATE_NAME | 409 | A <type> named <name> already exists in <application>. |
+    | DUPLICATE_NAME | 409 | A <type> named <name> already exists in <application>. (`details`: field, type, name, application, container) |
     | EMAIL_TAKEN | 409 | A user with this email already exists. |
     | REPORT_NOT_READY | 409 | Only ready reports can be published or downloaded. |
     | PRECONDITION_FAILED | 412 | Someone else saved changes to this <element> after you opened it. Reload to see their version. |
@@ -66,7 +106,8 @@ info:
     | SCOPE_MISMATCH | 422 | Set applies to global variables and UpdateContext to context variables. |
     | SCOPE_CONFLICT | 422 | You can't change the scope while collections assign this variable with <function>. Update those assignments first. |
     | CROSS_APPLICATION | 422 | You can only link elements of the same application. |
-    | INVALID_ORIGIN_SCREEN | 422 | Context variables are created inside a screen, not in App (OnStart). |
+    | INVALID_ORIGIN_SCREEN | 422 | Context variables are created inside a screen, not in App (OnStart). (`details`: field) |
+    | INVALID_ORIGIN_SCREEN (other application) | 422 | <screen> belongs to another application. Choose a screen of <application>. (`details`: field, screenId, screen, application) |
     | CONTEXT_SCREEN_MISMATCH | 422 | <variable> belongs to <screen>. From here you can only write it with Navigate. (`details`: variableId, variable, originScreenId, screen, screenId, targetScreen) |
     | CONTEXT_SCREEN_MISMATCH (no origin screen) | 422 | <variable> has no origin screen. Set its origin screen before linking it. (`details`: variableId, variable, originScreenId: null, screenId, targetScreen) |
     | LAST_ACTIVE_ADMIN | 422 | There must be at least one active administrator. Promote another user first. |
@@ -85,6 +126,14 @@ info:
     | INTERNAL_ERROR | 500 | Something went wrong on our side. Try again in a moment. Reference: <requestId>. |
     | JIRA_UNAVAILABLE | 502 | Jira isn't responding. The to-do wasn't created. Try again in a few minutes. |
     | JIRA_PARTIAL_FAILURE | 502 | The story <key> was created, but the to-do wasn't. Try again to add it to that story. |
+
+    In `DUPLICATE_NAME`, `<type>` is the noun in lowercase (`global variable`,
+    `context variable`, `collection`, `application`; `An` before a vowel) and
+    `<application>` is the place where the name must be unique, which
+    `details.container` names: `application` (global variables, collections and
+    context variables without an origin screen: the name of the application),
+    `screen` (context variables with an origin screen: the name of that screen) or
+    `system` (applications: Documentación técnica).
 
     Each operation that can answer 422 lists its possible codes in `x-error-codes`.
   contact:
@@ -162,6 +211,7 @@ paths:
             Set-Cookie:
               description: Refresh token cookie
               schema: { type: string, example: 'rt=<opaque>; Path=/api/v1/auth; HttpOnly; Secure; SameSite=Strict; Expires=<login + 12 h>' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SessionResponse' }
@@ -179,6 +229,8 @@ paths:
       description: |
         Rotates the refresh token (the old one is revoked). Presenting a refresh
         token that was already rotated revokes its whole family and returns 401.
+        The request must carry the frontend's `Origin` header (CSRF defense):
+        otherwise 403 FORBIDDEN with `details.reason = ORIGIN`.
       security: [{ refreshCookie: [] }]
       responses:
         '200':
@@ -186,10 +238,12 @@ paths:
           headers:
             Set-Cookie:
               schema: { type: string }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SessionResponse' }
-        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '401': { $ref: '#/components/responses/RefreshInvalid' }
+        '403': { $ref: '#/components/responses/OriginRejected' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
   /auth/logout:
@@ -199,10 +253,14 @@ paths:
       x-capability: 'Authentication (public)'
       x-roles: []
       summary: End the session
-      description: Revokes the refresh token and clears the cookie. Idempotent.
+      description: |
+        Revokes the refresh token and clears the cookie. Idempotent. The request must
+        carry the frontend's `Origin` header (CSRF defense): otherwise 403 FORBIDDEN
+        with `details.reason = ORIGIN`.
       security: [{ refreshCookie: [] }, {}]
       responses:
-        '204': { description: Session closed }
+        '204': { description: Session closed, headers: { X-Request-Id: { $ref: '#/components/headers/XRequestId' } } }
+        '403': { $ref: '#/components/responses/OriginRejected' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -232,9 +290,13 @@ paths:
           in: query
           description: 'Allowed: name, email, createdAt, lastLoginAt; prefix - for descending.'
           schema: { type: string, default: name, example: '-lastLoginAt' }
+        - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
           description: Page of users
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema:
@@ -244,6 +306,7 @@ paths:
                     required: [data]
                     properties:
                       data: { type: array, items: { $ref: '#/components/schemas/User' } }
+        '304': { $ref: '#/components/responses/NotModified' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -266,6 +329,7 @@ paths:
           headers:
             Location: { $ref: '#/components/headers/Location' }
             ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/UserEnvelope' }
@@ -286,14 +350,18 @@ paths:
       description: |
         Roles: Administrator, or any authenticated user for their own id.
         The reserved integration account (CP-06) answers 404, as if it did not exist.
+      parameters:
+        - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
           description: The user
           headers:
             ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/UserEnvelope' }
+        '304': { $ref: '#/components/responses/NotModified' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -322,6 +390,7 @@ paths:
           description: Updated
           headers:
             ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/UserEnvelope' }
@@ -346,7 +415,7 @@ paths:
         The reserved integration account (CP-06) cannot be changed: 422
         RESERVED_ACCOUNT.
       responses:
-        '204': { description: Deactivated }
+        '204': { description: Deactivated, headers: { X-Request-Id: { $ref: '#/components/headers/XRequestId' } } }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -380,6 +449,7 @@ paths:
           description: Role changed
           headers:
             ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/UserEnvelope' }
@@ -405,9 +475,13 @@ paths:
         - name: status
           in: query
           schema: { $ref: '#/components/schemas/ApplicationStatus' }
+        - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
           description: Page of applications
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema:
@@ -417,6 +491,7 @@ paths:
                     required: [data]
                     properties:
                       data: { type: array, items: { $ref: '#/components/schemas/Application' } }
+        '304': { $ref: '#/components/responses/NotModified' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
     post:
       tags: [Applications]
@@ -437,6 +512,7 @@ paths:
           headers:
             Location: { $ref: '#/components/headers/Location' }
             ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ApplicationEnvelope' }
@@ -454,14 +530,18 @@ paths:
       x-roles: [ADMINISTRATOR, DEVELOPER, READER]
       summary: Get an application
       description: 'Roles: all.'
+      parameters:
+        - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
           description: The application
           headers:
             ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ApplicationEnvelope' }
+        '304': { $ref: '#/components/responses/NotModified' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
     put:
@@ -499,6 +579,7 @@ paths:
           description: Updated
           headers:
             ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ApplicationEnvelope' }
@@ -517,7 +598,10 @@ paths:
       x-capability: 'CRUD of variables and collections'
       x-roles: [ADMINISTRATOR, DEVELOPER, READER]
       summary: List variables of an application
-      description: 'Roles: all.'
+      description: |
+        Roles: all. An `applicationId` that does not exist (or is larger than an
+        integer can hold) answers 404. A filter by an id that does not exist
+        (`originScreenId`) is not an error: the page is empty.
       parameters:
         - $ref: '#/components/parameters/ApplicationId'
         - $ref: '#/components/parameters/Page'
@@ -535,15 +619,19 @@ paths:
           schema: { type: integer, minimum: 1 }
         - name: untraced
           in: query
-          description: true = only variables without an origin screen (FR-19 indicator)
+          description: true = only variables without an origin screen (FR-19 indicator). false is the same as omitting the parameter (no filter).
           schema: { type: boolean }
         - name: sort
           in: query
           description: 'Allowed: name, scope, dataType, updatedAt; prefix - for descending.'
           schema: { type: string, default: name }
+        - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
           description: Page of variables
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema:
@@ -553,21 +641,29 @@ paths:
                     required: [data]
                     properties:
                       data: { type: array, items: { $ref: '#/components/schemas/VariableSummary' } }
+        '304': { $ref: '#/components/responses/NotModified' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
     post:
       tags: [Variables]
       operationId: createVariable
       x-capability: 'CRUD of variables and collections'
       x-roles: [ADMINISTRATOR, DEVELOPER]
       summary: Register a variable (FR-05, FR-07)
-      x-error-codes: [APPLICATION_ARCHIVED, CROSS_APPLICATION, INVALID_ORIGIN_SCREEN]
+      x-error-codes: [APPLICATION_ARCHIVED, INVALID_ORIGIN_SCREEN, DUPLICATE_NAME]
       description: |
         Roles: Administrator, Developer. The variable is linked to the dependency
         map automatically (FR-06): it becomes a node, and its origin screen gets a
         WRITE link with `usedIn = origin`.
         When the application is archived it is read-only (CP-01): this operation
         returns 422 APPLICATION_ARCHIVED for every role.
+        404 when `applicationId` or `originScreenId` does not exist. 422
+        INVALID_ORIGIN_SCREEN when the origin screen of a context variable is App
+        (OnStart), or when the origin screen belongs to another application. The
+        name must be free where DUPLICATE_NAME says (global variable: in the
+        application; context variable: in its origin screen, or in the application
+        when it has none); a repeated environment is a 400 with its position.
       requestBody:
         required: true
         content:
@@ -586,12 +682,15 @@ paths:
           description: Created
           headers:
             Location: { $ref: '#/components/headers/Location' }
+            ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/VariableEnvelope' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/RuleViolation' }
   /variables/{id}:
@@ -604,14 +703,18 @@ paths:
       x-roles: [ADMINISTRATOR, DEVELOPER, READER]
       summary: Get a variable with its links
       description: 'Roles: all.'
+      parameters:
+        - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
           description: The variable
           headers:
             ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/VariableEnvelope' }
+        '304': { $ref: '#/components/responses/NotModified' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
     put:
@@ -620,7 +723,7 @@ paths:
       x-capability: 'CRUD of variables and collections'
       x-roles: [ADMINISTRATOR, DEVELOPER]
       summary: Replace a variable's editable data
-      x-error-codes: [APPLICATION_ARCHIVED, CROSS_APPLICATION, INVALID_ORIGIN_SCREEN, SCOPE_CONFLICT, CONTEXT_SCREEN_MISMATCH]
+      x-error-codes: [APPLICATION_ARCHIVED, INVALID_ORIGIN_SCREEN, SCOPE_CONFLICT, CONTEXT_SCREEN_MISMATCH, DUPLICATE_NAME]
       description: |
         Roles: Administrator, Developer. `applicationId` cannot change.
         Changing `scope` is rejected (422 SCOPE_CONFLICT) while Set/UpdateContext
@@ -632,6 +735,13 @@ paths:
         READ/READ_WRITE links and UpdateContext assignments elsewhere, and any link to
         a context variable without origin, return 422 CONTEXT_SCREEN_MISMATCH.
         Enforced by the database at commit (migration context_screen_rule).
+        `If-Match` is always checked when sent, also when the body changes nothing.
+        An update that changes nothing writes nothing: it answers 200 with the same
+        `ETag` and `updatedAt`. The business rules are applied in this order:
+        INVALID_ORIGIN_SCREEN (the origin screen follows the same rules as in
+        `POST /variables`), SCOPE_CONFLICT, CONTEXT_SCREEN_MISMATCH. The name must be
+        free where DUPLICATE_NAME says (409). The environments are replaced by
+        difference, and a change in them also moves the `ETag`.
       parameters:
         - $ref: '#/components/parameters/IfMatch'
       requestBody:
@@ -644,6 +754,7 @@ paths:
           description: Updated
           headers:
             ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/VariableEnvelope' }
@@ -667,7 +778,7 @@ paths:
         When the application is archived it is read-only (CP-01): this operation
         returns 422 APPLICATION_ARCHIVED for every role.
       responses:
-        '204': { description: Deleted }
+        '204': { description: Deleted, headers: { X-Request-Id: { $ref: '#/components/headers/XRequestId' } } }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -682,12 +793,18 @@ paths:
       x-roles: [ADMINISTRATOR, DEVELOPER, READER]
       summary: Where a variable is created and used (FR-06)
       description: 'Roles: all. Bounded result (one node and its neighbors), so it is not paginated.'
+      parameters:
+        - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
           description: Usage of the variable
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/VariableDependenciesEnvelope' }
+        '304': { $ref: '#/components/responses/NotModified' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
 
@@ -699,7 +816,9 @@ paths:
       x-capability: 'CRUD of variables and collections'
       x-roles: [ADMINISTRATOR, DEVELOPER, READER]
       summary: List collections of an application
-      description: 'Roles: all.'
+      description: |
+        Roles: all. An `applicationId` that does not exist (or is larger than an
+        integer can hold) answers 404.
       parameters:
         - $ref: '#/components/parameters/ApplicationId'
         - $ref: '#/components/parameters/Page'
@@ -708,15 +827,19 @@ paths:
         - $ref: '#/components/parameters/EnvironmentFilter'
         - name: undocumented
           in: query
-          description: true = only collections not linked to any screen (FR-19 definition, SDD D-14)
+          description: true = only collections not linked to any screen (FR-19 definition, SDD D-14). false is the same as omitting the parameter (no filter).
           schema: { type: boolean }
         - name: sort
           in: query
           description: 'Allowed: name, updatedAt; prefix - for descending.'
           schema: { type: string, default: name }
+        - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
           description: Page of collections
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema:
@@ -726,19 +849,33 @@ paths:
                     required: [data]
                     properties:
                       data: { type: array, items: { $ref: '#/components/schemas/CollectionSummary' } }
+        '304': { $ref: '#/components/responses/NotModified' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
     post:
       tags: [Collections]
       operationId: createCollection
       x-capability: 'CRUD of variables and collections'
       x-roles: [ADMINISTRATOR, DEVELOPER]
       summary: Register a collection with its fields and assignments (FR-08, FR-09)
-      x-error-codes: [APPLICATION_ARCHIVED, SCOPE_MISMATCH, CROSS_APPLICATION, CONTEXT_SCREEN_MISMATCH]
+      x-error-codes: [APPLICATION_ARCHIVED, SCOPE_MISMATCH, CROSS_APPLICATION, CONTEXT_SCREEN_MISMATCH, DUPLICATE_NAME]
       description: |
         Roles: Administrator, Developer. When the application is archived it is
         read-only (CP-01): this operation returns 422 APPLICATION_ARCHIVED for every
         role.
+        404 when `applicationId`, or a variable, screen or collection referenced by
+        the body, does not exist; `details.field` gives the position of the
+        reference. The name must be free in the application: 409 DUPLICATE_NAME with
+        `details.container = application`. A repeated field name, assignment or
+        `derivedFrom` item is a 400 with its position, not DUPLICATE_NAME.
+        The 422 rules on `variableAssignments` are applied one rule at a time, each
+        one from the first item to the last, and the first item that fails in the
+        first rule that fails is reported, with its position in `details.field`.
+        Order: CROSS_APPLICATION (the variable, then the screen of each assignment,
+        then the collections of `derivedFrom`), SCOPE_MISMATCH,
+        CONTEXT_SCREEN_MISMATCH. The scope of a variable is read from the database,
+        never from the request.
         Context variables belong to their origin screen (CP-07): from any other screen
         a context variable can only be written (WRITE, as Navigate does);
         READ/READ_WRITE links and UpdateContext assignments elsewhere, and any link to
@@ -764,12 +901,15 @@ paths:
           description: Created
           headers:
             Location: { $ref: '#/components/headers/Location' }
+            ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CollectionEnvelope' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/RuleViolation' }
   /collections/{id}:
@@ -782,14 +922,18 @@ paths:
       x-roles: [ADMINISTRATOR, DEVELOPER, READER]
       summary: Get a collection with fields and assignments
       description: 'Roles: all.'
+      parameters:
+        - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
           description: The collection
           headers:
             ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CollectionEnvelope' }
+        '304': { $ref: '#/components/responses/NotModified' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
     put:
@@ -798,11 +942,23 @@ paths:
       x-capability: 'CRUD of variables and collections'
       x-roles: [ADMINISTRATOR, DEVELOPER]
       summary: Replace a collection, its fields and its assignments
-      x-error-codes: [APPLICATION_ARCHIVED, SCOPE_MISMATCH, CROSS_APPLICATION, CONTEXT_SCREEN_MISMATCH]
+      x-error-codes: [APPLICATION_ARCHIVED, SCOPE_MISMATCH, CROSS_APPLICATION, CONTEXT_SCREEN_MISMATCH, DUPLICATE_NAME]
       description: |
-        Roles: Administrator, Developer. Nested items are matched by `id`: items
-        with an id are updated, items without one are created, and existing items
-        left out are deleted, so the audit log keeps one history per field.
+        Roles: Administrator, Developer. The body replaces the whole editable
+        representation: an omitted `fields`, `variableAssignments` or `derivedFrom`
+        is the same as an empty array and deletes the existing items.
+        Nested items are matched by `id`: items with an id are updated, items
+        without one are created, and existing items left out are deleted, so the
+        audit log keeps one history per field. An `id` that does not belong to this
+        collection (it belongs to another one, or does not exist) is 404 with
+        `details { element, id, field }`, for example `fields[2].id`; the same id
+        twice in the body is a 400 with its position. `derivedFrom` has no ids: it
+        is a set of collection ids that is compared with the existing one.
+        `If-Match` is always checked when sent, also when the body changes nothing.
+        An update that changes nothing writes nothing: it answers 200 with the same
+        `ETag` and `updatedAt`. A change in any nested array also moves the `ETag`
+        of the collection. The name must be free in the application: 409
+        DUPLICATE_NAME with `details.container = application`.
         When the application is archived it is read-only (CP-01): this operation
         returns 422 APPLICATION_ARCHIVED for every role.
         Context variables belong to their origin screen (CP-07): from any other screen
@@ -810,6 +966,13 @@ paths:
         READ/READ_WRITE links and UpdateContext assignments elsewhere, and any link to
         a context variable without origin, return 422 CONTEXT_SCREEN_MISMATCH.
         Enforced by the database at commit (migration context_screen_rule).
+        The 422 rules on `variableAssignments` are applied one rule at a time, each
+        one from the first item to the last, and the first item that fails in the
+        first rule that fails is reported, with its position in `details.field`.
+        Order: CROSS_APPLICATION (the variable, then the screen of each assignment,
+        then the collections of `derivedFrom`), SCOPE_MISMATCH,
+        CONTEXT_SCREEN_MISMATCH. The scope of a variable is read from the database,
+        never from the request.
       parameters:
         - $ref: '#/components/parameters/IfMatch'
       requestBody:
@@ -822,6 +985,7 @@ paths:
           description: Updated
           headers:
             ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CollectionEnvelope' }
@@ -845,7 +1009,7 @@ paths:
         read-only (CP-01): this operation returns 422 APPLICATION_ARCHIVED for every
         role.
       responses:
-        '204': { description: Deleted }
+        '204': { description: Deleted, headers: { X-Request-Id: { $ref: '#/components/headers/XRequestId' } } }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -865,9 +1029,13 @@ paths:
         - name: pageSize
           in: query
           schema: { type: integer, minimum: 1, maximum: 100, default: 100 }
+        - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
           description: Fields
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema:
@@ -877,6 +1045,7 @@ paths:
                     required: [data]
                     properties:
                       data: { type: array, items: { $ref: '#/components/schemas/CollectionField' } }
+        '304': { $ref: '#/components/responses/NotModified' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
 
@@ -888,7 +1057,10 @@ paths:
       x-capability: 'Create and edit screens (template)'
       x-roles: [ADMINISTRATOR, DEVELOPER, READER]
       summary: List screens of an application (FR-10, FR-14)
-      description: 'Roles: all.'
+      description: |
+        Roles: all. An `applicationId` that does not exist (or is larger than an
+        integer can hold) answers 404. A filter by an id that does not exist
+        (`authorId`) is not an error: the page is empty.
       parameters:
         - $ref: '#/components/parameters/ApplicationId'
         - $ref: '#/components/parameters/Page'
@@ -904,9 +1076,13 @@ paths:
           in: query
           description: 'Allowed: name, documentationStatus, updatedAt, pendingSubtasks; prefix - for descending. The App (OnStart) screen is always listed first.'
           schema: { type: string, default: name }
+        - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
           description: Page of screens
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema:
@@ -916,8 +1092,10 @@ paths:
                     required: [data]
                     properties:
                       data: { type: array, items: { $ref: '#/components/schemas/ScreenSummary' } }
+        '304': { $ref: '#/components/responses/NotModified' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
     post:
       tags: [Screens]
       operationId: createScreen
@@ -960,6 +1138,7 @@ paths:
           description: Created
           headers:
             Location: { $ref: '#/components/headers/Location' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ScreenEnvelope' }
@@ -979,14 +1158,18 @@ paths:
       x-roles: [ADMINISTRATOR, DEVELOPER, READER]
       summary: Get a screen with its template, components and links
       description: 'Roles: all.'
+      parameters:
+        - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
           description: The screen
           headers:
             ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ScreenEnvelope' }
+        '304': { $ref: '#/components/responses/NotModified' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
     put:
@@ -1024,6 +1207,7 @@ paths:
           description: Updated (the response shows the resulting status)
           headers:
             ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ScreenEnvelope' }
@@ -1049,7 +1233,7 @@ paths:
         When the application is archived it is read-only (CP-01): this operation
         returns 422 APPLICATION_ARCHIVED for every role.
       responses:
-        '204': { description: Deleted }
+        '204': { description: Deleted, headers: { X-Request-Id: { $ref: '#/components/headers/XRequestId' } } }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1088,6 +1272,8 @@ paths:
       responses:
         '200':
           description: New status
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ScreenEnvelope' }
@@ -1130,6 +1316,8 @@ paths:
       responses:
         '201':
           description: Subtask created (and Epic/Story when they were missing)
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/JiraTicketCreatedEnvelope' }
@@ -1157,12 +1345,17 @@ paths:
         - name: refresh
           in: query
           schema: { type: boolean, default: false }
+        - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
           description: Ticket tree
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/JiraTreeEnvelope' }
+        '304': { $ref: '#/components/responses/NotModified' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
 
@@ -1180,9 +1373,13 @@ paths:
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
           description: Page of comments
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema:
@@ -1192,6 +1389,7 @@ paths:
                     required: [data]
                     properties:
                       data: { type: array, items: { $ref: '#/components/schemas/Comment' } }
+        '304': { $ref: '#/components/responses/NotModified' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
     post:
@@ -1215,6 +1413,7 @@ paths:
           description: Created
           headers:
             Location: { $ref: '#/components/headers/Location' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CommentEnvelope' }
@@ -1247,6 +1446,8 @@ paths:
       responses:
         '200':
           description: Updated
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CommentEnvelope' }
@@ -1284,6 +1485,8 @@ paths:
       responses:
         '200':
           description: Decision applied
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ScreenEnvelope' }
@@ -1315,12 +1518,17 @@ paths:
           explode: false
           schema: { type: array, items: { $ref: '#/components/schemas/ElementType' } }
         - $ref: '#/components/parameters/EnvironmentFilter'
+        - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
           description: Nodes and edges
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GraphEnvelope' }
+        '304': { $ref: '#/components/responses/NotModified' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
   /dependencies/{type}/{id}:
@@ -1340,12 +1548,17 @@ paths:
         - name: depth
           in: query
           schema: { type: integer, minimum: 1, maximum: 3, default: 1 }
+        - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
           description: Nodes and edges around the element
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GraphEnvelope' }
+        '304': { $ref: '#/components/responses/NotModified' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1388,9 +1601,13 @@ paths:
           schema: { $ref: '#/components/schemas/VariableScope' }
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
           description: Page of results, exact name matches first
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema:
@@ -1400,6 +1617,7 @@ paths:
                     required: [data]
                     properties:
                       data: { type: array, items: { $ref: '#/components/schemas/SearchResult' } }
+        '304': { $ref: '#/components/responses/NotModified' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
 
@@ -1417,12 +1635,17 @@ paths:
         is omitted for them, as SRS Table 26 grants Readers no audit access.
       parameters:
         - $ref: '#/components/parameters/ApplicationId'
+        - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
           description: Indicators
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/IndicatorsEnvelope' }
+        '304': { $ref: '#/components/responses/NotModified' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
 
@@ -1463,9 +1686,13 @@ paths:
           schema: { type: string, format: date-time }
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
           description: Page of audit records
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema:
@@ -1475,6 +1702,7 @@ paths:
                     required: [data]
                     properties:
                       data: { type: array, items: { $ref: '#/components/schemas/AuditEntry' } }
+        '304': { $ref: '#/components/responses/NotModified' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -1536,9 +1764,13 @@ paths:
           schema: { type: boolean }
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
           description: Page of reports, newest first
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema:
@@ -1548,6 +1780,7 @@ paths:
                     required: [data]
                     properties:
                       data: { type: array, items: { $ref: '#/components/schemas/Report' } }
+        '304': { $ref: '#/components/responses/NotModified' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
   /reports/{id}:
@@ -1565,12 +1798,18 @@ paths:
         The detail includes `parameters` (format, scope, publish), stored in
         `report.parameters` (CP-10), so "Generate again" can request a new report
         with the same configuration. The list (`GET /reports`) does not include them.
+      parameters:
+        - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
           description: The report
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ReportDetailEnvelope' }
+        '304': { $ref: '#/components/responses/NotModified' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
   /reports/{id}/file:
@@ -1584,17 +1823,22 @@ paths:
       x-rule: READER_PUBLISHED_ONLY
       summary: Download the generated file
       description: 'Roles: as GET /reports/{id}. 409 REPORT_NOT_READY while PENDING or FAILED.'
+      parameters:
+        - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
           description: File
           headers:
             Content-Disposition:
               schema: { type: string, example: 'attachment; filename="documentacion-sar-2026-10.pdf"' }
+            ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/pdf:
               schema: { type: string, format: binary }
             application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
               schema: { type: string, format: binary }
+        '304': { $ref: '#/components/responses/NotModified' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
@@ -1622,6 +1866,8 @@ paths:
       responses:
         '200':
           description: Updated
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ReportEnvelope' }
@@ -1631,6 +1877,8 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
           description: The report is not READY
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -1647,12 +1895,17 @@ paths:
       description: 'Roles: all.'
       parameters:
         - $ref: '#/components/parameters/ApplicationId'
+        - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
           description: Summary
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/OnboardingEnvelope' }
+        '304': { $ref: '#/components/responses/NotModified' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
 
@@ -1705,10 +1958,12 @@ paths:
                   issuetype: { name: Subtask, hierarchyLevel: -1 }
                   parent: { id: '10002', key: TECHEA-2 }
       responses:
-        '204': { description: 'Processed, ignored, or duplicate' }
+        '204': { description: 'Processed, ignored, or duplicate', headers: { X-Request-Id: { $ref: '#/components/headers/XRequestId' } } }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401':
           description: Missing or invalid signature
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -1769,18 +2024,32 @@ components:
       required: false
       description: ETag from the last GET; if the resource changed since, the update is rejected with 412.
       schema: { type: string, example: 'W/"1727548800123"' }
+    IfNoneMatch:
+      name: If-None-Match
+      in: header
+      required: false
+      description: ETag from the last GET; if the response would not change, the answer is 304 with no body.
+      schema: { type: string, example: 'W/"1727548800123"' }
 
   headers:
     Location:
       description: URL of the created resource
       schema: { type: string, example: /api/v1/variables/42 }
     ETag:
-      description: Weak validator derived from updatedAt
+      description: Weak validator. A single resource with `updatedAt` sends one derived from it; listings and other responses send a weak hash of the body.
       schema: { type: string, example: 'W/"1727548800123"' }
+    XRequestId:
+      description: Identifier of the request, also written in the server log. Quote it when reporting a problem.
+      schema: { type: string, example: 7f3c2a9e41b0 }
 
   responses:
     ValidationError:
-      description: Malformed request or invalid fields
+      description: |
+        Malformed request or invalid fields. `details.fields` lists every invalid field as
+        `{ field, rule, message }`; `field` includes the position inside arrays
+        (`environments[1].environment`) and `rule` is `unique` for a repeated value.
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
@@ -1789,45 +2058,105 @@ components:
             message: Check the highlighted fields.
             details:
               fields:
-                - { field: environments, issue: min_items, message: Select at least one environment (DEV or PROD). }
+                - { field: environments, rule: minItems, message: must NOT have fewer than 1 items }
+    RefreshInvalid:
+      description: Missing, expired, revoked or already rotated refresh token, or the account is no longer active
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { code: REFRESH_INVALID, message: "Your session ended. Sign in again to continue.", details: null }
+    OriginRejected:
+      description: The request does not come from the frontend's Origin (cookie endpoints only)
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { code: FORBIDDEN, message: "This request's origin isn't allowed.", details: { reason: ORIGIN } }
+    NotModified:
+      description: The resource did not change since the `If-None-Match` value (no body)
+      headers:
+        ETag: { $ref: '#/components/headers/ETag' }
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
     InvalidCredentials:
       description: Wrong e-mail/password or inactive account (same response for both)
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
           example: { code: INVALID_CREDENTIALS, message: "The email or password is incorrect.", details: null }
     Unauthenticated:
       description: Missing, invalid, or expired token
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
           example: { code: TOKEN_EXPIRED, message: "Your session is not valid. Sign in again.", details: null }
     Forbidden:
       description: Authenticated but the role does not allow the operation (NFR-03)
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
           example: { code: FORBIDDEN, message: "Your role doesn't allow this action.", details: { requiredRoles: [ADMINISTRATOR] } }
     NotFound:
-      description: The resource does not exist
+      description: |
+        The resource does not exist. It may be the one in the path, the application of a listing
+        (`applicationId`), or one referenced by the body; in that last case `details.field`
+        gives its position in the body (for example `variableAssignments[1].variableId`).
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
-          example: { code: NOT_FOUND, message: "This variable doesn't exist. It may have been deleted.", details: { element: variable, id: 42 } }
+          examples:
+            resource:
+              value: { code: NOT_FOUND, message: "This variable doesn't exist. It may have been deleted.", details: { element: variable, id: 42 } }
+            nested:
+              summary: A reference inside the request body that does not exist; `field` is its position
+              value: { code: NOT_FOUND, message: "This collection field doesn't exist. It may have been deleted.", details: { element: collection field, id: 31, field: 'fields[2].id' } }
     Conflict:
-      description: Uniqueness conflict (duplicate name or e-mail)
+      description: |
+        Uniqueness conflict (duplicate name or e-mail). For `DUPLICATE_NAME`, `details.application`
+        is the place where the name must be unique and `details.container` says which one it is:
+        `application`, `screen` or `system` (see the error catalog).
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
-          example: { code: DUPLICATE_NAME, message: "A global variable named gUsuarioActual already exists in SAR.", details: { field: name, type: global variable, name: gUsuarioActual, application: SAR } }
+          examples:
+            DUPLICATE_NAME_GLOBAL_VARIABLE:
+              value: { code: DUPLICATE_NAME, message: "A global variable named gUsuarioActual already exists in SAR.", details: { field: name, type: global variable, name: gUsuarioActual, application: SAR, container: application } }
+            DUPLICATE_NAME_CONTEXT_VARIABLE:
+              summary: A context variable with an origin screen is unique inside that screen
+              value: { code: DUPLICATE_NAME, message: "A context variable named locFiltro already exists in Solicitudes.", details: { field: name, type: context variable, name: locFiltro, application: Solicitudes, container: screen } }
+            DUPLICATE_NAME_CONTEXT_VARIABLE_NO_ORIGIN:
+              summary: A context variable without an origin screen is unique inside the application
+              value: { code: DUPLICATE_NAME, message: "A context variable named locFiltro already exists in SAR.", details: { field: name, type: context variable, name: locFiltro, application: SAR, container: application } }
+            DUPLICATE_NAME_COLLECTION:
+              value: { code: DUPLICATE_NAME, message: "A collection named colSolicitudes already exists in SAR.", details: { field: name, type: collection, name: colSolicitudes, application: SAR, container: application } }
+            DUPLICATE_NAME_APPLICATION:
+              value: { code: DUPLICATE_NAME, message: "An application named SAR already exists in Documentación técnica.", details: { field: name, type: application, name: SAR, application: Documentación técnica, container: system } }
+            EMAIL_TAKEN:
+              value: { code: EMAIL_TAKEN, message: "A user with this email already exists.", details: { field: email } }
     PreconditionFailed:
       description: The resource changed since it was read (If-Match mismatch)
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
           example: { code: PRECONDITION_FAILED, message: "Someone else saved changes to this screen after you opened it. Reload to see their version.", details: { element: screen, currentETag: 'W/"1727548900456"' } }
     RuleViolation:
       description: Well-formed request that breaks a business or integrity rule
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
@@ -1837,13 +2166,17 @@ components:
             SCOPE_CONFLICT:
               value: { code: SCOPE_CONFLICT, message: "You can't change the scope while collections assign this variable with Set. Update those assignments first.", details: { function: Set } }
             CROSS_APPLICATION:
-              value: { code: CROSS_APPLICATION, message: "You can only link elements of the same application.", details: null }
+              summary: In a collection, `field` names the item; the database trigger answers without `details`
+              value: { code: CROSS_APPLICATION, message: "You can only link elements of the same application.", details: { field: 'variableAssignments[0].screenId' } }
             INVALID_ORIGIN_SCREEN:
               value: { code: INVALID_ORIGIN_SCREEN, message: "Context variables are created inside a screen, not in App (OnStart).", details: { field: originScreenId } }
+            INVALID_ORIGIN_SCREEN_OTHER_APPLICATION:
+              value: { code: INVALID_ORIGIN_SCREEN, message: "Pantalla ajena belongs to another application. Choose a screen of SAR.", details: { field: originScreenId, screenId: 9, screen: Pantalla ajena, application: SAR } }
             CONTEXT_SCREEN_MISMATCH:
-              value: { code: CONTEXT_SCREEN_MISMATCH, message: "locFiltro belongs to Solicitudes. From here you can only write it with Navigate.", details: { variableId: 15, variable: locFiltro, originScreenId: 3, screen: Solicitudes, screenId: 4, targetScreen: Detalle } }
+              summary: In a collection, `field` is added and `screenId` is the screen of the assignment
+              value: { code: CONTEXT_SCREEN_MISMATCH, message: "locFiltro belongs to Solicitudes. From here you can only write it with Navigate.", details: { variableId: 15, variable: locFiltro, originScreenId: 3, screen: Solicitudes, screenId: 4, targetScreen: Detalle, field: 'variableAssignments[0].screenId' } }
             CONTEXT_SCREEN_MISMATCH_NO_ORIGIN:
-              value: { code: CONTEXT_SCREEN_MISMATCH, message: "locFiltro has no origin screen. Set its origin screen before linking it.", details: { variableId: 15, variable: locFiltro, originScreenId: null, screenId: 4, targetScreen: Detalle } }
+              value: { code: CONTEXT_SCREEN_MISMATCH, message: "locFiltro has no origin screen. Set its origin screen before linking it.", details: { variableId: 15, variable: locFiltro, originScreenId: null, screenId: 4, targetScreen: Detalle, field: 'variableAssignments[0].screenId' } }
             LAST_ACTIVE_ADMIN:
               value: { code: LAST_ACTIVE_ADMIN, message: "There must be at least one active administrator. Promote another user first.", details: null }
             CANNOT_DEACTIVATE_SELF:
@@ -1873,12 +2206,15 @@ components:
       headers:
         Retry-After:
           schema: { type: integer, example: 60 }
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
           example: { code: RATE_LIMITED, message: "Too many attempts. Try again in 15 minutes.", details: { minutes: 15 } }
     InternalError:
       description: Unexpected error (no internal details are exposed)
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
@@ -1886,6 +2222,8 @@ components:
 
     JiraError:
       description: Jira Cloud unavailable or failed (NFR-14). The rest of the system keeps working.
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
@@ -1898,11 +2236,14 @@ components:
       description: Report accepted and queued (NFR-12)
       headers:
         Location: { $ref: '#/components/headers/Location' }
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ReportEnvelope' }
     PayloadTooLarge:
       description: Request body larger than allowed
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
@@ -2087,7 +2428,7 @@ components:
           type: array
           minItems: 1
           maxItems: 2
-          uniqueItems: true
+          description: At most one entry per environment. A repeated environment (even with different notes) is a 400 that names its position, for example `environments[1].environment`.
           items: { $ref: '#/components/schemas/EnvironmentPresence' }
     VariableCreate:
       allOf:
@@ -2140,7 +2481,7 @@ components:
             originScreen: { oneOf: [{ $ref: '#/components/schemas/Ref' }, { type: 'null' }] }
             screens:
               type: array
-              description: Screen links (screen_variable), including the origin row
+              description: Screen links (screen_variable) other than the origin row, which is reported in `originScreen`
               items:
                 type: object
                 required: [screen, accessMode, usedIn]
@@ -2217,21 +2558,30 @@ components:
           type: array
           minItems: 1
           maxItems: 2
-          uniqueItems: true
+          description: At most one entry per environment. A repeated environment (even with different notes) is a 400 that names its position, for example `environments[1].environment`.
           items: { $ref: '#/components/schemas/EnvironmentPresence' }
         fields:
           type: array
           maxItems: 200
+          description: A repeated field `name` or `id` is a 400 that names its position, for example `fields[1].name`. Omitted = empty (PUT deletes the existing fields).
           items: { $ref: '#/components/schemas/CollectionFieldWrite' }
         variableAssignments:
           type: array
           maxItems: 200
+          description: A repeated `id`, or a repeated combination of `variableId`, `screenId` and `usedIn`, is a 400 that names its position. Omitted = empty (PUT deletes the existing assignments).
           items: { $ref: '#/components/schemas/VariableAssignmentWrite' }
         derivedFrom:
           type: array
-          description: Collections this one is built from (dependency DERIVES_FROM, SDD D-29)
+          description: |
+            Ids of the collections this one is built from (dependency DERIVES_FROM, SDD D-29). The
+            collection being written is the source and each id is a target: `colActivos` is built from
+            `colClientes`. It is a set, so a repeated id is a 400 that names its position
+            (`derivedFrom[1]`, rule `unique`), and a collection that lists itself is a 400 on
+            `derivedFrom[i]` with rule `self` ("A collection cannot derive from itself."; PUT only).
+            Cycles between two or more collections are allowed. A collection of another application is
+            422 CROSS_APPLICATION and one that does not exist is 404, both with `details.field`.
+            Omitted = empty (PUT deletes the existing derivations).
           maxItems: 50
-          uniqueItems: true
           items: { type: integer, minimum: 1 }
     CollectionCreate:
       allOf:

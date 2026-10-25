@@ -1,9 +1,10 @@
-// TopBar: the 68 px bar of the shell (S-31): breadcrumb (application chip / section title) on the left and the
+// TopBar: the 68 px bar of the shell (S-31): breadcrumb (application chip / section title, or the label a page sets
+// with useBreadcrumbLabel) on the left and the
 // user block (initials, name, role) on the right, which opens a menu with "Sign out".
 // Props: user (the signed-in user). The quick search, Jira status pill and help button of the frame arrive with
 // the modules they depend on.
 // Sign out clears the session even if the server cannot be reached; in that case a warning toast says so.
-import { useEffect, useId, useRef } from 'react';
+import { useContext, useEffect, useId, useRef } from 'react';
 import { useLocation } from 'react-router';
 
 import type { components } from '../api/schema';
@@ -13,7 +14,8 @@ import { Avatar, useToast } from '../components/ui';
 import { useSession } from '../session/useSession';
 
 import { applicationInitials } from './applicationInitials';
-import { usePopover } from './usePopover';
+import { BreadcrumbContext } from './breadcrumbContext';
+import { usePopover } from '../hooks/usePopover';
 
 export const SIGN_OUT_FAILED_TEXT =
   "You're signed out on this device, but the server couldn't be reached to end the session.";
@@ -21,7 +23,8 @@ export const SIGN_OUT_FAILED_TEXT =
 function Breadcrumb() {
   const { currentApplication } = useApplication();
   const { pathname } = useLocation();
-  const title = findRoute(pathname)?.title;
+  const { label } = useContext(BreadcrumbContext);
+  const title = label ?? findRoute(pathname)?.title;
   return (
     <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-2.5">
       {currentApplication && (
