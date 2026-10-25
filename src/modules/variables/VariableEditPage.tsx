@@ -65,6 +65,7 @@ export function VariableEditPage() {
   const { applications, currentApplication } = useApplication();
   const reasonId = useId();
   const formRef = useRef<HTMLFormElement>(null);
+  const errorBannerRef = useRef<HTMLDivElement>(null);
 
   const variable = useApiResource<Variable>(
     `variable-edit:${id}`,
@@ -90,7 +91,11 @@ export function VariableEditPage() {
   const [scopeImpact, setScopeImpact] = useState<ScopeConflictImpact | null>(null);
 
   useEffect(() => {
-    if (errorToken > 0) focusFirstInvalid(formRef.current);
+    if (errorToken === 0) return;
+    focusFirstInvalid(formRef.current);
+    // The banner sits above the form and the user has usually scrolled down to Save: bring it back into view
+    // (after the focus, which scrolls to the field), or the message is announced but never seen.
+    errorBannerRef.current?.scrollIntoView?.({ block: 'nearest' });
   }, [errorToken]);
 
   const dataKey = `${variable.etag ?? ''}|${loaded?.updatedAt ?? ''}`;
@@ -232,21 +237,23 @@ export function VariableEditPage() {
         </Banner>
       )}
       {errors.form && (
-        <Banner tone="danger">
-          {errors.form}
-          {scopeImpact !== null &&
-            scopeImpact.collections.map((collection) => (
-              <span key={collection.id}>
-                {' '}
-                <Link
-                  to={`/collections/${collection.id}`}
-                  className="font-mono text-label font-semibold underline"
-                >
-                  {collection.name}
-                </Link>
-              </span>
-            ))}
-        </Banner>
+        <div ref={errorBannerRef}>
+          <Banner tone="danger">
+            {errors.form}
+            {scopeImpact !== null &&
+              scopeImpact.collections.map((collection) => (
+                <span key={collection.id}>
+                  {' '}
+                  <Link
+                    to={`/collections/${collection.id}`}
+                    className="font-mono text-label font-semibold underline"
+                  >
+                    {collection.name}
+                  </Link>
+                </span>
+              ))}
+          </Banner>
+        </div>
       )}
 
       <form

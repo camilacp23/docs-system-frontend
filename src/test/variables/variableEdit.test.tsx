@@ -381,6 +381,48 @@ describe('edit variable: errors on their field', () => {
     expect(await screen.findByText('Scope conflicts with 2 Set assignments.')).toBeInTheDocument();
   });
 
+  it('changing the scope to Context shows the banner with the collections, the field text and brings the banner into view', async () => {
+    // The real case: the user changes the scope in the form and the (fake) server applies its own rule (D-71).
+    const scrolled: Element[] = [];
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      configurable: true,
+      value(this: Element) {
+        scrolled.push(this);
+      },
+    });
+    try {
+      const user = userEvent.setup();
+      const { api } = await render();
+      const { save } = await ready();
+      await waitFor(() => {
+        expect(screen.getByLabelText('Origin screen')).toHaveValue('10');
+      });
+
+      await user.click(screen.getByRole('radio', { name: 'Context (UpdateContext)' }));
+      await user.click(save);
+
+      // The fresh read after the 422 is the only read of the dependencies.
+      await screen.findByText('Scope conflicts with 2 Set assignments.');
+      expect(api.callsTo('PUT /variables/{id}')).toHaveLength(1);
+      expect(api.callsTo('GET /variables/{id}/dependencies')).toHaveLength(1);
+
+      const banner = screen.getByRole('alert');
+      expect(banner).toHaveTextContent(
+        "You can't change the scope while collections assign this variable with Set. Update those assignments first.",
+      );
+      const link = within(banner).getByRole('link', { name: 'colUsuarios' });
+      expect(link).toHaveAttribute('href', '/collections/20');
+      expect(link).toHaveClass('font-mono');
+      // Both collections are one collection (colUsuarios) named once.
+      expect(within(banner).getAllByRole('link')).toHaveLength(1);
+
+      // The banner is above the form and the user is usually scrolled down at Save: it must be brought into view.
+      expect(scrolled.some((element) => element.contains(banner))).toBe(true);
+    } finally {
+      Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+    }
+  });
+
   it('SCOPE_CONFLICT uses the answer of the new read, not an older one', async () => {
     const user = userEvent.setup();
     const { api } = await render();

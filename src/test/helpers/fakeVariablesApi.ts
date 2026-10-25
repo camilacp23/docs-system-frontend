@@ -243,7 +243,23 @@ export function makeVariablesApi(
           details: { element: 'variable', currentETag: etagOf(current.id) },
         });
       }
-      const updated = applyWrite(current, options.body as VariableWrite);
+      const body = options.body as VariableWrite;
+      // Like the server (D-71): the scope cannot change while collections assign the variable with the function
+      // of the old scope; the error names that function (`Set` or `UpdateContext`).
+      if (body.scope !== current.scope) {
+        const incompatible = body.scope === 'CONTEXT' ? 'SET' : 'UPDATE_CONTEXT';
+        const blocked = state.dependencies[current.id]?.collections.some(
+          (assignment) => assignment.assignmentFunction === incompatible,
+        );
+        if (blocked) {
+          throw new ApiError({
+            status: 422,
+            code: 'SCOPE_CONFLICT',
+            details: { function: incompatible === 'SET' ? 'Set' : 'UpdateContext' },
+          });
+        }
+      }
+      const updated = applyWrite(current, body);
       state.variables = state.variables.map((v) => (v.id === current.id ? updated : v));
       bump(current.id);
       return response({ data: updated }, etagOf(current.id));
