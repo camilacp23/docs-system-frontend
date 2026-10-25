@@ -138,7 +138,10 @@ describe('New collection modal', () => {
       derivedFrom: [],
     });
     expect(await screen.findByText('colPedidos created.')).toBeInTheDocument();
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    // The modal closes through the URL (?new=1), which the router applies a moment after the toast is drawn.
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
     expect(router.state.location.search).toBe('');
     expect(await screen.findByRole('link', { name: 'colPedidos' })).toBeInTheDocument();
     expect(await screen.findByText(/5 collections/)).toBeInTheDocument();
