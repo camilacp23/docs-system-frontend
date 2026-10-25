@@ -9,6 +9,7 @@ import { AppShell } from '../../layout/AppShell';
 import { LoginPage } from '../../modules/auth/LoginPage';
 import { NotFoundPage, ServerErrorPage } from '../../modules/errors/ErrorPages';
 import { ModulePlaceholder } from '../../modules/ModulePlaceholder';
+import { CollectionEditPage } from '../../modules/collections/CollectionEditPage';
 import { CollectionDetailPage } from '../../modules/collections/CollectionDetailPage';
 import { CollectionsListPage } from '../../modules/collections/CollectionsListPage';
 import { VariableEditPage } from '../../modules/variables/VariableEditPage';
@@ -27,6 +28,7 @@ const PAGES: Record<string, ReactNode> = {
   '/variables/:id/edit': <VariableEditPage />,
   '/collections': <CollectionsListPage />,
   '/collections/:id': <CollectionDetailPage />,
+  '/collections/:id/edit': <CollectionEditPage />,
 };
 
 const pageRoutes: RouteObject[] = APP_ROUTES.map((route) => ({
