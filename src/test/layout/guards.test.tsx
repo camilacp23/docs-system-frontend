@@ -12,8 +12,11 @@ const NO_ACCESS = "You don't have access to this page";
 const FORBIDDEN: Record<Role, string[]> = {
   ADMINISTRATOR: [],
   DEVELOPER: ['/admin/users', '/admin/applications'],
-  READER: ['/review', '/audit', '/admin/users', '/admin/applications'],
+  READER: ['/review', '/audit', '/admin/users', '/admin/applications', '/variables/5/edit'],
 };
+
+/** Modules that already have their own pages: the placeholder text no longer applies to them. */
+const hasOwnPage = (path: string) => path.startsWith('/variables');
 
 const PROTECTED_PATHS = APP_ROUTES.map((route) => route.path.replace(':id', '5'));
 
@@ -27,6 +30,9 @@ describe('role guard', () => {
           expect(screen.getByText(/Your role \(/)).toBeInTheDocument();
           // The shell stays around the page.
           expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
+        } else if (hasOwnPage(path)) {
+          expect(await screen.findByRole('navigation', { name: 'Main' })).toBeInTheDocument();
+          expect(screen.queryByRole('heading', { name: NO_ACCESS })).not.toBeInTheDocument();
         } else {
           expect(await screen.findByText('This module is not available yet.')).toBeInTheDocument();
           expect(screen.queryByRole('heading', { name: NO_ACCESS })).not.toBeInTheDocument();

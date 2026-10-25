@@ -11,6 +11,7 @@ import { EmptyState, ErrorState, ICON_STROKE_WIDTH } from '../components/ui';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { useCurrentUser } from '../session/useCurrentUser';
 
+import { BreadcrumbProvider } from './BreadcrumbProvider';
 import { Sidebar } from './Sidebar';
 import { StatusStrip } from './StatusStrip';
 import { TopBar } from './TopBar';
@@ -62,28 +63,30 @@ export function AppShell() {
   const iconProps = { size: 18, strokeWidth: ICON_STROKE_WIDTH } as const;
 
   return (
-    <div className="grid h-screen grid-cols-[268px_minmax(0,1fr)] grid-rows-[68px_auto_minmax(0,1fr)] bg-canvas">
-      <Sidebar role={user.role} />
-      <TopBar user={user} />
-      <div className="col-start-2">
-        {!online && (
-          <StatusStrip icon={<CircleAlert {...iconProps} />} lead="You're offline.">
-            {OFFLINE_TEXT}
-          </StatusStrip>
-        )}
-        {archived && (
-          <StatusStrip
-            icon={<Archive {...iconProps} />}
-            lead="This application is archived."
-            action={user.role === 'ADMINISTRATOR' ? <UnarchiveButton /> : undefined}
-          >
-            {ARCHIVED_TEXT}
-          </StatusStrip>
-        )}
+    <BreadcrumbProvider>
+      <div className="grid h-screen grid-cols-[268px_minmax(0,1fr)] grid-rows-[68px_auto_minmax(0,1fr)] bg-canvas">
+        <Sidebar role={user.role} />
+        <TopBar user={user} />
+        <div className="col-start-2">
+          {!online && (
+            <StatusStrip icon={<CircleAlert {...iconProps} />} lead="You're offline.">
+              {OFFLINE_TEXT}
+            </StatusStrip>
+          )}
+          {archived && (
+            <StatusStrip
+              icon={<Archive {...iconProps} />}
+              lead="This application is archived."
+              action={user.role === 'ADMINISTRATOR' ? <UnarchiveButton /> : undefined}
+            >
+              {ARCHIVED_TEXT}
+            </StatusStrip>
+          )}
+        </div>
+        <main className="col-start-2 flex min-h-0 flex-col gap-4 overflow-y-auto px-6 py-5">
+          <ShellContent />
+        </main>
       </div>
-      <main className="col-start-2 flex min-h-0 flex-col gap-4 overflow-y-auto px-6 py-5">
-        <ShellContent />
-      </main>
-    </div>
+    </BreadcrumbProvider>
   );
 }

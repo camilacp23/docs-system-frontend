@@ -5,6 +5,8 @@
 //   ctx.element / ctx.type: page-provided values for the <element> and <type> placeholders.
 // getErrorField(error) -> { field, index } | null: the form field a business error points to (`details.field`,
 //   e.g. "variableAssignments[2].screenId" -> index 2), so the page can mark the exact field or row.
+// getRuleMessage(rule, label) -> the text of one validation rule, so a form can check its own fields with the
+//   same words as the server errors (client checks only enforce rules the contract declares).
 // getFieldErrors(error, fieldLabels?) -> one translated message per field of a VALIDATION_ERROR, by rule
 //   (the server's `details.fields[].message` is ignored). fieldLabels maps a field path to the label the
 //   screen shows; `items[0].name` also matches `items[].name`.
@@ -256,6 +258,12 @@ export function getErrorField(error: ApiError): ErrorField | null {
   return field === null ? null : { field, index: indexOf(field) };
 }
 
+/** Text of one validation rule for a field label (the messages of getFieldErrors). */
+export function getRuleMessage(rule: string, label: string = DEFAULT_LABEL): string {
+  const text = RULE_MESSAGES[rule];
+  return text ? text(label) : UNKNOWN_VALUE_TEXT;
+}
+
 /** Translated per-field messages of a VALIDATION_ERROR; empty for any other error. */
 export function getFieldErrors(
   error: ApiError,
@@ -270,12 +278,11 @@ export function getFieldErrors(
     const { field, rule } = entry as { field?: unknown; rule?: unknown };
     if (typeof field !== 'string') continue;
     const ruleName = typeof rule === 'string' ? rule : '';
-    const text = RULE_MESSAGES[ruleName];
     result.push({
       field,
       index: indexOf(field),
       rule: ruleName,
-      message: text ? text(labelFor(field, fieldLabels)) : UNKNOWN_VALUE_TEXT,
+      message: getRuleMessage(ruleName, labelFor(field, fieldLabels)),
     });
   }
   return result;

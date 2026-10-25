@@ -7,6 +7,7 @@ import {
   getErrorField,
   getErrorMessage,
   getFieldErrors,
+  getRuleMessage,
   getThrownMessage,
 } from '../../api/messages';
 
@@ -541,5 +542,18 @@ describe('field errors: unique and self rules (D-74, D-65)', () => {
     expect(getFieldErrors(validation(fields))[0]?.message).toBe(
       "This field can't point to itself.",
     );
+  });
+});
+
+describe('getRuleMessage', () => {
+  it('gives the text of a rule for a label, the same words as the server field errors', () => {
+    expect(getRuleMessage('required', 'Name')).toBe('Name is required.');
+    expect(getRuleMessage('maxLength', 'Name')).toBe('Name is too long.');
+    expect(getRuleMessage('pattern', 'Name')).toBe("Name isn't in a valid format.");
+  });
+
+  it('falls back to a generic label and to the unknown rule text', () => {
+    expect(getRuleMessage('required')).toBe('This field is required.');
+    expect(getRuleMessage('nope', 'Name')).toBe("This value isn't valid.");
   });
 });
