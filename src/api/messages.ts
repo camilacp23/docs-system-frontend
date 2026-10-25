@@ -1,7 +1,10 @@
-// messages: the user-facing text of every API error (SDD Table 59, with DUPLICATE_NAME per D-63 and the two
-// CONTEXT_SCREEN_MISMATCH cases per D-64). The server `message` is never shown.
+// messages: the user-facing text of every API error (SDD Table 59, with DUPLICATE_NAME per D-63, the two
+// CONTEXT_SCREEN_MISMATCH cases per D-64, the two INVALID_ORIGIN_SCREEN cases per D-68 and the two FORBIDDEN
+// cases per D-77). The server `message` is never shown.
 // getErrorMessage(error, ctx?) -> string | null (null: the code is handled silently, e.g. TOKEN_EXPIRED).
 //   ctx.element / ctx.type: page-provided values for the <element> and <type> placeholders.
+// getErrorField(error) -> { field, index } | null: the form field a business error points to (`details.field`,
+//   e.g. "variableAssignments[2].screenId" -> index 2), so the page can mark the exact field or row.
 // getFieldErrors(error, fieldLabels?) -> one translated message per field of a VALIDATION_ERROR, by rule
 //   (the server's `details.fields[].message` is ignored). fieldLabels maps a field path to the label the
 //   screen shows; `items[0].name` also matches `items[].name`.
@@ -14,8 +17,15 @@ export interface MessageContext {
 
 export interface FieldError {
   field: string;
+  /** First array position in `field` ("fields[2].name" -> 2), or null when the field is not in an array. */
+  index: number | null;
   rule: string;
   message: string;
+}
+
+export interface ErrorField {
+  field: string;
+  index: number | null;
 }
 
 const UNKNOWN_VALUE_TEXT = "This value isn't valid.";
@@ -30,13 +40,11 @@ const STATIC_MESSAGES: Record<string, string> = {
   VALIDATION_ERROR: 'Check the highlighted fields.',
   INVALID_CREDENTIALS: 'The email or password is incorrect.',
   REFRESH_INVALID: 'Your session ended. Sign in again to continue.',
-  FORBIDDEN: "Your role doesn't allow this action.",
   EMAIL_TAKEN: 'A user with this email already exists.',
   PAYLOAD_TOO_LARGE:
     'This is too much text to save at once. Shorten the longest fields and try again.',
   SCOPE_MISMATCH: 'Set applies to global variables and UpdateContext to context variables.',
   CROSS_APPLICATION: 'You can only link elements of the same application.',
-  INVALID_ORIGIN_SCREEN: 'Context variables are created inside a screen, not in App (OnStart).',
   LAST_ACTIVE_ADMIN: 'There must be at least one active administrator. Promote another user first.',
   CANNOT_DEACTIVATE_SELF: "You can't deactivate your own account.",
   RESERVED_ACCOUNT: "This is a system account and can't be changed.",
@@ -54,6 +62,10 @@ const STATIC_MESSAGES: Record<string, string> = {
   // Derived texts (DESIGN_REFERENCE.md section 9): the S-46 offline banner copy.
   NETWORK_ERROR: "You're offline. Changes can't be saved until the connection is back.",
 };
+
+const FORBIDDEN_ROLE_TEXT = "Your role doesn't allow this action.";
+const FORBIDDEN_ORIGIN_TEXT = "This request's origin isn't allowed.";
+const ORIGIN_APP_TEXT = 'Context variables are created inside a screen, not in App (OnStart).';
 
 const INTERNAL_ERROR_TEXT = 'Something went wrong on our side. Try again in a moment.';
 
@@ -120,6 +132,19 @@ function dynamicMessage(error: ApiError, ctx: MessageContext): string | undefine
       const name = required(error, 'name', 'this item');
       const application = required(error, 'application', 'this application');
       return `${article(type)} ${type} named ${name} already exists in ${application}.`;
+    }
+    case 'FORBIDDEN':
+      return str(error.details, 'reason') === 'ORIGIN'
+        ? FORBIDDEN_ORIGIN_TEXT
+        : FORBIDDEN_ROLE_TEXT;
+    case 'INVALID_ORIGIN_SCREEN': {
+      // D-68: the other-application case is told apart by its details, never by the server text.
+      const screen = str(error.details, 'screen');
+      const application = str(error.details, 'application');
+      if (screen !== null && application !== null) {
+        return `${screen} belongs to another application. Choose a screen of ${application}.`;
+      }
+      return ORIGIN_APP_TEXT;
     }
     case 'SCOPE_CONFLICT': {
       const fn = required(error, 'function', 'another function');
@@ -202,6 +227,7 @@ const RULE_MESSAGES: Record<string, RuleText> = {
   maxItems: (label) => `${label} has too many items.`,
   uniqueItems: (label) => `${label} has repeated values. Each one must be unique.`,
   unique: (label) => `${label} has repeated values. Each one must be unique.`,
+  self: (label) => `${label} can't point to itself.`,
   type: (label) => `${label} has an unexpected type of value.`,
   CHECK: (label) => `${label} doesn't meet the required conditions.`,
 };
@@ -213,6 +239,21 @@ function labelFor(field: string, labels: Record<string, string>): string {
   if (exact !== undefined) return exact;
   const generic = labels[field.replace(/\[\d+\]/g, '[]')];
   return generic ?? DEFAULT_LABEL;
+}
+
+/** First array position of a field path: "fields[2].name" -> 2; null when there is none. */
+function indexOf(field: string): number | null {
+  const match = /\[(\d+)\]/.exec(field);
+  return match?.[1] === undefined ? null : Number(match[1]);
+}
+
+/**
+ * The form field a business error (404, 409, 422) points to, from `details.field` (D-68, D-75, D-76); null when
+ * the error carries none. For a VALIDATION_ERROR use getFieldErrors.
+ */
+export function getErrorField(error: ApiError): ErrorField | null {
+  const field = str(error.details, 'field');
+  return field === null ? null : { field, index: indexOf(field) };
 }
 
 /** Translated per-field messages of a VALIDATION_ERROR; empty for any other error. */
@@ -232,6 +273,7 @@ export function getFieldErrors(
     const text = RULE_MESSAGES[ruleName];
     result.push({
       field,
+      index: indexOf(field),
       rule: ruleName,
       message: text ? text(labelFor(field, fieldLabels)) : UNKNOWN_VALUE_TEXT,
     });
