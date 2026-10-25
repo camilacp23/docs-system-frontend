@@ -147,3 +147,16 @@ export function validateVariable(values: VariableFormValues): VariableFormErrors
 export function isAppScreen(screens: readonly ScreenSummary[], originScreenId: string): boolean {
   return screens.some((screen) => screen.isAppContext && String(screen.id) === originScreenId);
 }
+
+/**
+ * The values after the scope changes. A context variable cannot originate in App (OnStart) (FR-05), so that
+ * origin is cleared when the scope becomes CONTEXT; the form says why next to the field.
+ */
+export function withScope(
+  values: VariableFormValues,
+  scope: VariableScope,
+  screens: readonly ScreenSummary[],
+): VariableFormValues {
+  const clearOrigin = scope === 'CONTEXT' && isAppScreen(screens, values.originScreenId);
+  return { ...values, scope, originScreenId: clearOrigin ? '' : values.originScreenId };
+}

@@ -41,6 +41,7 @@ export function SegmentedControl<V extends string>({
       role="radiogroup"
       aria-label={label}
       aria-describedby={describedBy}
+      aria-invalid={invalid || undefined}
       className={cx(
         'inline-flex gap-0.5 rounded-control border bg-search-bg p-0.5',
         invalid ? 'border-danger' : 'border-border-control',

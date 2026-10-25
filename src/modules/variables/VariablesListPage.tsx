@@ -4,7 +4,7 @@
 // skeleton only after 300 ms (Table 58); an empty list offers "Clear filters" when filters are set; a failure
 // shows the server error state with a retry. The page title says why writing is disabled when the application
 // is archived (S-09b).
-import { Braces, Network } from 'lucide-react';
+import { Braces, Network, Plus } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 
@@ -22,6 +22,9 @@ import {
   useDelayedLoading,
 } from '../../components/ui';
 import { ARCHIVED_WRITE_REASON } from '../../hooks/useWriteBlock';
+import { useCurrentUser } from '../../session/useCurrentUser';
+
+import { CreateVariableModal } from './CreateVariableModal';
 
 import { useScreenOptions } from './useScreenOptions';
 import { useVariableKpis } from './useVariableKpis';
@@ -49,6 +52,19 @@ export function VariablesListPage() {
 
 function VariablesList() {
   const client = useApi();
+  const user = useCurrentUser();
+  const canWrite = user !== null && user.role !== 'READER';
+  const [search, setSearch] = useSearchParams();
+  // The creation modal is part of the URL (?new=1), so it can be linked and the back button closes it.
+  const creating = canWrite && search.get('new') === '1';
+  const setCreating = (open: boolean) => {
+    setSearch((current) => {
+      const next = new URLSearchParams(current);
+      if (open) next.set('new', '1');
+      else next.delete('new');
+      return next;
+    });
+  };
   const { currentApplication, currentApplicationId } = useApplication();
   const { params, setParams, clearFilters, hasFilters } = useVariableListParams();
   const archived = currentApplication?.status === 'ARCHIVED';
@@ -100,6 +116,19 @@ function VariablesList() {
           >
             View on map
           </ButtonLink>
+          {canWrite && (
+            <Button
+              variant="primary"
+              disabled={archived}
+              title={archived ? ARCHIVED_WRITE_REASON : undefined}
+              iconLeft={<Plus aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+              onClick={() => {
+                setCreating(true);
+              }}
+            >
+              New variable
+            </Button>
+          )}
         </div>
       </div>
 
@@ -178,6 +207,19 @@ function VariablesList() {
           </>
         )}
       </section>
+
+      {creating && (
+        <CreateVariableModal
+          screens={screens.data ?? []}
+          onClose={() => {
+            setCreating(false);
+          }}
+          onCreated={() => {
+            list.reload();
+            kpis.reload();
+          }}
+        />
+      )}
     </>
   );
 }
