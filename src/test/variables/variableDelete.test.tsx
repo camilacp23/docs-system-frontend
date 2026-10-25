@@ -48,7 +48,8 @@ const render = (extra: Partial<RenderVariablesOptions> = {}) =>
   renderVariables({ dependencies: { 1: GUSUARIO_DEPENDENCIES }, ...extra });
 
 async function openDelete(user: ReturnType<typeof userEvent.setup>, name: string) {
-  await screen.findByRole('link', { name });
+  // A text query is far cheaper than a role query on this big page, so waiting does not slow the page down.
+  await screen.findByText(name);
   await user.click(screen.getByRole('button', { name: `Actions for ${name}` }));
   await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
   return within(await screen.findByRole('dialog', { name: `Delete ${name}?` }));
@@ -233,7 +234,7 @@ describe('delete from the list', () => {
     const user = userEvent.setup();
     await render({ applications: [makeApplication(1, { name: 'SAR', status: 'ARCHIVED' })] });
     await screen.findByText('Read-only: the application is archived.');
-    await screen.findByRole('link', { name: 'gUsuario' });
+    await screen.findByText('gUsuario');
 
     await user.click(screen.getByRole('button', { name: 'Actions for gUsuario' }));
 
@@ -250,7 +251,7 @@ describe('delete from the list', () => {
   it('offers no actions to the Reader', async () => {
     await render({ role: 'READER' });
 
-    await screen.findByRole('link', { name: 'gUsuario' });
+    await screen.findByText('gUsuario');
     expect(screen.queryByRole('button', { name: /^Actions for/ })).not.toBeInTheDocument();
   });
 });

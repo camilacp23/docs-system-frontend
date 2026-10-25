@@ -15,10 +15,16 @@ async function appReady() {
 
 async function openModal(user: ReturnType<typeof userEvent.setup>) {
   await appReady();
-  await screen.findByRole('link', { name: 'gUsuario' });
+  await screen.findByText('gUsuario');
   await user.click(screen.getByRole('button', { name: 'New variable' }));
   const dialog = await screen.findByRole('dialog');
   return within(dialog);
+}
+
+/** Puts a text in a field in one step: how fast it is typed does not matter in these tests. */
+async function fill(user: ReturnType<typeof userEvent.setup>, field: HTMLElement, text: string) {
+  await user.click(field);
+  await user.paste(text);
 }
 
 afterEach(() => {
@@ -54,10 +60,16 @@ describe('New variable modal', () => {
   it('traps the focus and closes with Escape', async () => {
     const user = userEvent.setup();
     await renderVariables();
-    await openModal(user);
+    const dialog = await openModal(user);
+    const last = dialog.getByRole('button', { name: 'Create variable' });
+    const first = dialog.getByRole('button', { name: 'Close' });
 
-    for (let i = 0; i < 30; i++) await user.tab();
-    expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true);
+    // Tab from the last control wraps to the first, Shift+Tab from the first wraps to the last.
+    last.focus();
+    await user.tab();
+    expect(first).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(last).toHaveFocus();
 
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -80,7 +92,7 @@ describe('New variable modal', () => {
     expect(dialog.getByLabelText(/^Name/)).toHaveFocus();
     expect(dialog.getByLabelText(/^Name/)).toHaveAttribute('aria-invalid', 'true');
 
-    await user.type(dialog.getByLabelText(/^Name/), '9bad name');
+    await fill(user, dialog.getByLabelText(/^Name/), '9bad name');
     await user.click(dialog.getByRole('button', { name: 'Create variable' }));
     expect(await dialog.findByText("Name isn't in a valid format.")).toBeInTheDocument();
 
@@ -88,7 +100,7 @@ describe('New variable modal', () => {
     expect(dialog.queryByText(/digit/i)).not.toBeInTheDocument();
 
     await user.clear(dialog.getByLabelText(/^Name/));
-    await user.type(dialog.getByLabelText(/^Name/), 'gOk');
+    await fill(user, dialog.getByLabelText(/^Name/), 'gOk');
     await user.click(dialog.getByRole('checkbox', { name: 'DEV' }));
     await user.click(dialog.getByRole('button', { name: 'Create variable' }));
     expect(await dialog.findByText('Add at least one item to Environments.')).toBeInTheDocument();
@@ -100,7 +112,7 @@ describe('New variable modal', () => {
     const { api, router } = await renderVariables();
     const dialog = await openModal(user);
 
-    await user.type(dialog.getByLabelText(/^Name/), 'gFechaFiltro');
+    await fill(user, dialog.getByLabelText(/^Name/), 'gFechaFiltro');
     expect(dialog.getByText('12/150')).toBeInTheDocument();
     await user.selectOptions(dialog.getByLabelText(/^Data type/), 'DATE');
     await user.selectOptions(dialog.getByLabelText('Origin screen'), 'Inicio');
@@ -145,7 +157,7 @@ describe('New variable modal', () => {
     const { api } = await renderVariables();
     const dialog = await openModal(user);
 
-    await user.type(dialog.getByLabelText(/^Name/), 'gSimple');
+    await fill(user, dialog.getByLabelText(/^Name/), 'gSimple');
     await user.click(dialog.getByRole('button', { name: 'Create variable' }));
 
     await waitFor(() => {
@@ -201,8 +213,8 @@ describe('New variable modal', () => {
       }),
     );
 
-    await user.type(dialog.getByLabelText(/^Name/), 'gUsuario');
-    await user.type(dialog.getByLabelText('Description'), 'Keep me');
+    await fill(user, dialog.getByLabelText(/^Name/), 'gUsuario');
+    await fill(user, dialog.getByLabelText('Description'), 'Keep me');
     await user.click(dialog.getByRole('button', { name: 'Create variable' }));
 
     const message = await dialog.findByText(
@@ -229,7 +241,7 @@ describe('New variable modal', () => {
       }),
     );
 
-    await user.type(dialog.getByLabelText(/^Name/), 'gNueva');
+    await fill(user, dialog.getByLabelText(/^Name/), 'gNueva');
     await user.click(dialog.getByRole('button', { name: 'Create variable' }));
 
     expect(
@@ -255,7 +267,7 @@ describe('New variable modal', () => {
       }),
     );
 
-    await user.type(dialog.getByLabelText(/^Name/), 'gNueva');
+    await fill(user, dialog.getByLabelText(/^Name/), 'gNueva');
     await user.click(dialog.getByRole('checkbox', { name: 'PROD' }));
     await user.click(dialog.getByRole('button', { name: 'Create variable' }));
 
@@ -280,7 +292,7 @@ describe('New variable modal', () => {
       }),
     );
 
-    await user.type(dialog.getByLabelText(/^Name/), 'gNueva');
+    await fill(user, dialog.getByLabelText(/^Name/), 'gNueva');
     await user.click(dialog.getByRole('button', { name: 'Create variable' }));
 
     expect(await dialog.findByText('Description is too long.')).toBeInTheDocument();
@@ -293,7 +305,7 @@ describe('New variable modal', () => {
     const dialog = await openModal(user);
     api.failNext('POST /variables', new ApiError({ status: 422, code: 'APPLICATION_ARCHIVED' }));
 
-    await user.type(dialog.getByLabelText(/^Name/), 'gNueva');
+    await fill(user, dialog.getByLabelText(/^Name/), 'gNueva');
     await user.click(dialog.getByRole('button', { name: 'Create variable' }));
 
     expect(
@@ -347,7 +359,7 @@ describe('New variable modal', () => {
   it('offers no creation to the Reader, not even through the link', async () => {
     await renderVariables({ role: 'READER', path: '/variables?new=1' });
 
-    await screen.findByRole('link', { name: 'gUsuario' });
+    await screen.findByText('gUsuario');
     expect(screen.queryByRole('button', { name: 'New variable' })).not.toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });

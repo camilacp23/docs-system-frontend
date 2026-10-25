@@ -21,9 +21,10 @@ const hasOwnPage = (path: string) => path.startsWith('/variables');
 const PROTECTED_PATHS = APP_ROUTES.map((route) => route.path.replace(':id', '5'));
 
 describe('role guard', () => {
+  // One test per role and route: each renders the whole shell, so they are kept small and independent.
   for (const role of ['ADMINISTRATOR', 'DEVELOPER', 'READER'] as const) {
-    it(`${role}: opens what its role allows and gets "No access" (S-41b) on the rest`, async () => {
-      for (const path of PROTECTED_PATHS) {
+    for (const path of PROTECTED_PATHS) {
+      it(`${role} on ${path}: opens it or gets "No access" (S-41b)`, async () => {
         const { unmount } = await renderApp({ role, path });
         if (FORBIDDEN[role].includes(path)) {
           expect(await screen.findByRole('heading', { name: NO_ACCESS })).toBeInTheDocument();
@@ -38,8 +39,8 @@ describe('role guard', () => {
           expect(screen.queryByRole('heading', { name: NO_ACCESS })).not.toBeInTheDocument();
         }
         unmount();
-      }
-    });
+      });
+    }
   }
 
   it('shows the role in the S-41b text', async () => {

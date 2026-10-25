@@ -123,7 +123,9 @@ describe('edit variable', () => {
       expect(router.state.location.pathname).toBe('/variables/1');
     });
     expect(await screen.findByText('Variable saved.')).toBeInTheDocument();
-    expect(await screen.findByText('New description')).toBeInTheDocument();
+    // Look in the Details card: the text of the edit form's textarea would match too, and it goes away.
+    const details = await screen.findByRole('region', { name: 'Details' });
+    expect(await within(details).findByText('New description')).toBeInTheDocument();
   });
 
   it('edits the notes per environment, the environments and the origin screen', async () => {

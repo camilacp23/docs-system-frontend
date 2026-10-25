@@ -402,7 +402,7 @@ describe('variable list', () => {
     await renderVariables({ role: 'READER' });
     const grid = await table();
 
-    await screen.findByRole('link', { name: 'gUsuario' });
+    await screen.findByText('gUsuario');
     expect(within(grid).queryByRole('columnheader', { name: 'Actions' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'New variable' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Actions for/ })).not.toBeInTheDocument();
