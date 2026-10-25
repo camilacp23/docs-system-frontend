@@ -4,7 +4,8 @@
 // application resets them. Until the screens module exists almost every collection is "Not linked": that is what the
 // data says and it is shown as it is. Loading shows a skeleton only after 300 ms (Table 58); an empty list offers
 // "Clear filters" when filters are set; a failure shows the server error state with a retry. The page subtitle says
-// why writing is disabled when the application is archived (S-09b).
+// why writing is disabled when the application is archived (S-09b): the counts stay and the reason follows them.
+// The counts line is never blank: a skeleton while they load, "Couldn't load the counts." with a retry if they fail.
 import { Database, Plus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
@@ -20,6 +21,7 @@ import {
   ICON_STROKE_WIDTH,
   Pagination,
   SLOW_LOADING_MESSAGE,
+  Skeleton,
   useDelayedLoading,
 } from '../../components/ui';
 import { ARCHIVED_WRITE_REASON } from '../../hooks/useWriteBlock';
@@ -101,11 +103,22 @@ function CollectionsList() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-page-title font-extrabold text-ink-900">Collections</h1>
-          <p className="text-body-lg text-ink-500">
-            {archived ? (
-              ARCHIVED_WRITE_REASON
-            ) : counts.data === null ? null : (
-              <>
+          <div className="text-body-lg text-ink-500">
+            {counts.status === 'error' ? (
+              <span>
+                Couldn&apos;t load the counts.{' '}
+                <button
+                  type="button"
+                  className="rounded-chip font-semibold text-primary hover:underline"
+                  onClick={counts.reload}
+                >
+                  Try again
+                </button>
+              </span>
+            ) : counts.data === null ? (
+              <Skeleton className="mt-1.5 h-4 w-56" />
+            ) : (
+              <span>
                 {countText(counts.data.total, 'collection')} ·{' '}
                 {counts.data.undocumented > 0 ? (
                   <button
@@ -121,9 +134,10 @@ function CollectionsList() {
                 ) : (
                   <span>0 not linked to any screen</span>
                 )}
-              </>
+              </span>
             )}
-          </p>
+            {archived && <span> · {ARCHIVED_WRITE_REASON}</span>}
+          </div>
         </div>
         {canWrite && (
           <Button

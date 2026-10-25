@@ -17,7 +17,7 @@ const ROW_NAMES = (table: HTMLElement) =>
 
 /** The table once the application is known and its first load has finished. */
 async function table() {
-  await screen.findByText(/collections? ·|Read-only: the application is archived/);
+  await screen.findAllByText(/collections? ·|Read-only: the application is archived/);
   const grid = await screen.findByRole('table', { name: 'Collections' });
   await waitFor(() => {
     expect(grid).toHaveAttribute('aria-busy', 'false');
@@ -61,6 +61,61 @@ describe('collection list', () => {
     expect(
       api.callsTo('GET /collections').filter((c) => c.options.query?.pageSize === 1),
     ).toHaveLength(2);
+  });
+
+  it('keeps the counts when the application is archived and adds the reason after them', async () => {
+    await renderCollections({
+      applications: [makeApplication(1, { name: 'SAR', status: 'ARCHIVED' })],
+    });
+    await table();
+
+    // The frame's subtitle is the counts; the archived reason follows it, it does not replace it (S-14, S-09b).
+    const subtitle = (await screen.findByText(/4 collections/)).parentElement;
+    expect(subtitle).toHaveTextContent(
+      '4 collections · 1 not linked to any screen · Read-only: the application is archived.',
+    );
+  });
+
+  it('shows the subtitle once the counts arrive, never a blank line that stays', async () => {
+    let release: () => void = () => undefined;
+    const { api } = await renderCollections({
+      prepare: (fake) => {
+        release = fake.hold((call) => call.options.query?.pageSize === 1).release;
+      },
+    });
+    await screen.findByRole('heading', { name: 'Collections' });
+    expect(screen.queryByText(/not linked to any screen/)).not.toBeInTheDocument();
+
+    release();
+
+    expect(await screen.findByText(/4 collections/)).toBeInTheDocument();
+    expect(
+      api.callsTo('GET /collections').filter((c) => c.options.query?.pageSize === 1),
+    ).toHaveLength(2);
+  });
+
+  it('says so, with a retry, when the counts cannot be read', async () => {
+    const user = userEvent.setup();
+    let failing = true;
+    await renderCollections({
+      prepare: (fake) => {
+        const read = fake.client.get.bind(fake.client);
+        fake.client.get = (path: string, options?: unknown) => {
+          const query = (options as { query?: { pageSize?: number } } | undefined)?.query;
+          if (failing && path === '/collections' && query?.pageSize === 1)
+            return Promise.reject(new ApiError({ status: 500, code: 'INTERNAL_ERROR' }));
+          return read(path as never, options as never);
+        };
+      },
+    });
+
+    expect(await screen.findByText("Couldn't load the counts.")).toBeInTheDocument();
+    // The list itself keeps working.
+    expect(await screen.findByRole('link', { name: 'colActivos' })).toBeInTheDocument();
+    failing = false;
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+
+    expect(await screen.findByText(/4 collections/)).toBeInTheDocument();
   });
 
   it('does not hide the collections without screens: all of them can be "Not linked"', async () => {
@@ -262,7 +317,7 @@ describe('collection list', () => {
     });
     await table();
 
-    expect(screen.getByText('Read-only: the application is archived.')).toBeInTheDocument();
+    expect(screen.getByText(/Read-only: the application is archived\./)).toBeInTheDocument();
     const create = screen.getByRole('button', { name: 'New collection' });
     expect(create).toBeDisabled();
     expect(create).toHaveAttribute('title', 'Read-only: the application is archived.');
