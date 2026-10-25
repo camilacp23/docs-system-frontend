@@ -580,7 +580,6 @@ Si algo no está definido, pregúntame antes de asumir.
 
 ---
 
-
 # FRONTEND — repo `docs-system-frontend`
 
 ## F-00 · Inicializar el proyecto (domingo)
