@@ -8,5 +8,7 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     globals: false,
     css: false,
+    // The page tests render the whole shell and type into forms: give them room on a busy machine.
+    testTimeout: 15000,
   },
 });

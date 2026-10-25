@@ -54,14 +54,13 @@ describe('New variable modal', () => {
   it('traps the focus and closes with Escape', async () => {
     const user = userEvent.setup();
     await renderVariables();
-    const dialog = await openModal(user);
+    await openModal(user);
 
     for (let i = 0; i < 30; i++) await user.tab();
     expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true);
 
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(dialog).toBeDefined();
   });
 
   it('opens from a link with ?new=1', async () => {
@@ -106,8 +105,10 @@ describe('New variable modal', () => {
     await user.selectOptions(dialog.getByLabelText(/^Data type/), 'DATE');
     await user.selectOptions(dialog.getByLabelText('Origin screen'), 'Inicio');
     await user.click(dialog.getByRole('checkbox', { name: 'PROD' }));
-    await user.type(dialog.getByLabelText('Notes for PROD'), 'Loaded from the production list.');
-    await user.type(dialog.getByLabelText('Description'), 'Filter date');
+    await user.click(dialog.getByLabelText('Notes for PROD'));
+    await user.paste('Loaded from the production list.');
+    await user.click(dialog.getByLabelText('Description'));
+    await user.paste('Filter date');
     await user.click(dialog.getByRole('button', { name: 'Create variable' }));
 
     await waitFor(() => {

@@ -1,7 +1,7 @@
 // renderVariables: renderApp over the in-memory variables API (fakeVariablesApi) with the sample data of the
 // frames S-10 / S-11: three screens (App (OnStart), Inicio, Detalle) and the variables gUsuario, gFiltroActivo,
 // gRegistroSel (untraced), locMostrarDetalle and locOrden. Options: role, path, applications, plus `variables`,
-// `screens` and `dependencies` to replace the sample data. Returns what renderApp returns plus `api`.
+// `screens` and `dependencies` to replace the sample data, `prepare` to arm failures before the first read. Returns what renderApp returns plus `api`.
 import type { Application } from '../../application/ApplicationContext';
 import type { Role } from '../../app/router/routes';
 import type {
@@ -70,6 +70,8 @@ export interface RenderVariablesOptions {
   variables?: Variable[];
   screens?: ScreenSummary[];
   dependencies?: Record<number, VariableDependencies>;
+  /** Runs on the fake API before the first render, to arm failures or holds for the first reads. */
+  prepare?: (api: ReturnType<typeof makeVariablesApi>) => void;
 }
 
 export async function renderVariables(options: RenderVariablesOptions = {}) {
@@ -84,6 +86,7 @@ export async function renderVariables(options: RenderVariablesOptions = {}) {
         screens: options.screens ?? [APP_SCREEN, SCREEN_INICIO, SCREEN_DETALLE],
         dependencies: options.dependencies,
       });
+      options.prepare?.(api);
       return api.client;
     },
   });

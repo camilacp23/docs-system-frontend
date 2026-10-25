@@ -9,6 +9,7 @@ import { AppShell } from '../../layout/AppShell';
 import { LoginPage } from '../../modules/auth/LoginPage';
 import { NotFoundPage, ServerErrorPage } from '../../modules/errors/ErrorPages';
 import { ModulePlaceholder } from '../../modules/ModulePlaceholder';
+import { VariableDetailPage } from '../../modules/variables/VariableDetailPage';
 import { VariablesListPage } from '../../modules/variables/VariablesListPage';
 import { RootError, RootLayout } from './RootLayout';
 
@@ -19,6 +20,7 @@ import { APP_ROUTES, HOME_PATH, LOGIN_PATH } from './routes';
 /** The pages that already exist, by route path; every other route shows the placeholder of its module. */
 const PAGES: Record<string, ReactNode> = {
   '/variables': <VariablesListPage />,
+  '/variables/:id': <VariableDetailPage />,
 };
 
 const pageRoutes: RouteObject[] = APP_ROUTES.map((route) => ({
