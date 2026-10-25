@@ -13,7 +13,7 @@ import { Avatar, useToast } from '../components/ui';
 import { useSession } from '../session/useSession';
 
 import { applicationInitials } from './applicationInitials';
-import { usePopover } from './usePopover';
+import { usePopover } from '../hooks/usePopover';
 
 export const SIGN_OUT_FAILED_TEXT =
   "You're signed out on this device, but the server couldn't be reached to end the session.";
