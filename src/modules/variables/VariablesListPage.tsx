@@ -5,13 +5,14 @@
 // shows the server error state with a retry. The page title says why writing is disabled when the application
 // is archived (S-09b).
 import { Braces, Network, Plus } from 'lucide-react';
-import { useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router';
 
 import { useApi } from '../../api/useApi';
 import { useApiResource } from '../../api/useApiResource';
 import { useApplication } from '../../application/useApplication';
 import {
+  ActionMenu,
   Button,
   ButtonLink,
   EmptyState,
@@ -25,6 +26,7 @@ import { ARCHIVED_WRITE_REASON } from '../../hooks/useWriteBlock';
 import { useCurrentUser } from '../../session/useCurrentUser';
 
 import { CreateVariableModal } from './CreateVariableModal';
+import { DeleteVariableModal } from './DeleteVariableModal';
 
 import { useScreenOptions } from './useScreenOptions';
 import { useVariableKpis } from './useVariableKpis';
@@ -68,6 +70,8 @@ function VariablesList() {
   const { currentApplication, currentApplicationId } = useApplication();
   const { params, setParams, clearFilters, hasFilters } = useVariableListParams();
   const archived = currentApplication?.status === 'ARCHIVED';
+  const navigate = useNavigate();
+  const [deleting, setDeleting] = useState<VariableSummary | null>(null);
 
   const query = {
     applicationId: currentApplicationId ?? 0,
@@ -186,6 +190,43 @@ function VariablesList() {
               }}
               loading={list.loading}
               showSkeleton={showSkeleton}
+              renderActions={
+                canWrite
+                  ? (row) => (
+                      <ActionMenu
+                        label={`Actions for ${row.name}`}
+                        items={[
+                          {
+                            key: 'view',
+                            label: 'View',
+                            onSelect: () => {
+                              void navigate(`/variables/${row.id}`);
+                            },
+                          },
+                          {
+                            key: 'edit',
+                            label: 'Edit',
+                            disabled: archived,
+                            reason: ARCHIVED_WRITE_REASON,
+                            onSelect: () => {
+                              void navigate(`/variables/${row.id}/edit`);
+                            },
+                          },
+                          {
+                            key: 'delete',
+                            label: 'Delete',
+                            danger: true,
+                            disabled: archived,
+                            reason: ARCHIVED_WRITE_REASON,
+                            onSelect: () => {
+                              setDeleting(row);
+                            },
+                          },
+                        ]}
+                      />
+                    )
+                  : undefined
+              }
             />
             {isSlow && (
               <p className="px-4 py-3 text-small text-ink-500" role="status">
@@ -207,6 +248,22 @@ function VariablesList() {
           </>
         )}
       </section>
+
+      {deleting !== null && (
+        <DeleteVariableModal
+          variable={deleting}
+          onClose={() => {
+            setDeleting(null);
+          }}
+          onDeleted={() => {
+            setDeleting(null);
+            // Deleting the last row of a page goes back one page, so the list is not left empty.
+            if (rows.length === 1 && params.page > 1) setParams({ page: params.page - 1 });
+            else list.reload();
+            kpis.reload();
+          }}
+        />
+      )}
 
       {creating && (
         <CreateVariableModal

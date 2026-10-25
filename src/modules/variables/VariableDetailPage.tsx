@@ -6,6 +6,7 @@
 // The breadcrumb reads "Variables / <name>". Loading shows a skeleton after 300 ms; unknown id: "This variable
 // doesn't exist" (S-41a); other failures: the server error state with a retry.
 import { Pencil } from 'lucide-react';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
 import { useApi } from '../../api/useApi';
@@ -13,6 +14,7 @@ import { useApiResource } from '../../api/useApiResource';
 import { useApplication } from '../../application/useApplication';
 import { useFollowElementApplication } from '../../application/useFollowElementApplication';
 import {
+  ActionMenu,
   Button,
   ButtonLink,
   ErrorState,
@@ -26,6 +28,7 @@ import { useBreadcrumbLabel } from '../../layout/breadcrumbContext';
 import { useCurrentUser } from '../../session/useCurrentUser';
 
 import { parseId } from './parseId';
+import { DeleteVariableModal } from './DeleteVariableModal';
 import { VariableDetailsCard } from './VariableDetailsCard';
 import { formatTimestamp, SCOPE_LABEL } from './variableLabels';
 import { VariableUsage } from './VariableUsage';
@@ -42,6 +45,7 @@ export function VariableDetailPage() {
   const { currentApplication } = useApplication();
   const canWrite = user !== null && user.role !== 'READER';
   const archived = currentApplication?.status === 'ARCHIVED';
+  const [deleting, setDeleting] = useState(false);
 
   const variable = useApiResource<Variable>(
     `variable:${id}`,
@@ -121,6 +125,21 @@ export function VariableDetailPage() {
         </div>
         {canWrite && (
           <div className="flex items-center gap-2">
+            <ActionMenu
+              label={`Actions for ${loaded.name}`}
+              items={[
+                {
+                  key: 'delete',
+                  label: 'Delete',
+                  danger: true,
+                  disabled: archived,
+                  reason: ARCHIVED_WRITE_REASON,
+                  onSelect: () => {
+                    setDeleting(true);
+                  },
+                },
+              ]}
+            />
             {archived ? (
               <Button
                 variant="primary"
@@ -149,6 +168,18 @@ export function VariableDetailPage() {
         </div>
         <VariableDetailsCard variable={loaded} />
       </div>
+
+      {deleting && (
+        <DeleteVariableModal
+          variable={loaded}
+          onClose={() => {
+            setDeleting(false);
+          }}
+          onDeleted={() => {
+            void navigate(LIST_PATH);
+          }}
+        />
+      )}
     </>
   );
 }
