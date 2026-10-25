@@ -9,6 +9,7 @@ import { AppShell } from '../../layout/AppShell';
 import { LoginPage } from '../../modules/auth/LoginPage';
 import { NotFoundPage, ServerErrorPage } from '../../modules/errors/ErrorPages';
 import { ModulePlaceholder } from '../../modules/ModulePlaceholder';
+import { VariableEditPage } from '../../modules/variables/VariableEditPage';
 import { VariableDetailPage } from '../../modules/variables/VariableDetailPage';
 import { VariablesListPage } from '../../modules/variables/VariablesListPage';
 import { RootError, RootLayout } from './RootLayout';
@@ -21,6 +22,7 @@ import { APP_ROUTES, HOME_PATH, LOGIN_PATH } from './routes';
 const PAGES: Record<string, ReactNode> = {
   '/variables': <VariablesListPage />,
   '/variables/:id': <VariableDetailPage />,
+  '/variables/:id/edit': <VariableEditPage />,
 };
 
 const pageRoutes: RouteObject[] = APP_ROUTES.map((route) => ({
