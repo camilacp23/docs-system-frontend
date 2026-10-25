@@ -3,7 +3,8 @@
 //   GET /variables (filters q, scope, dataType, environment, originScreenId, untraced, sort, page, pageSize),
 //   GET /variables/{id} (with a weak ETag that moves with every write), GET /variables/{id}/dependencies,
 //   POST /variables, PUT /variables/{id} (checks If-Match like the server: 412 PRECONDITION_FAILED),
-//   DELETE /variables/{id}, GET /screens (paged). Other paths fall back to the applications fake.
+//   DELETE /variables/{id}, GET /screens (paged). Writes check like the server: 404, 422 APPLICATION_ARCHIVED,
+//   412, then the business rules. Other paths fall back to the applications fake.
 //   failNext('PUT /variables/{id}', error) makes the next call to that operation fail once.
 //   hold(predicate) makes the matching calls wait until `release()` is called (to test slow answers and races).
 import { vi } from 'vitest';
@@ -195,6 +196,12 @@ export function makeVariablesApi(
     };
   }
 
+  /** 422 APPLICATION_ARCHIVED: an archived application is read-only; it comes before 412 and the business rules. */
+  function checkWritable(applicationId: number) {
+    if (apps.state.applications.find((a) => a.id === applicationId)?.status === 'ARCHIVED')
+      throw new ApiError({ status: 422, code: 'APPLICATION_ARCHIVED' });
+  }
+
   async function handle(method: string, path: string, options: RecordedApiCall['options'] = {}) {
     const call: RecordedApiCall = { method, path, options };
     calls.push(call);
@@ -226,6 +233,7 @@ export function makeVariablesApi(
     }
     if (method === 'POST' && path === '/variables') {
       const body = options.body as VariableWrite & { applicationId: number };
+      checkWritable(body.applicationId);
       const id = state.nextId++;
       const created = applyWrite(
         makeVariable(id, body.name, { applicationId: body.applicationId }),
@@ -236,6 +244,7 @@ export function makeVariablesApi(
     }
     if (method === 'PUT' && path === '/variables/{id}') {
       const current = find(options.path?.id);
+      checkWritable(current.applicationId);
       if (options.ifMatch !== undefined && options.ifMatch !== etagOf(current.id)) {
         throw new ApiError({
           status: 412,
@@ -266,6 +275,7 @@ export function makeVariablesApi(
     }
     if (method === 'DELETE' && path === '/variables/{id}') {
       const current = find(options.path?.id);
+      checkWritable(current.applicationId);
       state.variables = state.variables.filter((v) => v.id !== current.id);
       return response(null, null, 204);
     }

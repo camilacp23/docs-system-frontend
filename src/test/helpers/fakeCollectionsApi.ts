@@ -4,6 +4,8 @@
 //   ETag that moves when a write changes something), GET /collections/{id}/fields (paged, by position),
 //   POST /collections, PUT /collections/{id} and DELETE /collections/{id}. Everything else (variables, screens,
 //   applications) goes to the variables fake (makeVariablesApi).
+//   Writes check in the order of the real server: 400, 404, 422 APPLICATION_ARCHIVED, 412, 422 business rules,
+//   409 DUPLICATE_NAME (fixed by collectionsApiOrder.test.ts).
 //   PUT behaves like the server: If-Match is checked (412), nested items are reconciled by id (an id that is not of
 //   the collection is 404 with its position, an omitted item is deleted, an item without id is created), a repeated
 //   field name or assignment is 400 `unique` with its position, `self` derivations are 400, and the 422 rules run in
@@ -166,8 +168,12 @@ export function makeCollectionsApi(
     };
   }
 
-  /** The rules of a write that do not depend on the current state, and the 404 / 422 ones that do. */
-  function checkWrite(body: CollectionWrite, current: Collection | null, applicationId: number) {
+  // The order of the real server for a write: 400 (checkBadRequest) -> 404 (checkReferences) -> 422
+  // APPLICATION_ARCHIVED (checkWritable) -> 412 (If-Match) -> 422 business rules (checkRules) -> 409
+  // DUPLICATE_NAME (checkName). Each phase runs only when the previous ones passed.
+
+  /** 400: what the body says by itself (repeats, a collection that derives from itself). */
+  function checkBadRequest(body: CollectionWrite, current: Collection | null) {
     const fields = body.fields ?? [];
     const assignments = body.variableAssignments ?? [];
     const derivedFrom = body.derivedFrom ?? [];
@@ -193,7 +199,13 @@ export function makeCollectionsApi(
       if (seenDerived.has(id)) throw uniqueError(`derivedFrom[${index}]`);
       seenDerived.add(id);
     });
-    // 404: ids of nested items that are not of this collection, and references that do not exist.
+  }
+
+  /** 404: ids of nested items that are not of this collection, and references that do not exist. */
+  function checkReferences(body: CollectionWrite, current: Collection | null) {
+    const fields = body.fields ?? [];
+    const assignments = body.variableAssignments ?? [];
+    const derivedFrom = body.derivedFrom ?? [];
     fields.forEach((field, index) => {
       if (field.id !== undefined && !current?.fields.some((f) => f.id === field.id))
         throw notFound('collection field', field.id, `fields[${index}].id`);
@@ -219,7 +231,29 @@ export function makeCollectionsApi(
       if (!state.collections.some((c) => c.id === id))
         throw notFound('collection', id, `derivedFrom[${index}]`);
     });
-    // 422, rule by rule, each from the first item to the last (D-76).
+  }
+
+  /** 422 APPLICATION_ARCHIVED: an archived application is read-only for every role (CP-01). */
+  function checkWritable(applicationId: number) {
+    if (apps.state.applications.find((a) => a.id === applicationId)?.status === 'ARCHIVED')
+      throw new ApiError({ status: 422, code: 'APPLICATION_ARCHIVED' });
+  }
+
+  /** 412: If-Match, when sent, must be the current ETag. */
+  function checkIfMatch(current: Collection, ifMatch: string | undefined) {
+    if (ifMatch !== undefined && ifMatch !== etagOf(current.id)) {
+      throw new ApiError({
+        status: 412,
+        code: 'PRECONDITION_FAILED',
+        details: { element: 'collection', currentETag: etagOf(current.id) },
+      });
+    }
+  }
+
+  /** 422 business rules, rule by rule, each from the first item to the last (D-76). */
+  function checkRules(body: CollectionWrite, applicationId: number) {
+    const assignments = body.variableAssignments ?? [];
+    const derivedFrom = body.derivedFrom ?? [];
     const rule = (field: string, code: string, details: Record<string, unknown> = {}) =>
       new ApiError({ status: 422, code, details: { field, ...details } });
     assignments.forEach((assignment, index) => {
@@ -363,7 +397,10 @@ export function makeCollectionsApi(
     }
     if (method === 'POST' && path === '/collections') {
       const body = options.body as CollectionWrite & { applicationId: number };
-      checkWrite(body, null, body.applicationId);
+      checkBadRequest(body, null);
+      checkReferences(body, null);
+      checkWritable(body.applicationId);
+      checkRules(body, body.applicationId);
       checkName(body, body.applicationId, null);
       const id = state.nextId++;
       const created = build(
@@ -376,14 +413,11 @@ export function makeCollectionsApi(
     if (method === 'PUT' && path === '/collections/{id}') {
       const current = find(options.path?.id);
       const body = options.body as CollectionWrite;
-      checkWrite(body, current, current.applicationId);
-      if (options.ifMatch !== undefined && options.ifMatch !== etagOf(current.id)) {
-        throw new ApiError({
-          status: 412,
-          code: 'PRECONDITION_FAILED',
-          details: { element: 'collection', currentETag: etagOf(current.id) },
-        });
-      }
+      checkBadRequest(body, current);
+      checkReferences(body, current);
+      checkWritable(current.applicationId);
+      checkIfMatch(current, options.ifMatch);
+      checkRules(body, current.applicationId);
       checkName(body, current.applicationId, current.id);
       const built = build(body, current);
       if (comparable(built) !== comparable(current)) {
@@ -395,6 +429,7 @@ export function makeCollectionsApi(
     }
     if (method === 'DELETE' && path === '/collections/{id}') {
       const current = find(options.path?.id);
+      checkWritable(current.applicationId);
       state.collections = state.collections.filter((c) => c.id !== current.id);
       return response(null, null, 204);
     }
