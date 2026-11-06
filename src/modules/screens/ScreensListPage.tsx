@@ -6,16 +6,20 @@
 // server error state with a retry. The page subtitle says why writing is disabled when the application is
 // archived (S-09b): the counts stay and the reason follows them. The counts line is never blank: a skeleton while
 // they load, "Couldn't load the counts." with a retry if they fail.
+// The row menu (Administrator and Developer) has View and Delete; Delete is disabled with the reason when the screen
+// is App (OnStart) or in review, the application is archived or the browser is offline (deleteBlockReason); the API
+// stays the authority. After a deletion the list and the counts are read again.
 // "New screen" (Administrator and Developer) opens the creation modal (?new=1); it is disabled with the reason
 // when the application is archived or the browser is offline (useWriteBlock).
-import { ListFilter, Monitor, Plus, X } from 'lucide-react';
-import { useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router';
+import { Eye, ListFilter, Monitor, Plus, Trash2, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router';
 
 import { useApi } from '../../api/useApi';
 import { useApiResource } from '../../api/useApiResource';
 import { useApplication } from '../../application/useApplication';
 import {
+  ActionMenu,
   Button,
   EmptyState,
   ErrorState,
@@ -32,11 +36,15 @@ import { useCurrentUser } from '../../session/useCurrentUser';
 import { countText } from '../variables/variableLabels';
 
 import { CreateScreenModal } from './CreateScreenModal';
+import { DeleteScreenModal } from './DeleteScreenModal';
 import { ScreenFilters } from './ScreenFilters';
 import { ScreenTable } from './ScreenTable';
+import { deleteBlockReason } from './screenDeleteBlock';
 import type { ScreenSummary } from './screenTypes';
 import { useScreenCounts } from './useScreenCounts';
 import { useScreenListParams } from './useScreenListParams';
+
+const ACTION_ICON = { size: 16, strokeWidth: ICON_STROKE_WIDTH } as const;
 
 /** Changing the application starts the list over: the URL goes back to its defaults and the page state is rebuilt. */
 export function ScreensListPage() {
@@ -71,6 +79,8 @@ function ScreensList() {
   const { currentApplication, currentApplicationId } = useApplication();
   const { params, setParams, clearFilters, hasFilters } = useScreenListParams();
   const archived = currentApplication?.status === 'ARCHIVED';
+  const navigate = useNavigate();
+  const [deleting, setDeleting] = useState<ScreenSummary | null>(null);
 
   const query = {
     applicationId: currentApplicationId ?? 0,
@@ -200,6 +210,39 @@ function ScreensList() {
               }}
               loading={list.loading}
               showSkeleton={showSkeleton}
+              renderActions={
+                canWrite
+                  ? (row) => {
+                      const blockedReason = deleteBlockReason(row, reason);
+                      return (
+                        <ActionMenu
+                          label={`Actions for ${row.name}`}
+                          items={[
+                            {
+                              key: 'view',
+                              label: 'View',
+                              icon: <Eye {...ACTION_ICON} />,
+                              onSelect: () => {
+                                void navigate(`/screens/${row.id}`);
+                              },
+                            },
+                            {
+                              key: 'delete',
+                              label: 'Delete',
+                              icon: <Trash2 {...ACTION_ICON} />,
+                              danger: true,
+                              disabled: blockedReason !== null,
+                              reason: blockedReason ?? undefined,
+                              onSelect: () => {
+                                setDeleting(row);
+                              },
+                            },
+                          ]}
+                        />
+                      );
+                    }
+                  : undefined
+              }
             />
             {isSlow && (
               <p className="px-4 py-3 text-small text-ink-500" role="status">
@@ -221,6 +264,22 @@ function ScreensList() {
           </>
         )}
       </SectionCard>
+
+      {deleting !== null && (
+        <DeleteScreenModal
+          screen={deleting}
+          onClose={() => {
+            setDeleting(null);
+          }}
+          onDeleted={() => {
+            setDeleting(null);
+            // Deleting the last row of a page goes back one page, so the list is not left empty.
+            if (rows.length === 1 && params.page > 1) setParams({ page: params.page - 1 });
+            else list.reload();
+            counts.reload();
+          }}
+        />
+      )}
 
       {creating && (
         <CreateScreenModal

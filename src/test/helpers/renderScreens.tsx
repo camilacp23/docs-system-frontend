@@ -3,11 +3,12 @@
 // (Draft) and Reportes (Undocumented), over the variables and collections of renderVariables / renderCollections.
 // (The uses carry `targetId` only because the contract types the response as ComponentWrite & the read shape;
 // the API returns `target`.) Detalle has a full detail (template 5 of 7, components, links with an origin row, a navigation).
-// Options: role, path, applications, plus `screens` (full screens) to replace the sample data and `prepare` to arm
+// Options: role, path, applications, plus `screens` (full screens) and `variables` to replace the sample data and `prepare` to arm
 // failures or holds before the first read. Returns what renderApp returns plus `api`.
 import type { Application } from '../../application/ApplicationContext';
 import type { Role } from '../../app/router/routes';
 import type { Screen } from '../../modules/screens/screenTypes';
+import type { Variable } from '../../modules/variables/variableTypes';
 
 import { sampleCollections } from './renderCollections';
 import { makeScreenDetail, makeScreensApi } from './fakeScreensApi';
@@ -141,6 +142,8 @@ export interface RenderScreensOptions {
   path?: string;
   applications?: Application[];
   screens?: Screen[];
+  /** Replaces the sample variables (their origin screens decide what a deletion leaves without origin). */
+  variables?: Variable[];
   /** Runs on the fake API before the first render, to arm failures or holds for the first reads. */
   prepare?: (api: ReturnType<typeof makeScreensApi>) => void;
 }
@@ -156,7 +159,7 @@ export async function renderScreens(options: RenderScreensOptions = {}) {
       api = makeScreensApi(apps, {
         screenDetails: screens,
         collections: sampleCollections(),
-        variables: sampleVariables(),
+        variables: options.variables ?? sampleVariables(),
       });
       options.prepare?.(api);
       return api.client;
