@@ -80,13 +80,13 @@ describe('screen detail: header', () => {
     );
   });
 
-  it('does not draw Future to do, Comments or any action of the later tasks', async () => {
+  it('does not draw Future to do, Comments or the workflow actions of the later tasks', async () => {
     await open();
 
     expect(screen.queryByRole('tab', { name: /Future to do/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: /Comments/ })).not.toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: /Edit|Submit for review/ }),
+      screen.queryByRole('button', { name: /Submit for review|Withdraw|Add to-do/ }),
     ).not.toBeInTheDocument();
   });
 });

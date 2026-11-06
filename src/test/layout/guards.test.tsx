@@ -19,6 +19,7 @@ const FORBIDDEN: Record<Role, string[]> = {
     '/admin/applications',
     '/variables/5/edit',
     '/collections/5/edit',
+    '/screens/5/edit',
   ],
 };
 
