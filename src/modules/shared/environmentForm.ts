@@ -1,6 +1,6 @@
 // environmentForm: the form model of the environments (DEV, PROD) of a variable or a collection, with the notes of
 // each one (contract schema EnvironmentPresence; FR-07).
-//   emptyEnvironments()                  -> DEV on, PROD off, no notes
+//   emptyEnvironments(devOn = true)      -> DEV on (or off), PROD off, no notes
 //   environmentsFromDetails(details)     -> the form values of `environmentDetails`
 //   environmentsToWrite(values)          -> the `environments` array of the write body (empty notes are sent as null)
 //   validateEnvironments(values)         -> { group, rows }: none chosen / notes too long, by the contract's rules
@@ -29,8 +29,8 @@ export interface EnvironmentErrors {
   rows?: Partial<Record<Environment, string>>;
 }
 
-export function emptyEnvironments(): EnvironmentValues {
-  return { DEV: { enabled: true, notes: '' }, PROD: { enabled: false, notes: '' } };
+export function emptyEnvironments(devOn = true): EnvironmentValues {
+  return { DEV: { enabled: devOn, notes: '' }, PROD: { enabled: false, notes: '' } };
 }
 
 export function environmentsFromDetails(

@@ -2,9 +2,10 @@
 // (`variableAssignments`). Props: assignments. Columns: Variable (links to its detail), Function (Set /
 // UpdateContext), Table function, Screen (links to its page; App (OnStart) is a screen like the others, D-57) and
 // Used in (the Power Apps event or property). Identifiers and usedIn are in IBM Plex Mono.
+import { Variable } from 'lucide-react';
 import { Link } from 'react-router';
 
-import { Tag } from '../../components/ui';
+import { ICON_STROKE_WIDTH, SectionCard, Tag } from '../../components/ui';
 import { ASSIGNMENT_FUNCTION_LABEL } from '../variables/variableLabels';
 
 import type { VariableAssignment } from './collectionTypes';
@@ -20,9 +21,13 @@ export function CollectionAssignmentsTab({
   assignments: readonly VariableAssignment[];
 }) {
   return (
-    <section
-      aria-label="Variable assignments"
-      className="rounded-card border border-border-subtle bg-surface shadow-card"
+    <SectionCard
+      title="Variable assignments"
+      description="Variables this collection feeds, and where"
+      icon={<Variable size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+      tone="success"
+      count={assignments.length}
+      flush
     >
       {assignments.length === 0 ? (
         <p className="px-4 py-4 text-body-lg text-ink-500">No variable assignments yet.</p>
@@ -72,6 +77,6 @@ export function CollectionAssignmentsTab({
           </table>
         </div>
       )}
-    </section>
+    </SectionCard>
   );
 }

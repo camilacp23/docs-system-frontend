@@ -5,17 +5,17 @@
 // The API gives no list of the screens that use a collection, so the "Used by screens" card of the frame is not
 // drawn until the screens module exists (D-79).
 // Props: collection.
+import { Code, Info } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 
-import { Tag } from '../../components/ui';
+import { ICON_STROKE_WIDTH, SectionCard, Tag } from '../../components/ui';
 
 import type { Collection } from './collectionTypes';
 
 const NO_DIFFERENCES_TEXT = 'No known differences.';
 const NO_DESCRIPTION_TEXT = 'No description.';
 const NO_CONDITION_TEXT = 'No creation condition.';
-const CARD_CLASS = 'rounded-card border border-border-subtle bg-surface shadow-card';
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -31,11 +31,12 @@ export function CollectionOverview({ collection }: { collection: Collection }) {
   const description = collection.description ?? '';
   return (
     <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)] items-start gap-4">
-      <section aria-label="Creation condition" className={CARD_CLASS}>
-        <h2 className="px-4 py-3.5 text-subheading font-semibold text-ink-900">
-          Creation condition
-        </h2>
-        <div className="border-t border-divider px-4 py-3.5">
+      <SectionCard
+        title="Creation condition"
+        description="The formula that creates the collection"
+        icon={<Code size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+      >
+        <div>
           {condition === '' ? (
             <p className="text-body-lg text-ink-500">{NO_CONDITION_TEXT}</p>
           ) : (
@@ -44,11 +45,16 @@ export function CollectionOverview({ collection }: { collection: Collection }) {
             </pre>
           )}
         </div>
-      </section>
+      </SectionCard>
 
-      <section aria-label="Details" className={CARD_CLASS}>
-        <h2 className="px-4 py-3.5 text-subheading font-semibold text-ink-900">Details</h2>
-        <dl className="border-t border-divider">
+      <SectionCard
+        title="Details"
+        description="Description, links and notes per environment"
+        icon={<Info size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+        tone="neutral"
+        flush
+      >
+        <dl>
           <Row label="Description">{description === '' ? NO_DESCRIPTION_TEXT : description}</Row>
           <Row label="Linked to screens">
             {collection.documented ? 'Yes' : <Tag tone="warning">Not linked</Tag>}
@@ -86,7 +92,7 @@ export function CollectionOverview({ collection }: { collection: Collection }) {
             </div>
           ))}
         </dl>
-      </section>
+      </SectionCard>
     </div>
   );
 }

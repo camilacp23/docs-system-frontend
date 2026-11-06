@@ -5,7 +5,8 @@
 import { Braces, CircleAlert, LayoutGrid, Monitor } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-import { cx, ICON_STROKE_WIDTH } from '../../components/ui';
+import { cx, ICON_STROKE_WIDTH, SECTION_TONE_TILE } from '../../components/ui';
+import type { SectionTone } from '../../components/ui';
 
 import type { VariableKpis as Kpis } from './useVariableKpis';
 
@@ -15,7 +16,8 @@ interface VariableKpisProps {
   onToggleUntraced: () => void;
 }
 
-const CARD_CLASS = 'flex items-center gap-3.5 rounded-card border p-4 text-left shadow-card';
+const CARD_CLASS =
+  'flex items-center gap-3.5 rounded-card border p-4 text-left shadow-card transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:transform-none';
 
 function Card({
   icon,
@@ -26,29 +28,29 @@ function Card({
   icon: ReactNode;
   value: number | null;
   label: string;
-  tone?: 'accent' | 'warning';
+  tone?: SectionTone;
 }) {
   return (
     <>
       <span
         aria-hidden="true"
         className={cx(
-          'flex size-10 shrink-0 items-center justify-center rounded-card',
-          tone === 'warning' ? 'bg-warning-bg text-warning-ink' : 'bg-accent-soft text-accent-ink',
+          'flex size-9 shrink-0 items-center justify-center rounded-control',
+          SECTION_TONE_TILE[tone],
         )}
       >
         {icon}
       </span>
       <span className="flex flex-col">
-        <span className="text-kpi font-extrabold text-ink-900">{value ?? '–'}</span>
-        <span className="text-body text-ink-500">{label}</span>
+        <span className="text-title font-bold text-ink-900">{value ?? '–'}</span>
+        <span className="text-label text-ink-500">{label}</span>
       </span>
     </>
   );
 }
 
 export function VariableKpis({ kpis, untracedActive, onToggleUntraced }: VariableKpisProps) {
-  const iconProps = { size: 20, strokeWidth: ICON_STROKE_WIDTH } as const;
+  const iconProps = { size: 16, strokeWidth: ICON_STROKE_WIDTH } as const;
   return (
     <section aria-label="Variable counts" className="grid grid-cols-4 gap-4">
       <div className={cx(CARD_CLASS, 'border-border-subtle bg-surface')}>
@@ -59,6 +61,7 @@ export function VariableKpis({ kpis, untracedActive, onToggleUntraced }: Variabl
           icon={<LayoutGrid {...iconProps} />}
           value={kpis?.global ?? null}
           label="Global · Set"
+          tone="success"
         />
       </div>
       <div className={cx(CARD_CLASS, 'border-border-subtle bg-surface')}>
@@ -66,6 +69,7 @@ export function VariableKpis({ kpis, untracedActive, onToggleUntraced }: Variabl
           icon={<Monitor {...iconProps} />}
           value={kpis?.context ?? null}
           label="Context · UpdateContext"
+          tone="neutral"
         />
       </div>
       <button

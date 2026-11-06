@@ -14,12 +14,14 @@ export interface ToastAction {
 
 export interface ToastOptions {
   message: ReactNode;
-  /** 'default' is the dark toast; 'warning' is the amber one of S-43a. */
+  /** Secondary line under the message (smaller, muted). */
+  description?: ReactNode;
+  /** 'default' is the success toast (green edge); 'warning' is the amber one of S-43a. */
   tone?: ToastTone;
   action?: ToastAction;
   /** Milliseconds before auto-close; `null` keeps it until dismissed. Default: 5000 (default tone), null (warning). */
   duration?: number | null;
-  /** Shows the close button. Default: false (default tone), true (warning). */
+  /** Shows the close button. Default: true. */
   dismissible?: boolean;
 }
 

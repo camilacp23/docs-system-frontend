@@ -12,6 +12,7 @@
 //    a danger banner says "N fields need attention." with a link to each control (Table 58).
 // Save is disabled with the reason when the application is archived or the browser is offline. On success a toast says
 // "Collection saved." and the page goes to the detail. The breadcrumb reads "<name> / Edit".
+import { Pencil } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router';
@@ -27,6 +28,8 @@ import {
   Button,
   ButtonLink,
   ErrorState,
+  ICON_STROKE_WIDTH,
+  PageHeader,
   Skeleton,
   useDelayedLoading,
   useToast,
@@ -36,6 +39,7 @@ import { useBreadcrumbLabel } from '../../layout/breadcrumbContext';
 import { focusFirstInvalid } from '../variables/focusFirstInvalid';
 import { parseId } from '../variables/parseId';
 import { useScreenOptions } from '../variables/useScreenOptions';
+import { PageBand } from '../shared/PageBand';
 
 import { AssignmentRowsEditor } from './AssignmentRowsEditor';
 import { CollectionGeneralFields } from './CollectionGeneralFields';
@@ -58,7 +62,6 @@ import { useVariableOptions } from './useVariableOptions';
 
 const LIST_PATH = '/collections';
 const CONFLICT_EXTRA = 'Your changes will be lost, so copy anything you need first.';
-const CARD_CLASS = 'rounded-card border border-border-subtle bg-surface p-5 shadow-card';
 
 /** Adds to `options` the items of `extra` it does not have yet (by id), keeping the order of `options`. */
 function withExtras<T extends { id: number }>(options: readonly T[], extra: readonly T[]): T[] {
@@ -91,7 +94,7 @@ export function CollectionEditPage() {
   const screens = useScreenOptions(loaded?.applicationId ?? null);
   const collections = useCollectionOptions(loaded?.applicationId ?? null);
   useFollowElementApplication(loaded?.applicationId ?? null, LIST_PATH);
-  useBreadcrumbLabel(loaded === null ? null : `${loaded.name} / Edit`);
+  useBreadcrumbLabel(loaded === null ? null : loaded.name);
   const { showSkeleton } = useDelayedLoading(collection.loading && id !== null);
 
   // What the user edited, tagged with the version it started from: reloading (a new ETag) discards it.
@@ -222,9 +225,15 @@ export function CollectionEditPage() {
 
   return (
     <>
-      <h1 className="text-page-title font-extrabold text-ink-900">
-        Edit <span className="font-mono text-body-lg font-semibold">{loaded.name}</span>
-      </h1>
+      <PageHeader
+        icon={<Pencil size={18} strokeWidth={ICON_STROKE_WIDTH} />}
+        title={
+          <>
+            Edit <span className="font-mono text-body-lg font-semibold">{loaded.name}</span>
+          </>
+        }
+        description="Update the details below and save your changes."
+      />
 
       {conflict !== null && !conflictHidden && (
         <Banner
@@ -284,63 +293,82 @@ export function CollectionEditPage() {
         }}
         className="flex flex-col gap-4"
       >
-        <section aria-label="General" className={CARD_CLASS}>
-          <header className="mb-4 flex flex-col">
-            <h2 className="text-subheading font-semibold text-ink-900">General</h2>
-            <p className="text-small text-ink-500">Name, creation condition and environments</p>
-          </header>
-          <CollectionGeneralFields
-            layout="page"
-            values={values}
-            onChange={edit}
-            errors={errors}
-            applicationName={
-              applications.find((application) => application.id === loaded.applicationId)?.name ??
-              currentApplication?.name ??
-              ''
-            }
-            disabled={saving}
-          />
-        </section>
-        <div className={CARD_CLASS}>
-          <FieldRowsEditor
-            layout="page"
-            rows={values.fields}
-            onChange={(fields) => {
-              edit({ ...values, fields });
-            }}
-            errors={errors.fieldRows}
-            groupError={errors.fields}
-            disabled={saving}
-          />
+        <div className="divide-y divide-border overflow-hidden rounded-card border border-border bg-surface shadow-card">
+          <PageBand
+            step={1}
+            tone="accent"
+            title="General"
+            label="General"
+            description="Name, creation condition and environments."
+          >
+            <CollectionGeneralFields
+              layout="page"
+              values={values}
+              onChange={edit}
+              errors={errors}
+              applicationName={
+                applications.find((application) => application.id === loaded.applicationId)?.name ??
+                currentApplication?.name ??
+                ''
+              }
+              disabled={saving}
+            />
+          </PageBand>
+          <PageBand
+            step={2}
+            tone="success"
+            title="Structure"
+            description="The fields of the collection, in order."
+          >
+            <FieldRowsEditor
+              layout="page"
+              rows={values.fields}
+              onChange={(fields) => {
+                edit({ ...values, fields });
+              }}
+              errors={errors.fieldRows}
+              groupError={errors.fields}
+              disabled={saving}
+            />
+          </PageBand>
+          <PageBand
+            step={3}
+            tone="warning"
+            title="Variable links"
+            description="Variables it feeds, and where."
+          >
+            <AssignmentRowsEditor
+              rows={values.assignments}
+              onChange={(assignments) => {
+                edit({ ...values, assignments });
+              }}
+              errors={errors.assignmentRows}
+              groupError={errors.assignments}
+              variables={variableOptions}
+              screens={screenOptions}
+              disabled={saving}
+            />
+          </PageBand>
+          <PageBand
+            step={4}
+            tone="neutral"
+            title="Lineage"
+            description="Collections it is derived from."
+          >
+            <DerivedFromPicker
+              options={collectionOptions}
+              selfId={loaded.id}
+              value={values.derivedFrom}
+              onChange={(derivedFrom) => {
+                edit({ ...values, derivedFrom });
+              }}
+              error={errors.derivedFrom}
+              disabled={saving}
+              loading={collections.loading}
+            />
+          </PageBand>
         </div>
-        <div className={CARD_CLASS}>
-          <AssignmentRowsEditor
-            rows={values.assignments}
-            onChange={(assignments) => {
-              edit({ ...values, assignments });
-            }}
-            errors={errors.assignmentRows}
-            groupError={errors.assignments}
-            variables={variableOptions}
-            screens={screenOptions}
-            disabled={saving}
-          />
-        </div>
-        <div className={CARD_CLASS}>
-          <DerivedFromPicker
-            options={collectionOptions}
-            selfId={loaded.id}
-            value={values.derivedFrom}
-            onChange={(derivedFrom) => {
-              edit({ ...values, derivedFrom });
-            }}
-            error={errors.derivedFrom}
-            disabled={saving}
-            loading={collections.loading}
-          />
-        </div>
-        <div className="flex items-center justify-end gap-3 border-t border-border-subtle pt-4">
+        <div className="flex items-center justify-end gap-3">
           {saveReason && (
             <p id={reasonId} className="mr-auto text-small text-warning-ink">
               {saveReason}

@@ -37,9 +37,9 @@ function apiError(code: string, status: number, details: Record<string, unknown>
 }
 
 describe('form values', () => {
-  it('starts with a text variable in DEV', () => {
+  it('starts with a text variable and no environment chosen', () => {
     const values = emptyValues();
-    expect(values.environments.DEV.enabled).toBe(true);
+    expect(values.environments.DEV.enabled).toBe(false);
     expect(values.environments.PROD.enabled).toBe(false);
     expect(values.originScreenId).toBe('');
   });
@@ -81,9 +81,16 @@ describe('form values', () => {
   });
 });
 
+/** The empty form with DEV chosen: what a user has after picking an environment. */
+function withDev() {
+  const values = emptyValues();
+  values.environments.DEV.enabled = true;
+  return values;
+}
+
 describe('validateVariable (only the rules of the contract)', () => {
   it('accepts a valid form', () => {
-    expect(hasErrors(validateVariable({ ...emptyValues(), name: 'gFiltro' }))).toBe(false);
+    expect(hasErrors(validateVariable({ ...withDev(), name: 'gFiltro' }))).toBe(false);
   });
 
   it('requires the name and checks its length and pattern', () => {
@@ -109,7 +116,7 @@ describe('validateVariable (only the rules of the contract)', () => {
   });
 
   it('checks the length of the description and of the notes of a chosen environment', () => {
-    const values = { ...emptyValues(), name: 'gFiltro', description: 'x'.repeat(4001) };
+    const values = { ...withDev(), name: 'gFiltro', description: 'x'.repeat(4001) };
     values.environments.DEV.notes = 'n'.repeat(2001);
     const errors = validateVariable(values);
     expect(errors.description).toBe('Description is too long.');
@@ -117,7 +124,7 @@ describe('validateVariable (only the rules of the contract)', () => {
   });
 
   it('adds no rule of its own (a name with letters, digits and underscores passes)', () => {
-    expect(hasErrors(validateVariable({ ...emptyValues(), name: '_a1_B2' }))).toBe(false);
+    expect(hasErrors(validateVariable({ ...withDev(), name: '_a1_B2' }))).toBe(false);
   });
 });
 

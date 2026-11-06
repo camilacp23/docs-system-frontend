@@ -5,13 +5,15 @@
 // disabled until the impact is known (an unknown impact is never deleted blindly); if the read fails the modal
 // offers to try again. Delete is also disabled, with the reason, when the application is archived or the browser is
 // offline; a server refusal (APPLICATION_ARCHIVED, NOT_FOUND ...) shows its catalog message in the modal.
+import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { getThrownMessage, getErrorMessage } from '../../api/messages';
 import { useApi } from '../../api/useApi';
 import { useApiResource } from '../../api/useApiResource';
-import { Banner, Button, Modal, Spinner, useToast } from '../../components/ui';
+import { Banner, Button, ICON_STROKE_WIDTH, Modal, Spinner, useToast } from '../../components/ui';
 import { useWriteBlock } from '../../hooks/useWriteBlock';
+import { DeleteImpactBody } from '../shared/DeleteImpactBody';
 
 import { deleteImpact, impactSummary } from './deleteImpact';
 import type { VariableDependencies } from './variableTypes';
@@ -46,7 +48,10 @@ export function DeleteVariableModal({ variable, onClose, onDeleted }: DeleteVari
     setFailure(null);
     try {
       await client.delete('/variables/{id}', { path: { id: variable.id } });
-      toast.show({ message: `${variable.name} deleted.` });
+      toast.show({
+        message: `${variable.name} deleted.`,
+        description: 'The audit log keeps a record of everything deleted.',
+      });
       onDeleted();
     } catch (thrown) {
       setFailure(getThrownMessage(thrown, { element: 'variable' }));
@@ -63,6 +68,9 @@ export function DeleteVariableModal({ variable, onClose, onDeleted }: DeleteVari
   return (
     <Modal
       open
+      placement="top-right"
+      icon={<Trash2 size={18} strokeWidth={ICON_STROKE_WIDTH} />}
+      tone="danger"
       onClose={() => {
         if (!deleting) onClose();
       }}
@@ -85,7 +93,7 @@ export function DeleteVariableModal({ variable, onClose, onDeleted }: DeleteVari
         </>
       }
     >
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-4">
         {impact.status === 'loading' && (
           <p role="status" className="flex items-center gap-2 text-ink-500">
             <Spinner size="sm" />
@@ -106,13 +114,12 @@ export function DeleteVariableModal({ variable, onClose, onDeleted }: DeleteVari
           </Banner>
         )}
         {impact.status === 'ready' && (
-          <p>
+          <DeleteImpactBody>
             {name}{' '}
             {summary === null
               ? "isn't linked to anything."
-              : `${summary}. Those links are deleted too.`}{' '}
-            The audit log keeps a record of everything deleted.
-          </p>
+              : `${summary}. Those links are deleted too.`}
+          </DeleteImpactBody>
         )}
         {reason && <p className="text-small text-warning-ink">{reason}</p>}
         {failure && <Banner tone="danger">{failure}</Banner>}

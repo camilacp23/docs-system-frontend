@@ -4,7 +4,7 @@
 // skeleton only after 300 ms (Table 58); an empty list offers "Clear filters" when filters are set; a failure
 // shows the server error state with a retry. The page title says why writing is disabled when the application
 // is archived (S-09b).
-import { Braces, Network, Plus } from 'lucide-react';
+import { Braces, Eye, ListFilter, Network, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 
@@ -18,7 +18,9 @@ import {
   EmptyState,
   ErrorState,
   ICON_STROKE_WIDTH,
+  PageHeader,
   Pagination,
+  SectionCard,
   SLOW_LOADING_MESSAGE,
   useDelayedLoading,
 } from '../../components/ui';
@@ -36,7 +38,7 @@ import { VariableKpis } from './VariableKpis';
 import { VariableTable } from './VariableTable';
 import type { VariableSummary } from './variableTypes';
 
-const CARD_CLASS = 'rounded-card border border-border-subtle bg-surface shadow-card';
+const ACTION_ICON = { size: 16, strokeWidth: ICON_STROKE_WIDTH } as const;
 
 /** Changing the application starts the list over: the URL goes back to its defaults and the page state is rebuilt. */
 export function VariablesListPage() {
@@ -104,37 +106,38 @@ function VariablesList() {
 
   return (
     <>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-page-title font-extrabold text-ink-900">Variables</h1>
-          <p className="text-body-lg text-ink-500">
-            {archived
-              ? ARCHIVED_WRITE_REASON
-              : `Global and context variables of ${applicationName}, with where they are created and used.`}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <ButtonLink
-            to="/dependency-map"
-            iconLeft={<Network aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
-          >
-            View on map
-          </ButtonLink>
-          {canWrite && (
-            <Button
-              variant="primary"
-              disabled={archived}
-              title={archived ? ARCHIVED_WRITE_REASON : undefined}
-              iconLeft={<Plus aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
-              onClick={() => {
-                setCreating(true);
-              }}
+      <PageHeader
+        icon={<Braces size={20} strokeWidth={ICON_STROKE_WIDTH} />}
+        title="Variables"
+        description={
+          archived
+            ? ARCHIVED_WRITE_REASON
+            : `Global and context variables of ${applicationName}, with where they are created and used.`
+        }
+        actions={
+          <>
+            <ButtonLink
+              to="/dependency-map"
+              iconLeft={<Network aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
             >
-              New variable
-            </Button>
-          )}
-        </div>
-      </div>
+              View on map
+            </ButtonLink>
+            {canWrite && (
+              <Button
+                variant="primary"
+                disabled={archived}
+                title={archived ? ARCHIVED_WRITE_REASON : undefined}
+                iconLeft={<Plus aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+                onClick={() => {
+                  setCreating(true);
+                }}
+              >
+                New variable
+              </Button>
+            )}
+          </>
+        }
+      />
 
       <VariableKpis
         kpis={kpis.data}
@@ -144,14 +147,26 @@ function VariablesList() {
         }}
       />
 
-      <section aria-label="Variable list" className={CARD_CLASS}>
-        <VariableFilters
-          params={params}
-          setParams={setParams}
-          screens={screens.data ?? []}
-          hasFilters={hasFilters}
-          onClear={clearFilters}
-        />
+      <SectionCard
+        title="Variable list"
+        icon={<ListFilter size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+        description="Search, filter and sort the variables of this application"
+        count={list.status === 'ready' ? total : null}
+        actions={
+          hasFilters && total > 0 ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              iconLeft={<X aria-hidden="true" size={14} strokeWidth={ICON_STROKE_WIDTH} />}
+              onClick={clearFilters}
+            >
+              Clear filters
+            </Button>
+          ) : undefined
+        }
+        flush
+      >
+        <VariableFilters params={params} setParams={setParams} screens={screens.data ?? []} />
         {list.status === 'error' ? (
           <ErrorState
             variant="server-error"
@@ -199,6 +214,7 @@ function VariablesList() {
                           {
                             key: 'view',
                             label: 'View',
+                            icon: <Eye {...ACTION_ICON} />,
                             onSelect: () => {
                               void navigate(`/variables/${row.id}`);
                             },
@@ -206,6 +222,7 @@ function VariablesList() {
                           {
                             key: 'edit',
                             label: 'Edit',
+                            icon: <Pencil {...ACTION_ICON} />,
                             disabled: archived,
                             reason: ARCHIVED_WRITE_REASON,
                             onSelect: () => {
@@ -215,6 +232,7 @@ function VariablesList() {
                           {
                             key: 'delete',
                             label: 'Delete',
+                            icon: <Trash2 {...ACTION_ICON} />,
                             danger: true,
                             disabled: archived,
                             reason: ARCHIVED_WRITE_REASON,
@@ -247,7 +265,7 @@ function VariablesList() {
             />
           </>
         )}
-      </section>
+      </SectionCard>
 
       {deleting !== null && (
         <DeleteVariableModal

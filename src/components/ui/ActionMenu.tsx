@@ -1,6 +1,6 @@
 // ActionMenu: the "…" button of a row or page header and its menu of actions.
 // Props: label (accessible name of the button, e.g. "Actions for gUsuario"), items ({ key, label, onSelect,
-// danger?, disabled?, reason? }). A disabled item stays focusable with aria-disabled, shows `reason` as its title
+// icon?, danger?, disabled?, reason? }). Items are drawn with their icon and a thin divider between them. A disabled item stays focusable with aria-disabled, shows `reason` as its title
 // and does nothing, so the reason is reachable by keyboard. Arrow keys move, Home / End jump, Escape closes and
 // returns focus to the button, as does choosing an item.
 // The menu is drawn in a portal on <body> with fixed coordinates taken from the button, so no ancestor with
@@ -8,8 +8,8 @@
 // edge; when there is no room below it opens above, and it never leaves the window horizontally. Scrolling or
 // resizing closes it (its coordinates would be stale).
 import { Ellipsis } from 'lucide-react';
-import { useEffect, useId, useLayoutEffect, useRef } from 'react';
-import type { KeyboardEvent } from 'react';
+import { Fragment, useEffect, useId, useLayoutEffect, useRef } from 'react';
+import type { KeyboardEvent, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 import { usePopover } from '../../hooks/usePopover';
@@ -21,6 +21,8 @@ export interface ActionMenuItem {
   key: string;
   label: string;
   onSelect: () => void;
+  /** Decorative icon before the label (16 px Lucide). */
+  icon?: ReactNode;
   danger?: boolean;
   disabled?: boolean;
   reason?: string;
@@ -97,7 +99,7 @@ export function ActionMenu({ label, items }: ActionMenuProps) {
         onClick={() => {
           setOpen((current) => !current);
         }}
-        className="flex size-7.5 items-center justify-center rounded-chip border border-border-control bg-surface text-ink-700 hover:bg-control-hover"
+        className="flex size-8 items-center justify-center rounded-chip border border-border-control bg-surface text-ink-700 transition-[background-color,border-color,color,transform] duration-200 hover:-translate-y-0.5 hover:border-accent hover:bg-accent-soft hover:text-accent-ink active:translate-y-0 active:scale-95 aria-expanded:border-accent aria-expanded:bg-accent-soft aria-expanded:text-accent-ink motion-reduce:transform-none motion-reduce:transition-none"
       >
         <Ellipsis aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />
       </button>
@@ -111,31 +113,41 @@ export function ActionMenu({ label, items }: ActionMenuProps) {
             tabIndex={-1}
             onKeyDown={onMenuKeyDown}
             style={{ top: 0, left: 0, visibility: 'hidden' }}
-            className="fixed z-40 min-w-40 rounded-card border border-border-subtle bg-surface p-1 shadow-modal"
+            className="fixed z-40 min-w-48 rounded-card border border-border-subtle bg-surface p-1.5 shadow-modal motion-safe:animate-fade-in"
           >
-            {items.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                role="menuitem"
-                aria-disabled={item.disabled || undefined}
-                title={item.disabled ? item.reason : undefined}
-                onClick={() => {
-                  if (item.disabled) return;
-                  setOpen(false);
-                  triggerRef.current?.focus();
-                  item.onSelect();
-                }}
-                className={cx(
-                  'flex w-full rounded-chip px-3 py-2 text-left text-body font-medium',
-                  item.disabled
-                    ? 'cursor-not-allowed text-ink-500 opacity-45'
-                    : 'hover:bg-control-hover',
-                  item.danger && !item.disabled ? 'text-danger' : 'text-ink-900',
+            {items.map((item, index) => (
+              <Fragment key={item.key}>
+                {index > 0 && (
+                  <div role="separator" aria-hidden="true" className="mx-2 my-1 h-px bg-divider" />
                 )}
-              >
-                {item.label}
-              </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  aria-disabled={item.disabled || undefined}
+                  title={item.disabled ? item.reason : undefined}
+                  onClick={() => {
+                    if (item.disabled) return;
+                    setOpen(false);
+                    triggerRef.current?.focus();
+                    item.onSelect();
+                  }}
+                  className={cx(
+                    'flex w-full items-center gap-2.5 rounded-chip px-3 py-2.25 text-left text-body font-medium transition-colors duration-150 motion-reduce:transition-none',
+                    item.disabled
+                      ? 'cursor-not-allowed text-ink-500 opacity-45'
+                      : item.danger
+                        ? 'text-danger hover:bg-danger-bg focus-visible:bg-danger-bg'
+                        : 'text-ink-900 hover:bg-accent-soft hover:text-accent-ink focus-visible:bg-accent-soft',
+                  )}
+                >
+                  {item.icon && (
+                    <span aria-hidden="true" className="flex shrink-0 items-center">
+                      {item.icon}
+                    </span>
+                  )}
+                  {item.label}
+                </button>
+              </Fragment>
             ))}
           </div>,
           document.body,

@@ -343,10 +343,10 @@ describe('variable list', () => {
     const { router } = await renderVariables({ path: '/variables?dataType=GUID' });
 
     expect(await screen.findByRole('heading', { name: 'No results' })).toBeInTheDocument();
-    // One in the filter bar and one in the empty state.
+    // The empty state offers it; the header of the list card only shows it while there are rows.
     const clear = screen.getAllByRole('button', { name: 'Clear filters' });
-    expect(clear).toHaveLength(2);
-    await user.click(clear[1] as HTMLElement);
+    expect(clear).toHaveLength(1);
+    await user.click(clear[0] as HTMLElement);
 
     await waitFor(() => {
       expect(router.state.location.search).toBe('');

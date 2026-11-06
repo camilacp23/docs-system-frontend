@@ -15,6 +15,6 @@ describe('App', () => {
     new FakeBackend().install();
     render(<App />);
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
-    expect(screen.getAllByText('Documentación técnica').length).toBeGreaterThan(0);
+    expect(screen.getByRole('region', { name: 'Documentación técnica' })).toBeInTheDocument();
   });
 });

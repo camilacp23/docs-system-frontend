@@ -85,7 +85,8 @@ describe('edit variable', () => {
     );
     expect(description).toHaveValue('Signed-in user record, loaded at start.');
     const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' });
-    expect(await within(breadcrumb).findByText('gUsuario / Edit')).toBeInTheDocument();
+    expect(await within(breadcrumb).findByRole('link', { name: 'gUsuario' })).toBeInTheDocument();
+    expect(within(breadcrumb).getByText('Edit')).toHaveAttribute('aria-current', 'page');
   });
 
   it('sends the COMPLETE representation with If-Match, says it was saved and shows the detail', async () => {

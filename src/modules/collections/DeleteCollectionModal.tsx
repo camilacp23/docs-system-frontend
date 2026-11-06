@@ -6,13 +6,15 @@
 // disabled until the impact is known (an unknown impact is never deleted blindly); if the read fails the modal
 // offers to try again. Delete is also disabled, with the reason, when the application is archived or the browser is
 // offline; a server refusal (APPLICATION_ARCHIVED, NOT_FOUND ...) shows its catalog message in the modal.
+import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { getErrorMessage, getThrownMessage } from '../../api/messages';
 import { useApi } from '../../api/useApi';
 import { useApiResource } from '../../api/useApiResource';
-import { Banner, Button, Modal, Spinner, useToast } from '../../components/ui';
+import { Banner, Button, ICON_STROKE_WIDTH, Modal, Spinner, useToast } from '../../components/ui';
 import { useWriteBlock } from '../../hooks/useWriteBlock';
+import { DeleteImpactBody } from '../shared/DeleteImpactBody';
 
 import type { Collection } from './collectionTypes';
 import { deleteImpact, impactSummary } from './deleteImpact';
@@ -48,7 +50,10 @@ export function DeleteCollectionModal({
     setFailure(null);
     try {
       await client.delete('/collections/{id}', { path: { id: collection.id } });
-      toast.show({ message: `${collection.name} deleted.` });
+      toast.show({
+        message: `${collection.name} deleted.`,
+        description: 'The audit log keeps a record of everything deleted.',
+      });
       onDeleted();
     } catch (thrown) {
       setFailure(getThrownMessage(thrown, { element: 'collection' }));
@@ -65,6 +70,9 @@ export function DeleteCollectionModal({
   return (
     <Modal
       open
+      placement="top-right"
+      icon={<Trash2 size={18} strokeWidth={ICON_STROKE_WIDTH} />}
+      tone="danger"
       onClose={() => {
         if (!deleting) onClose();
       }}
@@ -87,7 +95,7 @@ export function DeleteCollectionModal({
         </>
       }
     >
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-4">
         {impact.status === 'loading' && (
           <p role="status" className="flex items-center gap-2 text-ink-500">
             <Spinner size="sm" />
@@ -108,10 +116,9 @@ export function DeleteCollectionModal({
           </Banner>
         )}
         {impact.status === 'ready' && (
-          <p>
-            {summary === null ? <>{name} has no fields or links.</> : summary} The audit log keeps a
-            record of everything deleted.
-          </p>
+          <DeleteImpactBody>
+            {summary === null ? <>{name} has no fields or links.</> : summary}
+          </DeleteImpactBody>
         )}
         {reason && <p className="text-small text-warning-ink">{reason}</p>}
         {failure && <Banner tone="danger">{failure}</Banner>}

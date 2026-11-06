@@ -59,6 +59,8 @@ export function FieldGroup({
 
 interface EnvironmentsGroupProps {
   layout: 'modal' | 'page';
+  /** Cards per row; default 1 on the page layout, 2 in the modal. */
+  columns?: 1 | 2;
   values: EnvironmentValues;
   onChange: (next: EnvironmentValues) => void;
   error?: EnvironmentErrors['group'];
@@ -68,6 +70,7 @@ interface EnvironmentsGroupProps {
 
 export function EnvironmentsGroup({
   layout,
+  columns,
   values,
   onChange,
   error,
@@ -75,10 +78,16 @@ export function EnvironmentsGroup({
   disabled = false,
 }: EnvironmentsGroupProps) {
   const page = layout === 'page';
+  const columnCount = columns ?? (page ? 1 : 2);
   return (
     <FieldGroup legend={ENVIRONMENTS_LABEL} required error={error}>
       {() => (
-        <div className={cx('grid gap-3', page ? 'grid-cols-1' : 'grid-cols-2')}>
+        <div
+          className={cx(
+            'grid items-start gap-3',
+            columnCount === 1 ? 'grid-cols-1' : 'grid-cols-2',
+          )}
+        >
           {ENVIRONMENT_LIST.map((environment) => {
             const row = values[environment];
             const rowError = rowErrors?.[environment];
@@ -90,8 +99,8 @@ export function EnvironmentsGroup({
               <div
                 key={environment}
                 className={cx(
-                  'flex flex-col gap-2 rounded-control border p-3',
-                  row.enabled ? 'border-primary bg-search-bg' : 'border-border-subtle',
+                  'rounded-control border px-3.5 py-3 transition-colors duration-200 motion-reduce:transition-none',
+                  row.enabled ? 'border-primary bg-search-bg' : 'border-border-subtle bg-surface',
                 )}
               >
                 <Checkbox
@@ -103,34 +112,46 @@ export function EnvironmentsGroup({
                     setRow({ enabled: event.target.checked });
                   }}
                 />
-                <FormField
-                  label={<span className={page ? undefined : 'sr-only'}>{notesLabel}</span>}
-                  error={rowError}
+                {/* The notes open under the checkbox only for an environment that is in use; the field stays in
+                    the document (disabled) so its label is always reachable. */}
+                <div
+                  className={cx(
+                    'grid transition-[grid-template-rows,margin] duration-200 motion-reduce:transition-none',
+                    row.enabled ? 'mt-3 grid-rows-[1fr]' : 'mt-0 grid-rows-[0fr]',
+                  )}
                 >
-                  {(control) =>
-                    page ? (
-                      <Textarea
-                        {...control}
-                        rows={2}
-                        disabled={disabled || !row.enabled}
-                        value={row.notes}
-                        onChange={(event) => {
-                          setRow({ notes: event.target.value });
-                        }}
-                      />
-                    ) : (
-                      <TextField
-                        {...control}
-                        placeholder={`${notesLabel} (optional)`}
-                        disabled={disabled || !row.enabled}
-                        value={row.notes}
-                        onChange={(event) => {
-                          setRow({ notes: event.target.value });
-                        }}
-                      />
-                    )
-                  }
-                </FormField>
+                  <div className="min-h-0 overflow-hidden">
+                    <FormField
+                      label={<span className={page ? undefined : 'sr-only'}>{notesLabel}</span>}
+                      error={rowError}
+                      className="min-w-0"
+                    >
+                      {(control) =>
+                        page ? (
+                          <Textarea
+                            {...control}
+                            rows={2}
+                            disabled={disabled || !row.enabled}
+                            value={row.notes}
+                            onChange={(event) => {
+                              setRow({ notes: event.target.value });
+                            }}
+                          />
+                        ) : (
+                          <TextField
+                            {...control}
+                            placeholder="Optional notes"
+                            disabled={disabled || !row.enabled}
+                            value={row.notes}
+                            onChange={(event) => {
+                              setRow({ notes: event.target.value });
+                            }}
+                          />
+                        )
+                      }
+                    </FormField>
+                  </div>
+                </div>
               </div>
             );
           })}

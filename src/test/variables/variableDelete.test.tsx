@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';
 import { deleteImpact, impactSummary } from '../../modules/variables/deleteImpact';
+import { AUDIT_NOTE_TEXT } from '../../modules/shared/DeleteImpactBody';
 import type { VariableDependencies } from '../../modules/variables/variableTypes';
 import { makeVariable } from '../helpers/fakeVariablesApi';
 import { makeApplication } from '../helpers/renderApp';
@@ -87,9 +88,10 @@ describe('delete from the list', () => {
 
     expect(
       await dialog.findByText(
-        /is used in 3 screens, fed from 1 collection and used by 1 component\. Those links are deleted too\. The audit log keeps a record of everything deleted\./,
+        /is used in 3 screens, fed from 1 collection and used by 1 component\. Those links are deleted too\./,
       ),
     ).toBeInTheDocument();
+    expect(dialog.getByText(AUDIT_NOTE_TEXT)).toBeInTheDocument();
     expect(dialog.getByText('gUsuario', { selector: 'span' })).toHaveClass('font-mono');
 
     await user.click(dialog.getByRole('button', { name: 'Delete variable' }));
@@ -116,9 +118,7 @@ describe('delete from the list', () => {
     await render();
     const dialog = await openDelete(user, 'gRegistroSel');
 
-    expect(
-      await dialog.findByText(/isn't linked to anything\. The audit log keeps a record/),
-    ).toBeInTheDocument();
+    expect(await dialog.findByText(/isn't linked to anything\./)).toBeInTheDocument();
   });
 
   it('keeps Delete disabled until the impact is known, then enables it', async () => {
@@ -252,7 +252,7 @@ describe('delete from the list', () => {
     await render({ role: 'READER' });
 
     await screen.findByText('gUsuario');
-    expect(screen.queryByRole('button', { name: /^Actions for/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
   });
 });
 
@@ -262,8 +262,7 @@ describe('delete from the detail', () => {
     const { api, router } = await render({ path: '/variables/1' });
     await screen.findByRole('heading', { name: 'gUsuario', level: 1 });
 
-    await user.click(screen.getByRole('button', { name: 'Actions for gUsuario' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Delete gUsuario?' }));
     await dialog.findByText(/is used in 3 screens/);
     await user.click(dialog.getByRole('button', { name: 'Delete variable' }));
@@ -278,8 +277,7 @@ describe('delete from the detail', () => {
     });
   });
 
-  it('disables Delete in the menu, with the reason, on an archived application', async () => {
-    const user = userEvent.setup();
+  it('disables Delete, with the reason, on an archived application', async () => {
     await render({
       path: '/variables/1',
       applications: [makeApplication(1, { name: 'SAR', status: 'ARCHIVED' })],
@@ -289,22 +287,17 @@ describe('delete from the detail', () => {
       expect(screen.getByRole('button', { name: 'Edit' })).toBeDisabled();
     });
 
-    await user.click(screen.getByRole('button', { name: 'Actions for gUsuario' }));
-
-    expect(screen.getByRole('menuitem', { name: 'Delete' })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    );
-    expect(screen.getByRole('menuitem', { name: 'Delete' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Delete' })).toHaveAttribute(
       'title',
       'Read-only: the application is archived.',
     );
   });
 
-  it('shows no actions menu to the Reader', async () => {
+  it('shows no Delete button to the Reader', async () => {
     await render({ path: '/variables/1', role: 'READER' });
 
     await screen.findByRole('heading', { name: 'gUsuario', level: 1 });
-    expect(screen.queryByRole('button', { name: /^Actions for/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
   });
 });

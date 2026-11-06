@@ -5,38 +5,57 @@
 // While they load the cards show skeletons; if the read fails only these cards show the error with a retry, the rest
 // of the page keeps working. Power Apps identifiers and usedIn values are in IBM Plex Mono; every screen and
 // collection links to its page.
+import { Box, Database, Monitor } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 
 import { getErrorMessage } from '../../api/messages';
 import type { ApiResource } from '../../api/useApiResource';
-import { Banner, Button, Skeleton, Tag, useDelayedLoading } from '../../components/ui';
+import {
+  Banner,
+  Button,
+  ICON_STROKE_WIDTH,
+  SectionCard,
+  Skeleton,
+  Tag,
+  useDelayedLoading,
+} from '../../components/ui';
+import type { SectionTone } from '../../components/ui';
 
 import { ACCESS_MODE_LABEL, ASSIGNMENT_FUNCTION_LABEL } from './variableLabels';
 import type { Variable, VariableDependencies } from './variableTypes';
 
-const CARD_CLASS = 'rounded-card border border-border-subtle bg-surface shadow-card';
+const ICON = { size: 16, strokeWidth: ICON_STROKE_WIDTH } as const;
 const TH_CLASS = 'px-4 py-2 text-left text-micro font-bold tracking-wider text-ink-500 uppercase';
 const TD_CLASS = 'px-4 py-2.5 align-middle';
 const MONO_CLASS = 'font-mono text-label text-identifier';
 
 function UsageCard({
   title,
+  icon,
+  tone,
+  description,
   count,
   children,
 }: {
   title: string;
+  icon: ReactNode;
+  tone: SectionTone;
+  description: string;
   count: number | null;
   children: ReactNode;
 }) {
   return (
-    <section aria-label={title} className={CARD_CLASS}>
-      <header className="flex items-center justify-between px-4 py-3.5">
-        <h2 className="text-subheading font-semibold text-ink-900">{title}</h2>
-        {count !== null && <span className="text-label text-ink-500">{count}</span>}
-      </header>
+    <SectionCard
+      title={title}
+      icon={icon}
+      tone={tone}
+      description={description}
+      count={count}
+      flush
+    >
       {children}
-    </section>
+    </SectionCard>
   );
 }
 
@@ -133,7 +152,13 @@ export function VariableUsage({ variable, dependencies }: VariableUsageProps) {
 
   return (
     <>
-      <UsageCard title="Screens" count={screenCount}>
+      <UsageCard
+        title="Screens"
+        icon={<Monitor {...ICON} />}
+        tone="accent"
+        description="Where it is created and read"
+        count={screenCount}
+      >
         {loading ? (
           showSkeleton ? (
             <Placeholder />
@@ -174,7 +199,13 @@ export function VariableUsage({ variable, dependencies }: VariableUsageProps) {
         )}
       </UsageCard>
 
-      <UsageCard title="Fed from collections" count={loaded?.collections.length ?? null}>
+      <UsageCard
+        title="Fed from collections"
+        icon={<Database {...ICON} />}
+        tone="success"
+        description="Collections that assign its value"
+        count={loaded?.collections.length ?? null}
+      >
         {loading ? (
           showSkeleton ? (
             <Placeholder />
@@ -205,7 +236,13 @@ export function VariableUsage({ variable, dependencies }: VariableUsageProps) {
         )}
       </UsageCard>
 
-      <UsageCard title="Used by components" count={loaded?.components.length ?? null}>
+      <UsageCard
+        title="Used by components"
+        icon={<Box {...ICON} />}
+        tone="warning"
+        description="Components that read it"
+        count={loaded?.components.length ?? null}
+      >
         {loading ? (
           showSkeleton ? (
             <Placeholder />

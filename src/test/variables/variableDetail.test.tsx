@@ -220,7 +220,11 @@ describe('variable detail', () => {
 
     await screen.findByRole('heading', { name: 'gUsuario', level: 1 });
     const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' });
-    expect(await within(breadcrumb).findByText('Variables / gUsuario')).toBeInTheDocument();
+    expect(await within(breadcrumb).findByText('gUsuario')).toHaveAttribute('aria-current', 'page');
+    expect(within(breadcrumb).getByRole('link', { name: 'Variables' })).toHaveAttribute(
+      'href',
+      '/variables',
+    );
   });
 
   it('shows Edit to Administrator and Developer, as a link to the edit page', async () => {

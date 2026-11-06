@@ -53,7 +53,8 @@ export function emptyValues(): VariableFormValues {
     dataType: 'TEXT',
     scope: 'GLOBAL',
     originScreenId: '',
-    environments: emptyEnvironments(),
+    // A new variable starts with no environment chosen: the user decides where it exists.
+    environments: emptyEnvironments(false),
     description: '',
   };
 }

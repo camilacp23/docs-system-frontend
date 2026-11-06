@@ -7,7 +7,7 @@
 // application from the shell while the page is open goes back to the list.
 // The breadcrumb reads "Collections / <name>". Loading shows a skeleton after 300 ms; unknown id: "This collection
 // doesn't exist" (S-41a); other failures: the server error state with a retry.
-import { Pencil } from 'lucide-react';
+import { Database, Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 
@@ -16,11 +16,11 @@ import { useApiResource } from '../../api/useApiResource';
 import { useApplication } from '../../application/useApplication';
 import { useFollowElementApplication } from '../../application/useFollowElementApplication';
 import {
-  ActionMenu,
   Button,
   ButtonLink,
   ErrorState,
   ICON_STROKE_WIDTH,
+  PageHeader,
   PAGE_SIZES,
   Skeleton,
   Tabs,
@@ -93,7 +93,7 @@ export function CollectionDetailPage() {
 
   const loaded = collection.status === 'ready' ? collection.data : null;
   useFollowElementApplication(loaded?.applicationId ?? null, LIST_PATH);
-  useBreadcrumbLabel(loaded === null ? null : `Collections / ${loaded.name}`);
+  useBreadcrumbLabel(loaded === null ? null : loaded.name);
   const { showSkeleton } = useDelayedLoading(collection.loading && id !== null);
 
   const notFound = id === null || collection.error?.code === 'NOT_FOUND';
@@ -132,10 +132,11 @@ export function CollectionDetailPage() {
 
   return (
     <>
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex min-w-0 flex-col gap-2">
-          <h1 className="truncate text-page-title font-extrabold text-ink-900">{loaded.name}</h1>
-          <div className="flex flex-wrap items-center gap-2">
+      <PageHeader
+        icon={<Database size={20} strokeWidth={ICON_STROKE_WIDTH} />}
+        title={loaded.name}
+        meta={
+          <>
             {loaded.environments.map((environment) => (
               <Tag key={environment} tone={environment === 'PROD' ? 'success' : 'neutral'}>
                 {environment}
@@ -144,46 +145,44 @@ export function CollectionDetailPage() {
             <span className="text-label text-ink-500">
               Updated {formatTimestamp(loaded.updatedAt)}
             </span>
-          </div>
-        </div>
-        {canWrite && (
-          <div className="flex items-center gap-2">
-            <ActionMenu
-              label={`Actions for ${loaded.name}`}
-              items={[
-                {
-                  key: 'delete',
-                  label: 'Delete',
-                  danger: true,
-                  disabled: archived,
-                  reason: ARCHIVED_WRITE_REASON,
-                  onSelect: () => {
-                    setDeleting(true);
-                  },
-                },
-              ]}
-            />
-            {archived ? (
+          </>
+        }
+        actions={
+          canWrite && (
+            <>
               <Button
-                variant="primary"
-                disabled
-                title={ARCHIVED_WRITE_REASON}
-                iconLeft={<Pencil aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+                variant="danger"
+                disabled={archived}
+                title={archived ? ARCHIVED_WRITE_REASON : undefined}
+                iconLeft={<Trash2 aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+                onClick={() => {
+                  setDeleting(true);
+                }}
               >
-                Edit
+                Delete
               </Button>
-            ) : (
-              <ButtonLink
-                to={`/collections/${loaded.id}/edit`}
-                variant="primary"
-                iconLeft={<Pencil aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
-              >
-                Edit
-              </ButtonLink>
-            )}
-          </div>
-        )}
-      </div>
+              {archived ? (
+                <Button
+                  variant="primary"
+                  disabled
+                  title={ARCHIVED_WRITE_REASON}
+                  iconLeft={<Pencil aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+                >
+                  Edit
+                </Button>
+              ) : (
+                <ButtonLink
+                  to={`/collections/${loaded.id}/edit`}
+                  variant="primary"
+                  iconLeft={<Pencil aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+                >
+                  Edit
+                </ButtonLink>
+              )}
+            </>
+          )
+        }
+      />
 
       <Tabs<TabKey>
         label="Collection sections"

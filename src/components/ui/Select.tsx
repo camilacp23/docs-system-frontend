@@ -6,6 +6,7 @@ import { ChevronDown } from 'lucide-react';
 import type { ComponentProps } from 'react';
 
 import { cx, ICON_STROKE_WIDTH } from './cx';
+import { fieldBorderClass } from './fieldStyles';
 
 export interface SelectProps extends ComponentProps<'select'> {
   invalid?: boolean;
@@ -25,11 +26,9 @@ export function Select({
         {...rest}
         aria-invalid={invalid || rest['aria-invalid'] || undefined}
         className={cx(
-          'h-9 w-full appearance-none rounded-control border bg-surface pr-9 pl-3 text-ink-900 disabled:cursor-not-allowed disabled:bg-disabled-bg disabled:opacity-45',
+          'h-9 w-full appearance-none rounded-control border-2 bg-surface pr-9 pl-3 text-ink-900 disabled:cursor-not-allowed disabled:bg-disabled-bg disabled:opacity-45',
           mono ? 'font-mono text-label' : 'text-body-lg',
-          invalid
-            ? 'border-danger'
-            : 'border-border-control focus:border-accent enabled:hover:border-border-control-hover',
+          fieldBorderClass(invalid),
           className,
         )}
       >
@@ -39,7 +38,7 @@ export function Select({
         aria-hidden="true"
         size={16}
         strokeWidth={ICON_STROKE_WIDTH}
-        className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-ink-500"
+        className="select-chevron pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-ink-500"
       />
     </div>
   );

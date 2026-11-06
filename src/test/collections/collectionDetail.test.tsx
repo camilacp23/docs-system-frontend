@@ -61,12 +61,19 @@ describe('collection detail: overview', () => {
     expect(screen.getByText('No creation condition.')).toBeInTheDocument();
   });
 
-  it('shows the breadcrumb "Collections / <name>"', async () => {
+  it('shows the breadcrumb "Collections / <name>" with a link back to the list', async () => {
     await open();
     await ready();
 
     const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' });
-    expect(await within(breadcrumb).findByText('Collections / colClientes')).toBeInTheDocument();
+    expect(await within(breadcrumb).findByText('colClientes')).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(within(breadcrumb).getByRole('link', { name: 'Collections' })).toHaveAttribute(
+      'href',
+      '/collections',
+    );
   });
 });
 
@@ -356,17 +363,16 @@ describe('collection detail: states and roles', () => {
   });
 
   it('disables Edit and Delete with the reason when the application is archived', async () => {
-    const user = userEvent.setup();
     await open({ applications: [makeApplication(1, { name: 'SAR', status: 'ARCHIVED' })] });
     await ready();
 
     const edit = screen.getByRole('button', { name: 'Edit' });
     expect(edit).toBeDisabled();
     expect(edit).toHaveAttribute('title', 'Read-only: the application is archived.');
-    await user.click(screen.getByRole('button', { name: 'Actions for colClientes' }));
-    expect(screen.getByRole('menuitem', { name: 'Delete' })).toHaveAttribute(
-      'aria-disabled',
-      'true',
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Delete' })).toHaveAttribute(
+      'title',
+      'Read-only: the application is archived.',
     );
   });
 
@@ -411,12 +417,11 @@ describe('collection detail: states and roles', () => {
     const { router, api } = await open();
     await ready();
 
-    await user.click(screen.getByRole('button', { name: 'Actions for colClientes' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Delete colClientes?' }));
     expect(
       await dialog.findByText(
-        /Its 4 fields, 3 variable assignments and 1 derivation are deleted too\. The audit log keeps a record of everything deleted\./,
+        /Its 4 fields, 3 variable assignments and 1 derivation are deleted too\./,
       ),
     ).toBeInTheDocument();
     await user.click(dialog.getByRole('button', { name: 'Delete collection' }));

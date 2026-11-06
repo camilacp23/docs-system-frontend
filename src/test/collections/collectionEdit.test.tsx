@@ -131,7 +131,11 @@ describe('edit collection: the form', () => {
     expect(screen.getByRole('checkbox', { name: 'colActivos' })).not.toBeChecked();
     expect(screen.queryByRole('checkbox', { name: 'colClientes' })).not.toBeInTheDocument();
     const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' });
-    expect(await within(breadcrumb).findByText('colClientes / Edit')).toBeInTheDocument();
+    expect(await within(breadcrumb).findByRole('link', { name: 'colClientes' })).toHaveAttribute(
+      'href',
+      '/collections/11',
+    );
+    expect(within(breadcrumb).getByText('Edit')).toHaveAttribute('aria-current', 'page');
   });
 
   it('goes back to the detail with Cancel', async () => {

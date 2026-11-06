@@ -2,11 +2,11 @@
 // description and, for each environment, its notes ("No known differences." when it has none).
 // Props: variable. The origin screen links to its page and is in IBM Plex Mono; a variable without origin shows
 // the "Untraced" tag.
-import { CircleAlert } from 'lucide-react';
+import { CircleAlert, Info } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 
-import { ICON_STROKE_WIDTH, Tag } from '../../components/ui';
+import { ICON_STROKE_WIDTH, SectionCard, Tag } from '../../components/ui';
 
 import { DATA_TYPE_LABEL, SCOPE_FUNCTION, SCOPE_LABEL } from './variableLabels';
 import type { Variable } from './variableTypes';
@@ -26,12 +26,13 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 export function VariableDetailsCard({ variable }: { variable: Variable }) {
   const origin = variable.originScreen;
   return (
-    <section
-      aria-label="Details"
-      className="rounded-card border border-border-subtle bg-surface shadow-card"
+    <SectionCard
+      title="Details"
+      description="Type, scope, origin and notes per environment"
+      icon={<Info size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+      flush
     >
-      <h2 className="px-4 py-3.5 text-subheading font-semibold text-ink-900">Details</h2>
-      <dl className="border-t border-divider">
+      <dl>
         <Row label="Data type">{DATA_TYPE_LABEL[variable.dataType]}</Row>
         <Row label="Scope">
           {SCOPE_LABEL[variable.scope]} ({SCOPE_FUNCTION[variable.scope]})
@@ -71,6 +72,6 @@ export function VariableDetailsCard({ variable }: { variable: Variable }) {
           </div>
         ))}
       </dl>
-    </section>
+    </SectionCard>
   );
 }

@@ -10,6 +10,7 @@
 //    scope. If that read fails only the banner shows.
 // Save is disabled with the reason when the application is archived or the browser is offline. On success a toast
 // says "Variable saved." and the page goes to the detail. The breadcrumb reads "<name> / Edit".
+import { Pencil } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
@@ -25,6 +26,8 @@ import {
   Button,
   ButtonLink,
   ErrorState,
+  ICON_STROKE_WIDTH,
+  PageHeader,
   Skeleton,
   useDelayedLoading,
   useToast,
@@ -78,7 +81,7 @@ export function VariableEditPage() {
   const loaded = variable.status === 'ready' ? variable.data : null;
   const screens = useScreenOptions(loaded?.applicationId ?? null);
   useFollowElementApplication(loaded?.applicationId ?? null, LIST_PATH);
-  useBreadcrumbLabel(loaded === null ? null : `${loaded.name} / Edit`);
+  useBreadcrumbLabel(loaded === null ? null : loaded.name);
   const { showSkeleton } = useDelayedLoading(variable.loading && id !== null);
 
   // What the user edited, tagged with the version it started from: reloading (a new ETag) discards it.
@@ -210,9 +213,15 @@ export function VariableEditPage() {
 
   return (
     <>
-      <h1 className="text-page-title font-extrabold text-ink-900">
-        Edit <span className="font-mono text-body-lg font-semibold">{loaded.name}</span>
-      </h1>
+      <PageHeader
+        icon={<Pencil size={18} strokeWidth={ICON_STROKE_WIDTH} />}
+        title={
+          <>
+            Edit <span className="font-mono text-body-lg font-semibold">{loaded.name}</span>
+          </>
+        }
+        description="Update the details below and save your changes."
+      />
 
       {conflict !== null && !conflictHidden && (
         <Banner
@@ -264,24 +273,22 @@ export function VariableEditPage() {
         }}
         className="flex flex-col gap-4"
       >
-        <div className="rounded-card border border-border-subtle bg-surface p-5 shadow-card">
-          <VariableFields
-            layout="page"
-            values={values}
-            onChange={(next) => {
-              setDraft({ key: dataKey, values: next });
-            }}
-            errors={errors}
-            screens={screens.data ?? []}
-            applicationName={
-              applications.find((application) => application.id === loaded.applicationId)?.name ??
-              currentApplication?.name ??
-              ''
-            }
-            disabled={saving}
-          />
-        </div>
-        <div className="flex items-center justify-end gap-3 border-t border-border-subtle pt-4">
+        <VariableFields
+          layout="page"
+          values={values}
+          onChange={(next) => {
+            setDraft({ key: dataKey, values: next });
+          }}
+          errors={errors}
+          screens={screens.data ?? []}
+          applicationName={
+            applications.find((application) => application.id === loaded.applicationId)?.name ??
+            currentApplication?.name ??
+            ''
+          }
+          disabled={saving}
+        />
+        <div className="flex items-center justify-end gap-3">
           {saveReason && (
             <p id={reasonId} className="mr-auto text-small text-warning-ink">
               {saveReason}

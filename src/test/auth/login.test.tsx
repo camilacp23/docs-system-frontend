@@ -33,7 +33,7 @@ describe('login page', () => {
     await openLogin();
     expect(screen.getByText('Use your department account.')).toBeInTheDocument();
     expect(
-      screen.getByText("Technical documentation of the department's applications"),
+      screen.getByText('Technical documentation for department applications'),
     ).toBeInTheDocument();
     expect(
       screen.getByText('Enterprise Architecture Department · Sessions last up to 12 hours.'),
@@ -131,9 +131,9 @@ describe('login page', () => {
     await openLogin();
     const password = screen.getByLabelText(/^Password/);
     expect(password).toHaveAttribute('type', 'password');
-    await user.click(screen.getByRole('button', { name: 'Show' }));
+    await user.click(screen.getByRole('button', { name: 'Show password' }));
     expect(password).toHaveAttribute('type', 'text');
-    await user.click(screen.getByRole('button', { name: 'Hide' }));
+    await user.click(screen.getByRole('button', { name: 'Hide password' }));
     expect(password).toHaveAttribute('type', 'password');
   });
 });

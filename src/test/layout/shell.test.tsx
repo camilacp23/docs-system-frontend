@@ -28,6 +28,27 @@ describe('sidebar', () => {
     expect(await navLinks()).toHaveLength(count);
   });
 
+  it('collapses to icons that keep their names, and expands again', async () => {
+    const user = userEvent.setup();
+    window.localStorage.removeItem('sidebar-collapsed');
+    await renderApp({ role: 'ADMINISTRATOR' });
+    const nav = await screen.findByRole('navigation', { name: 'Main' });
+    expect(within(nav).getByText('Dashboard')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
+    expect(within(nav).queryByText('Dashboard')).not.toBeInTheDocument();
+    expect(within(nav).getByRole('link', { name: 'Dashboard' })).toBeInTheDocument();
+    expect(within(nav).getAllByRole('link')).toHaveLength(12);
+    expect(screen.getByRole('button', { name: 'Expand sidebar' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Expand sidebar' }));
+    expect(within(nav).getByText('Dashboard')).toBeInTheDocument();
+    window.localStorage.removeItem('sidebar-collapsed');
+  });
+
   it('lists the exact labels in order (Administrator)', async () => {
     await renderApp();
     const labels = (await navLinks()).map((link) => link.textContent);
@@ -74,6 +95,18 @@ describe('sidebar', () => {
       expect(screen.queryByText(text)).not.toBeInTheDocument();
     }
     expect(screen.queryByRole('button', { name: 'Help' })).not.toBeInTheDocument();
+  });
+});
+
+describe('breadcrumb', () => {
+  it('links the application to the dashboard and the section to its list', async () => {
+    await renderApp({ path: '/variables' });
+    const breadcrumb = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(breadcrumb).getByRole('link', { name: /SAR/ })).toHaveAttribute(
+      'href',
+      '/dashboard',
+    );
+    expect(within(breadcrumb).getByText('Variables')).toHaveAttribute('aria-current', 'page');
   });
 });
 

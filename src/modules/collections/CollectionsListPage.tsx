@@ -6,7 +6,7 @@
 // "Clear filters" when filters are set; a failure shows the server error state with a retry. The page subtitle says
 // why writing is disabled when the application is archived (S-09b): the counts stay and the reason follows them.
 // The counts line is never blank: a skeleton while they load, "Couldn't load the counts." with a retry if they fail.
-import { Database, Plus } from 'lucide-react';
+import { Database, Eye, ListFilter, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 
@@ -19,7 +19,9 @@ import {
   EmptyState,
   ErrorState,
   ICON_STROKE_WIDTH,
+  PageHeader,
   Pagination,
+  SectionCard,
   SLOW_LOADING_MESSAGE,
   Skeleton,
   useDelayedLoading,
@@ -36,7 +38,7 @@ import { DeleteCollectionModal } from './DeleteCollectionModal';
 import { useCollectionCounts } from './useCollectionCounts';
 import { useCollectionListParams } from './useCollectionListParams';
 
-const CARD_CLASS = 'rounded-card border border-border-subtle bg-surface shadow-card';
+const ACTION_ICON = { size: 16, strokeWidth: ICON_STROKE_WIDTH } as const;
 
 /** Changing the application starts the list over: the URL goes back to its defaults and the page state is rebuilt. */
 export function CollectionsListPage() {
@@ -100,10 +102,11 @@ function CollectionsList() {
 
   return (
     <>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-page-title font-extrabold text-ink-900">Collections</h1>
-          <div className="text-body-lg text-ink-500">
+      <PageHeader
+        icon={<Database size={20} strokeWidth={ICON_STROKE_WIDTH} />}
+        title="Collections"
+        description={
+          <>
             {counts.status === 'error' ? (
               <span>
                 Couldn&apos;t load the counts.{' '}
@@ -137,30 +140,45 @@ function CollectionsList() {
               </span>
             )}
             {archived && <span> · {ARCHIVED_WRITE_REASON}</span>}
-          </div>
-        </div>
-        {canWrite && (
-          <Button
-            variant="primary"
-            disabled={archived}
-            title={archived ? ARCHIVED_WRITE_REASON : undefined}
-            iconLeft={<Plus aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
-            onClick={() => {
-              setCreating(true);
-            }}
-          >
-            New collection
-          </Button>
-        )}
-      </div>
+          </>
+        }
+        actions={
+          canWrite && (
+            <Button
+              variant="primary"
+              disabled={archived}
+              title={archived ? ARCHIVED_WRITE_REASON : undefined}
+              iconLeft={<Plus aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+              onClick={() => {
+                setCreating(true);
+              }}
+            >
+              New collection
+            </Button>
+          )
+        }
+      />
 
-      <section aria-label="Collection list" className={CARD_CLASS}>
-        <CollectionFilters
-          params={params}
-          setParams={setParams}
-          hasFilters={hasFilters}
-          onClear={clearFilters}
-        />
+      <SectionCard
+        title="Collection list"
+        icon={<ListFilter size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+        description="Search, filter and sort the collections of this application"
+        count={list.status === 'ready' ? total : null}
+        actions={
+          hasFilters && total > 0 ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              iconLeft={<X aria-hidden="true" size={14} strokeWidth={ICON_STROKE_WIDTH} />}
+              onClick={clearFilters}
+            >
+              Clear filters
+            </Button>
+          ) : undefined
+        }
+        flush
+      >
+        <CollectionFilters params={params} setParams={setParams} />
         {list.status === 'error' ? (
           <ErrorState
             variant="server-error"
@@ -208,6 +226,7 @@ function CollectionsList() {
                           {
                             key: 'view',
                             label: 'View',
+                            icon: <Eye {...ACTION_ICON} />,
                             onSelect: () => {
                               void navigate(`/collections/${row.id}`);
                             },
@@ -215,6 +234,7 @@ function CollectionsList() {
                           {
                             key: 'edit',
                             label: 'Edit',
+                            icon: <Pencil {...ACTION_ICON} />,
                             disabled: archived,
                             reason: ARCHIVED_WRITE_REASON,
                             onSelect: () => {
@@ -224,6 +244,7 @@ function CollectionsList() {
                           {
                             key: 'delete',
                             label: 'Delete',
+                            icon: <Trash2 {...ACTION_ICON} />,
                             danger: true,
                             disabled: archived,
                             reason: ARCHIVED_WRITE_REASON,
@@ -256,7 +277,7 @@ function CollectionsList() {
             />
           </>
         )}
-      </section>
+      </SectionCard>
 
       {deleting !== null && (
         <DeleteCollectionModal

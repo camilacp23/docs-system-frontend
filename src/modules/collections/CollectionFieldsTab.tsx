@@ -6,7 +6,17 @@
 import { getErrorMessage } from '../../api/messages';
 import { useApi } from '../../api/useApi';
 import { useApiResource } from '../../api/useApiResource';
-import { Banner, Button, Pagination, Skeleton, useDelayedLoading } from '../../components/ui';
+import { ListOrdered } from 'lucide-react';
+
+import {
+  Banner,
+  Button,
+  ICON_STROKE_WIDTH,
+  Pagination,
+  SectionCard,
+  Skeleton,
+  useDelayedLoading,
+} from '../../components/ui';
 import { DATA_TYPE_LABEL } from '../variables/variableLabels';
 
 import type { CollectionField } from './collectionTypes';
@@ -65,9 +75,12 @@ export function CollectionFieldsTab({
   const loaded = fields.status === 'ready';
 
   return (
-    <section
-      aria-label="Fields"
-      className="rounded-card border border-border-subtle bg-surface shadow-card"
+    <SectionCard
+      title="Fields"
+      description="In the order they have in the collection"
+      icon={<ListOrdered size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+      count={loaded ? total : null}
+      flush
     >
       {loaded && total === 0 ? (
         <p className="px-4 py-4 text-body-lg text-ink-500">No fields yet.</p>
@@ -131,6 +144,6 @@ export function CollectionFieldsTab({
           />
         </>
       )}
-    </section>
+    </SectionCard>
   );
 }

@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';
 import { deleteImpact, impactSummary } from '../../modules/collections/deleteImpact';
+import { AUDIT_NOTE_TEXT } from '../../modules/shared/DeleteImpactBody';
 import { makeCollection, makeField } from '../helpers/fakeCollectionsApi';
 import { makeApplication } from '../helpers/renderApp';
 import { renderCollections } from '../helpers/renderCollections';
@@ -63,9 +64,10 @@ describe('delete collection', () => {
     const dialog = await openDelete(user, 'colClientes');
     expect(
       await dialog.findByText(
-        'Its 4 fields, 3 variable assignments and 1 derivation are deleted too. The audit log keeps a record of everything deleted.',
+        'Its 4 fields, 3 variable assignments and 1 derivation are deleted too.',
       ),
     ).toBeInTheDocument();
+    expect(dialog.getByText(AUDIT_NOTE_TEXT)).toBeInTheDocument();
     expect(dialog.queryByText(/screen/)).not.toBeInTheDocument();
     await user.click(dialog.getByRole('button', { name: 'Delete collection' }));
 
@@ -89,9 +91,7 @@ describe('delete collection', () => {
     const dialog = await openDelete(user, 'colVacia');
 
     const text = (await dialog.findByText(/has no fields or links/)).closest('p');
-    expect(text).toHaveTextContent(
-      'colVacia has no fields or links. The audit log keeps a record of everything deleted.',
-    );
+    expect(text).toHaveTextContent('colVacia has no fields or links.');
   });
 
   it('keeps Delete disabled until the impact is known and offers to try again if it fails', async () => {

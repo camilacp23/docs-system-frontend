@@ -121,8 +121,16 @@ describe('Toast', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('has no close button on the default tone unless dismissible is set', () => {
+  it('offers a close button on every toast unless dismissible is false', () => {
     const toast = setup({ message: 'Saved.' });
+    toast.show();
+    expect(screen.getByRole('button', { name: 'Dismiss' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('hides the close button when dismissible is false', () => {
+    const toast = setup({ message: 'Saved.', dismissible: false });
     toast.show();
 
     expect(screen.queryByRole('button', { name: 'Dismiss' })).not.toBeInTheDocument();

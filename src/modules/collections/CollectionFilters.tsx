@@ -1,7 +1,7 @@
 // CollectionFilters: the filter bar of the collection list (S-14): search by name (the URL changes after the user
-// stops typing, useSearchDraft), environment and the "Not linked to any screen" toggle, and "Clear filters" when any
-// is set. Props: params (current filters), setParams (writes the URL), hasFilters, onClear. Every control has an
-// accessible name; the changes reach the URL, never a local copy.
+// stops typing, useSearchDraft), environment and the "Not linked to any screen" toggle, all in one row (the search is the longest).
+// "Clear filters" lives in the header of the list card. Props: params (current filters), setParams (writes the
+// URL). Every control has an accessible name; the changes reach the URL, never a local copy.
 import { Funnel, Search } from 'lucide-react';
 import { useCallback } from 'react';
 
@@ -15,16 +15,9 @@ import type { CollectionListParams } from './useCollectionListParams';
 interface CollectionFiltersProps {
   params: CollectionListParams;
   setParams: (patch: Partial<CollectionListParams>, options?: { replace?: boolean }) => void;
-  hasFilters: boolean;
-  onClear: () => void;
 }
 
-export function CollectionFilters({
-  params,
-  setParams,
-  hasFilters,
-  onClear,
-}: CollectionFiltersProps) {
+export function CollectionFilters({ params, setParams }: CollectionFiltersProps) {
   const [text, setText] = useSearchDraft(
     params.q,
     useCallback(
@@ -36,20 +29,14 @@ export function CollectionFilters({
   );
 
   return (
-    <div className="flex flex-wrap items-center gap-3 p-4">
-      <div className="relative w-65">
-        <Search
-          aria-hidden="true"
-          size={16}
-          strokeWidth={ICON_STROKE_WIDTH}
-          className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-ink-500"
-        />
+    <div className="flex flex-wrap items-center gap-3 border-b border-divider bg-search-bg/60 p-4">
+      <div className="min-w-64 flex-1">
         <TextField
           type="search"
+          icon={<Search size={16} strokeWidth={ICON_STROKE_WIDTH} />}
           aria-label="Search by name"
-          placeholder="Search by name…"
+          placeholder="Search collections by name…"
           maxLength={100}
-          className="pl-9"
           value={text}
           onChange={(event) => {
             setText(event.target.value);
@@ -80,11 +67,6 @@ export function CollectionFilters({
       >
         Not linked to any screen
       </Button>
-      {hasFilters && (
-        <Button variant="ghost" onClick={onClear}>
-          Clear filters
-        </Button>
-      )}
     </div>
   );
 }

@@ -3,11 +3,22 @@
 // each message sits under its field and the field is marked invalid), screens (origin screen options),
 // applicationName ("Unique in <application>"), disabled (while saving), nameRef (first field, for the focus).
 // A context variable cannot use App (OnStart) as origin: the option is disabled and the field says why.
+// The fields come in three groups (Basics, Environment setup, Documentation): cards on the page, headed blocks in the modal.
 // Identifiers (the name) are in IBM Plex Mono. Every control has a label; errors are linked with aria-describedby.
+import { FileText, Layers, ListTree } from 'lucide-react';
 import type { RefObject } from 'react';
 
-import { FormField, SegmentedControl, Select, Textarea, TextField } from '../../components/ui';
+import {
+  FormField,
+  ICON_STROKE_WIDTH,
+  SegmentedControl,
+  Select,
+  Textarea,
+  TextField,
+} from '../../components/ui';
 import { EnvironmentsGroup, FieldGroup } from '../shared/EnvironmentsGroup';
+import { ModalGroup } from '../shared/ModalGroup';
+import { PageBand } from '../shared/PageBand';
 
 import { FIELD_LABEL, NAME_MAX_LENGTH, withScope } from './variableForm';
 import type { VariableFormErrors, VariableFormValues } from './variableForm';
@@ -175,6 +186,7 @@ export function VariableFields({
   const environments = (
     <EnvironmentsGroup
       layout={layout}
+      columns={1}
       values={values.environments}
       onChange={(next) => {
         set({ environments: next });
@@ -191,7 +203,7 @@ export function VariableFields({
         page ? (
           <Textarea
             {...control}
-            rows={4}
+            rows={3}
             disabled={disabled}
             value={values.description}
             onChange={(event) => {
@@ -215,28 +227,76 @@ export function VariableFields({
 
   if (page) {
     return (
-      <div className="grid grid-cols-2 gap-x-6 gap-y-5">
-        <div className="flex flex-col gap-5">
-          {name}
-          {scope}
-          {environments}
-        </div>
-        <div className="flex flex-col gap-5">
-          {dataType}
-          {origin}
+      <div className="divide-y divide-border overflow-hidden rounded-card border border-border bg-surface shadow-card">
+        <PageBand
+          step={1}
+          tone="accent"
+          title="Basics"
+          label="Basics"
+          description="Name, type, scope and where it is created."
+        >
+          <div className="grid grid-cols-3 gap-x-4 gap-y-4">
+            <div className="col-span-2">{name}</div>
+            {dataType}
+            <div className="col-span-2">{scope}</div>
+            {origin}
+          </div>
+        </PageBand>
+        <PageBand
+          step={2}
+          tone="success"
+          title="Environment setup"
+          label="Environment setup"
+          description="Where it exists and how it differs."
+        >
+          <EnvironmentsGroup
+            layout="page"
+            columns={2}
+            values={values.environments}
+            onChange={(next) => {
+              set({ environments: next });
+            }}
+            error={errors.environments}
+            rowErrors={errors.environmentRows}
+            disabled={disabled}
+          />
+        </PageBand>
+        <PageBand
+          step={3}
+          tone="neutral"
+          title="Documentation"
+          label="Documentation"
+          description="What it holds and when it changes."
+        >
           {description}
-        </div>
+        </PageBand>
       </div>
     );
   }
   return (
-    <div className="grid grid-cols-2 gap-x-4 gap-y-4">
-      {name}
-      {dataType}
-      <div className="col-span-2">{scope}</div>
-      <div className="col-span-2">{origin}</div>
-      <div className="col-span-2">{environments}</div>
-      <div className="col-span-2">{description}</div>
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-x-8">
+      <ModalGroup title="Basics" icon={<ListTree size={13} strokeWidth={ICON_STROKE_WIDTH} />}>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+          {name}
+          {dataType}
+          <div className="col-span-2">{scope}</div>
+          <div className="col-span-2">{origin}</div>
+        </div>
+      </ModalGroup>
+      <div className="flex flex-col gap-5 border-t border-divider pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-8">
+        <ModalGroup
+          title="Environment setup"
+          icon={<Layers size={13} strokeWidth={ICON_STROKE_WIDTH} />}
+        >
+          {environments}
+        </ModalGroup>
+        <ModalGroup
+          title="Documentation"
+          icon={<FileText size={13} strokeWidth={ICON_STROKE_WIDTH} />}
+        >
+          {description}
+        </ModalGroup>
+      </div>
     </div>
   );
 }

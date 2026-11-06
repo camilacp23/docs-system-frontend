@@ -102,21 +102,14 @@ export function CreateVariableModal({ onClose, onCreated, screens }: CreateVaria
       onClose={() => {
         if (!saving) onClose();
       }}
-      size="lg"
+      size="xl"
       initialFocusRef={nameRef}
+      icon={<Braces size={16} strokeWidth={ICON_STROKE_WIDTH} />}
       title={
-        <span className="flex items-center gap-3">
-          <span
-            aria-hidden="true"
-            className="flex size-11 shrink-0 items-center justify-center rounded-card bg-primary text-on-primary"
-          >
-            <Braces size={20} strokeWidth={ICON_STROKE_WIDTH} />
-          </span>
-          <span className="flex flex-col">
-            <span>New variable</span>
-            <span className="text-body font-normal text-ink-500">
-              {applicationName} · Global or context variable
-            </span>
+        <span className="flex flex-col">
+          <span>New variable</span>
+          <span className="text-small font-normal text-ink-500">
+            {applicationName} · Global or context variable
           </span>
         </span>
       }

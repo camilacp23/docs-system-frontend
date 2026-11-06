@@ -220,30 +220,6 @@ describe('ActionMenu in the pages', () => {
     expect(itemNames(menu)).toEqual(['View', 'Edit', 'Delete']);
   });
 
-  it('collection detail: the header menu is complete and outside the page container', async () => {
-    const user = userEvent.setup();
-    await renderCollections({ path: '/collections/11' });
-    await screen.findByRole('heading', { name: 'colClientes', level: 1 });
-
-    await user.click(screen.getByRole('button', { name: 'Actions for colClientes' }));
-    const menu = screen.getByRole('menu', { name: 'Actions for colClientes' });
-
-    expectOutsideClippingContainers(menu);
-    expect(itemNames(menu)).toEqual(['Delete']);
-  });
-
-  it('variable detail: the header menu is complete and outside the page container', async () => {
-    const user = userEvent.setup();
-    await renderVariables({ path: '/variables/1' });
-    await screen.findByRole('heading', { name: 'gUsuario', level: 1 });
-
-    await user.click(screen.getByRole('button', { name: 'Actions for gUsuario' }));
-    const menu = screen.getByRole('menu', { name: 'Actions for gUsuario' });
-
-    expectOutsideClippingContainers(menu);
-    expect(itemNames(menu)).toEqual(['Delete']);
-  });
-
   it('a menu item of the list still works from the portal (View opens the collection)', async () => {
     const user = userEvent.setup();
     const { router } = await renderCollections();

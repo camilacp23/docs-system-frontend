@@ -101,7 +101,6 @@ describe('New variable modal', () => {
 
     await user.clear(dialog.getByLabelText(/^Name/));
     await fill(user, dialog.getByLabelText(/^Name/), 'gOk');
-    await user.click(dialog.getByRole('checkbox', { name: 'DEV' }));
     await user.click(dialog.getByRole('button', { name: 'Create variable' }));
     expect(await dialog.findByText('Add at least one item to Environments.')).toBeInTheDocument();
     expect(api.callsTo('POST /variables')).toHaveLength(0);
@@ -111,6 +110,7 @@ describe('New variable modal', () => {
     const user = userEvent.setup();
     const { api, router } = await renderVariables();
     const dialog = await openModal(user);
+    await user.click(dialog.getByRole('checkbox', { name: 'DEV' }));
 
     await fill(user, dialog.getByLabelText(/^Name/), 'gFechaFiltro');
     expect(dialog.getByText('12/150')).toBeInTheDocument();
@@ -156,6 +156,7 @@ describe('New variable modal', () => {
     const user = userEvent.setup();
     const { api } = await renderVariables();
     const dialog = await openModal(user);
+    await user.click(dialog.getByRole('checkbox', { name: 'DEV' }));
 
     await fill(user, dialog.getByLabelText(/^Name/), 'gSimple');
     await user.click(dialog.getByRole('button', { name: 'Create variable' }));
@@ -198,6 +199,7 @@ describe('New variable modal', () => {
     const user = userEvent.setup();
     const { api } = await renderVariables();
     const dialog = await openModal(user);
+    await user.click(dialog.getByRole('checkbox', { name: 'DEV' }));
     api.failNext(
       'POST /variables',
       new ApiError({
@@ -232,6 +234,7 @@ describe('New variable modal', () => {
     const user = userEvent.setup();
     const { api } = await renderVariables();
     const dialog = await openModal(user);
+    await user.click(dialog.getByRole('checkbox', { name: 'DEV' }));
     api.failNext(
       'POST /variables',
       new ApiError({
@@ -254,6 +257,7 @@ describe('New variable modal', () => {
     const user = userEvent.setup();
     const { api } = await renderVariables();
     const dialog = await openModal(user);
+    await user.click(dialog.getByRole('checkbox', { name: 'DEV' }));
     api.failNext(
       'POST /variables',
       new ApiError({
@@ -283,6 +287,7 @@ describe('New variable modal', () => {
     const user = userEvent.setup();
     const { api } = await renderVariables();
     const dialog = await openModal(user);
+    await user.click(dialog.getByRole('checkbox', { name: 'DEV' }));
     api.failNext(
       'POST /variables',
       new ApiError({
@@ -303,6 +308,7 @@ describe('New variable modal', () => {
     const user = userEvent.setup();
     const { api } = await renderVariables();
     const dialog = await openModal(user);
+    await user.click(dialog.getByRole('checkbox', { name: 'DEV' }));
     api.failNext('POST /variables', new ApiError({ status: 422, code: 'APPLICATION_ARCHIVED' }));
 
     await fill(user, dialog.getByLabelText(/^Name/), 'gNueva');

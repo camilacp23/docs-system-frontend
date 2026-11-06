@@ -1,6 +1,6 @@
 // Button: the only action control of the design system (SDD Table 54).
 // Props: variant ('primary' gradient | 'secondary' | 'ghost' | 'danger', default 'secondary'),
-// size ('sm' 30 px | 'md' 36 px | 'lg' 40 px, default 'md'), loading (shows a spinner, sets aria-busy and
+// size ('sm' 30 px | 'md' 36 px | 'lg' 40 px | 'xl' 44 px, default 'md'), loading (shows a spinner, sets aria-busy and
 // ignores clicks without losing focus), fullWidth, iconLeft (decorative icon), plus every native button prop.
 // `disabled` removes the button from the tab order and shows the flat disabled style (opacity .45).
 import type { ComponentProps, MouseEvent, ReactNode } from 'react';

@@ -105,21 +105,14 @@ export function CreateCollectionModal({ onClose, onCreated }: CreateCollectionMo
       onClose={() => {
         if (!saving) onClose();
       }}
-      size="lg"
+      size="xl"
       initialFocusRef={nameRef}
+      icon={<Database size={16} strokeWidth={ICON_STROKE_WIDTH} />}
       title={
-        <span className="flex items-center gap-3">
-          <span
-            aria-hidden="true"
-            className="flex size-11 shrink-0 items-center justify-center rounded-card bg-primary text-on-primary"
-          >
-            <Database size={20} strokeWidth={ICON_STROKE_WIDTH} />
-          </span>
-          <span className="flex flex-col">
-            <span>New collection</span>
-            <span className="text-body font-normal text-ink-500">
-              {applicationName} · {currentApplication?.platform ?? 'Power Apps'} collection
-            </span>
+        <span className="flex flex-col">
+          <span>New collection</span>
+          <span className="text-small font-normal text-ink-500">
+            {applicationName} · {currentApplication?.platform ?? 'Power Apps'} collection
           </span>
         </span>
       }
@@ -171,7 +164,7 @@ export function CreateCollectionModal({ onClose, onCreated }: CreateCollectionMo
         onSubmit={(event) => {
           void submit(event);
         }}
-        className="flex flex-col gap-4"
+        className="flex flex-col gap-5"
       >
         {errors.form && <Banner tone="danger">{errors.form}</Banner>}
         <CollectionGeneralFields
@@ -183,16 +176,18 @@ export function CreateCollectionModal({ onClose, onCreated }: CreateCollectionMo
           disabled={saving}
           nameRef={nameRef}
         />
-        <FieldRowsEditor
-          layout="modal"
-          rows={values.fields}
-          onChange={(fields) => {
-            setValues({ ...values, fields });
-          }}
-          errors={errors.fieldRows}
-          groupError={errors.fields}
-          disabled={saving}
-        />
+        <div className="border-t border-divider pt-5">
+          <FieldRowsEditor
+            layout="modal"
+            rows={values.fields}
+            onChange={(fields) => {
+              setValues({ ...values, fields });
+            }}
+            errors={errors.fieldRows}
+            groupError={errors.fields}
+            disabled={saving}
+          />
+        </div>
       </form>
     </Modal>
   );
