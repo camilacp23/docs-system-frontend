@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Technical Documentation System API
-  version: 0.3.3
+  version: 0.3.5
   summary: REST API contracts — SDD Interface Viewpoint (Bitácora 3, Activities 5 and 6)
   description: |
     Contracts of the eleven modules (41 operations of SRS Table 25), the
@@ -22,7 +22,7 @@ info:
       value sent by the client is kept when it has 8 to 64 characters among
       letters, digits, `.`, `_` and `-`; otherwise the server generates one.
       `INTERNAL_ERROR` repeats it in `details.requestId`.
-    - Writes on variables and collections check, in this order: the shape of the request (400), that the
+    - Writes on variables, collections and screens check, in this order: the shape of the request (400), that the
       referenced resources exist (404), that the application is not archived
       (422 `APPLICATION_ARCHIVED`), `If-Match` (412), the business rules (422)
       and the name (409 `DUPLICATE_NAME`).
@@ -86,6 +86,42 @@ info:
     return it and no longer lists `CROSS_APPLICATION` on `PUT /variables/{id}`.
     No operation was added or removed (50).
 
+    Changes in 0.3.4 (screens and the documentation workflow): `POST /screens`
+    sends the `ETag` of the created screen, and `PUT /screens/{id}/status` and
+    `POST /screens/{id}/review` send the `ETag` of the screen with its new status.
+    `DUPLICATE_NAME` is documented on `POST` and `PUT /screens`, `SCREEN_IN_REVIEW`
+    on `DELETE /screens/{id}` and `APP_CONTEXT_PROTECTED` (second message: the
+    App (OnStart) screen cannot be renamed) on `PUT /screens/{id}`. The
+    operations describe the status a screen gets when it is created or edited,
+    that the four lists of `ScreenWrite` are required and only `uses` is optional,
+    that the `origin` links are read-only, that the cross-application and context
+    rules judge only new or modified links, and the order of the errors of
+    `/status` and `/review`. `POST /screens/{id}/review` has no `If-Match`: a
+    RETURN without `comment`, with `""` or with `null` is a 400, one with only
+    spaces is a 422 `COMMENT_REQUIRED`, and an APPROVE with only spaces creates
+    no comment. The error examples show the position (`details.field`) of the
+    failing item, `TEMPLATE_INCOMPLETE` lists the fields in the order of the
+    template, and `AuditEntry` describes the payload of the review events. No
+    operation was added or removed (50).
+
+    Changes in 0.3.5 (Jira integration): `POST /screens/{id}/jira-ticket`
+    describes the flow (Epic created once per screen, Story chosen or new,
+    Subtask), the project and the summary of the Epic, the provisional values
+    of the 201, the order of the errors, the 400 rules of the summaries
+    (`required`, `minLength`, `singleLine`, `maxLength` counted as Jira counts it),
+    the order of `created`, the link of each issue and why the 201 has no
+    `Location`. `STORY_NOT_IN_SCREEN` lists its cases, and `JIRA_PARTIAL_FAILURE`
+    has four messages (story created, only the epic created, screen deleted,
+    issues not saved) with the shape of their `details`, each with an example.
+    `GET /screens/{id}/jira-tickets` states what `refresh` does and writes,
+    the meaning of `sync` in every case, the order of the tree, the ETag and
+    the 304. `POST /integrations/jira/webhook` states the order of its rules,
+    when it answers 400, 401, 413 and 204, which events are ignored, and that
+    `jira:issue_created` is accepted and ignored. `issue.key` of the event is
+    optional, as `issue.id` is the only field the server requires.
+    `JiraHierarchyLevel` documents its correspondence with the level of Jira
+    (1, 0 and -1). No operation was added or removed (50).
+
     Error catalog (`code` -> HTTP status: `message`):
 
     | Code | HTTP | Message |
@@ -105,33 +141,38 @@ info:
     | PAYLOAD_TOO_LARGE | 413 | This is too much text to save at once. Shorten the longest fields and try again. |
     | SCOPE_MISMATCH | 422 | Set applies to global variables and UpdateContext to context variables. |
     | SCOPE_CONFLICT | 422 | You can't change the scope while collections assign this variable with <function>. Update those assignments first. |
-    | CROSS_APPLICATION | 422 | You can only link elements of the same application. |
+    | CROSS_APPLICATION | 422 | You can only link elements of the same application. (`details`: field, when the service reports it) |
     | INVALID_ORIGIN_SCREEN | 422 | Context variables are created inside a screen, not in App (OnStart). (`details`: field) |
     | INVALID_ORIGIN_SCREEN (other application) | 422 | <screen> belongs to another application. Choose a screen of <application>. (`details`: field, screenId, screen, application) |
-    | CONTEXT_SCREEN_MISMATCH | 422 | <variable> belongs to <screen>. From here you can only write it with Navigate. (`details`: variableId, variable, originScreenId, screen, screenId, targetScreen) |
-    | CONTEXT_SCREEN_MISMATCH (no origin screen) | 422 | <variable> has no origin screen. Set its origin screen before linking it. (`details`: variableId, variable, originScreenId: null, screenId, targetScreen) |
+    | CONTEXT_SCREEN_MISMATCH | 422 | <variable> belongs to <screen>. From here you can only write it with Navigate. (`details`: variableId, variable, originScreenId, screen, screenId, targetScreen, field) |
+    | CONTEXT_SCREEN_MISMATCH (no origin screen) | 422 | <variable> has no origin screen. Set its origin screen before linking it. (`details`: variableId, variable, originScreenId: null, screenId, targetScreen, field) |
     | LAST_ACTIVE_ADMIN | 422 | There must be at least one active administrator. Promote another user first. |
     | CANNOT_DEACTIVATE_SELF | 422 | You can't deactivate your own account. |
     | RESERVED_ACCOUNT | 422 | This is a system account and can't be changed. |
     | APPLICATION_ARCHIVED | 422 | This application is archived, so its documentation can't be changed. |
-    | INVALID_TRANSITION | 422 | This screen changed status meanwhile. Reload to see its current status. |
+    | INVALID_TRANSITION | 422 | This screen changed status meanwhile. Reload to see its current status. (`details`: from, to) |
     | NOT_IN_REVIEW | 422 | This screen is no longer in review. Reload to see its status. |
     | SCREEN_IN_REVIEW | 422 | This screen is in review. Edit it after the review, or withdraw it from review. |
-    | TEMPLATE_INCOMPLETE | 422 | Complete all seven template fields to submit for review. Missing: <fields>. |
+    | TEMPLATE_INCOMPLETE | 422 | Complete all seven template fields to submit for review. Missing: <fields>. (`details`: fields, in template order) |
     | COMMENT_REQUIRED | 422 | Write a comment: it is required to return the documentation. |
     | REVIEW_COMMENT_LOCKED | 422 | Review decisions can't be edited. |
     | APP_CONTEXT_PROTECTED | 422 | The App (OnStart) screen can't be deleted. |
-    | STORY_NOT_IN_SCREEN | 422 | That story doesn't belong to this screen. Refresh the list and pick again. |
+    | APP_CONTEXT_PROTECTED (rename) | 422 | The App (OnStart) screen can't be renamed. |
+    | STORY_NOT_IN_SCREEN | 422 | That story doesn't belong to this screen. Refresh the list and pick again. (`details`: storyId) |
     | RATE_LIMITED | 429 | Too many attempts. Try again in <n> minutes. |
     | INTERNAL_ERROR | 500 | Something went wrong on our side. Try again in a moment. Reference: <requestId>. |
-    | JIRA_UNAVAILABLE | 502 | Jira isn't responding. The to-do wasn't created. Try again in a few minutes. |
-    | JIRA_PARTIAL_FAILURE | 502 | The story <key> was created, but the to-do wasn't. Try again to add it to that story. |
+    | JIRA_UNAVAILABLE | 502 | Jira isn't responding. The to-do wasn't created. Try again in a few minutes. (Jira not configured, circuit breaker open, or Jira failed before anything was created) |
+    | JIRA_PARTIAL_FAILURE | 502 | The story <key> was created, but the to-do wasn't. Try again to add it to that story. (`details`: key, created, storyId) |
+    | JIRA_PARTIAL_FAILURE (only the epic) | 502 | The epic <key> was created, but the story and the to-do weren't. Try again to add them to that epic. (`details`: key, created) |
+    | JIRA_PARTIAL_FAILURE (screen deleted) | 502 | The screen was deleted while the tickets were being created. These Jira issues weren't saved here: <keys>. Delete them in Jira if you don't need them. (`details`: created, unsaved, reason = SCREEN_DELETED) |
+    | JIRA_PARTIAL_FAILURE (not saved) | 502 | These Jira issues were created but couldn't be saved here: <keys>. Delete them in Jira, then try again. (`details`: created, unsaved, reason = SAVE_FAILED) |
 
     In `DUPLICATE_NAME`, `<type>` is the noun in lowercase (`global variable`,
-    `context variable`, `collection`, `application`; `An` before a vowel) and
+    `context variable`, `collection`, `screen`, `application`; `An` before a vowel) and
     `<application>` is the place where the name must be unique, which
-    `details.container` names: `application` (global variables, collections and
-    context variables without an origin screen: the name of the application),
+    `details.container` names: `application` (global variables, collections,
+    screens and context variables without an origin screen: the name of the
+    application),
     `screen` (context variables with an origin screen: the name of that screen) or
     `system` (applications: Documentación técnica).
 
@@ -1102,19 +1143,41 @@ paths:
       x-capability: 'Create and edit screens (template)'
       x-roles: [ADMINISTRATOR, DEVELOPER]
       summary: Document a new screen with the standard template (FR-10, FR-11, FR-13)
-      x-error-codes: [APPLICATION_ARCHIVED, CROSS_APPLICATION, CONTEXT_SCREEN_MISMATCH]
+      x-error-codes: [APPLICATION_ARCHIVED, CROSS_APPLICATION, CONTEXT_SCREEN_MISMATCH, DUPLICATE_NAME]
       description: |
         Roles: Administrator, Developer. The caller becomes the author. The screen
-        starts as UNDOCUMENTED, or DRAFT when any template field has content.
+        starts as UNDOCUMENTED, or DRAFT when any template field has content: a
+        field has content when it is not null and is not empty after trimming
+        spaces (the text is stored as it arrives).
         Components, their uses (component -> variable/collection), variable and
         collection links, and navigations are written in the same request (SDD D-29).
+        The four lists (`components`, `variableLinks`, `collectionLinks`,
+        `navigations`) are required, empty or not; only `uses` of a component is
+        optional. The `id` of a nested item is ignored. `usedIn = origin` is reserved
+        for the links the variables module maintains and is a 400.
+        404 when `applicationId`, or a variable, collection or screen referenced by the
+        body, does not exist; `details.field` gives the position of the reference.
+        The name must be free in the application: 409 DUPLICATE_NAME with
+        `details.container = application`. A repeated component name, a repeated
+        target in the uses of a component, a repeated element and `usedIn` pair in the
+        links, or a repeated navigation target is a 400 with its position, not
+        DUPLICATE_NAME.
+        The errors are checked in this order: 400, 404, 422 APPLICATION_ARCHIVED,
+        the 422 business rules and 409 DUPLICATE_NAME. The 422 rules are applied one
+        rule at a time, each one from the first item to the last, and the first item
+        that fails in the first rule that fails is reported with its position in
+        `details.field`. Order: CROSS_APPLICATION (`variableLinks`, `collectionLinks`,
+        `navigations`, then the uses of each component), then CONTEXT_SCREEN_MISMATCH
+        (`variableLinks`). Every link is judged on create.
         When the application is archived it is read-only (CP-01): this operation
         returns 422 APPLICATION_ARCHIVED for every role.
         Context variables belong to their origin screen (CP-07): from any other screen
         a context variable can only be written (WRITE, as Navigate does);
-        READ/READ_WRITE links and UpdateContext assignments elsewhere, and any link to
-        a context variable without origin, return 422 CONTEXT_SCREEN_MISMATCH.
-        Enforced by the database at commit (migration context_screen_rule).
+        READ/READ_WRITE links elsewhere, and any link to a context variable without
+        origin, return 422 CONTEXT_SCREEN_MISMATCH. The screen has no id yet, so its
+        `details.screenId` is null and `details.targetScreen` is the name in the body.
+        Enforced by the service before writing, and by the database at commit
+        (migration context_screen_rule) as a backstop.
       requestBody:
         required: true
         content:
@@ -1138,6 +1201,7 @@ paths:
           description: Created
           headers:
             Location: { $ref: '#/components/headers/Location' }
+            ETag: { $ref: '#/components/headers/ETag' }
             X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
@@ -1178,21 +1242,63 @@ paths:
       x-capability: 'Create and edit screens (template)'
       x-roles: [ADMINISTRATOR, DEVELOPER]
       summary: Replace a screen's documentation
-      x-error-codes: [APPLICATION_ARCHIVED, CROSS_APPLICATION, CONTEXT_SCREEN_MISMATCH, SCREEN_IN_REVIEW]
+      x-error-codes: [APPLICATION_ARCHIVED, APP_CONTEXT_PROTECTED, CROSS_APPLICATION, CONTEXT_SCREEN_MISMATCH, SCREEN_IN_REVIEW, DUPLICATE_NAME]
       description: |
-        Roles: Administrator, Developer. Nested arrays are matched by `id`
-        (update / create / delete). Links with `usedIn = origin` are maintained by
-        the variables module and are neither required nor deletable here.
-        Editing the template of an APPROVED screen returns it to IN_PROGRESS; an
-        UNDOCUMENTED screen that receives content becomes DRAFT. Status itself is
-        changed only through `/status` and `/review`.
+        Roles: Administrator, Developer. The body replaces the whole editable
+        representation: an omitted `miroLink`, `onSelect` or `description` is stored
+        as null, and the four lists (`components`, `variableLinks`, `collectionLinks`,
+        `navigations`) are required, so leaving one out is a 400. Only `uses` of a
+        component is optional: leaving it out deletes the uses of that component.
+        Nested items are matched by `id`: items with an id are updated, items without
+        one are created, and existing items left out are deleted, so the audit log
+        keeps one history per row. An `id` that does not belong to this screen (it
+        belongs to another screen or application, does not exist, is the id of a use
+        under another component, or is the id of an `origin` row) is 404 with
+        `details { element, id, field }`, for example `variableLinks[2].id`, where
+        `element` is `component`, `component use`, `variable link`, `collection link`
+        or `navigation`. The same id twice in the body is a 400 with its position.
+        When an update swaps or rotates the targets of two or more uses of a component,
+        or of two or more navigations, the one row that breaks the cycle is deleted and
+        created again with a new id, and the audit log records DELETE and CREATE for it.
+        Links with `usedIn = origin` are maintained by the variables module: they come
+        back with `isOrigin = true`, are never read as editable, and are never updated
+        or deleted here, even when they are missing from the body. `usedIn = origin` in
+        the body is a 400.
+        `If-Match` is always checked when sent, also when the body changes nothing.
+        An update that changes nothing writes nothing: it answers 200 with the same
+        `ETag`, `updatedAt` and status. A change in any nested array also moves the
+        `ETag` of the screen.
+        Resulting status: editing an APPROVED screen in any way (a column or a nested
+        item) returns it to IN_PROGRESS; an UNDOCUMENTED screen in which a template
+        field goes from no content to content (not null and not empty after trimming
+        spaces) becomes DRAFT; in every other case the status does not change. Status
+        itself is changed only through `/status` and `/review`.
+        The errors are checked in this order: 400, 404 (the screen, then the nested
+        ids, then the variables, collections and screens the body points at), 422
+        APPLICATION_ARCHIVED, 412, the 422 business rules and 409 DUPLICATE_NAME. The
+        422 rules, in order: APP_CONTEXT_PROTECTED (renaming the App (OnStart) screen),
+        SCREEN_IN_REVIEW, CROSS_APPLICATION (`variableLinks`, `collectionLinks`,
+        `navigations`, then the uses of each component), CONTEXT_SCREEN_MISMATCH
+        (`variableLinks`). Each one goes from the first item to the last and reports
+        the first item that fails, with its position in `details.field`. In
+        `variableLinks` and `collectionLinks` only the links that are new or modified
+        (the element, the access mode or `usedIn` changes) are judged by
+        CROSS_APPLICATION and CONTEXT_SCREEN_MISMATCH: a link that already existed
+        and did not change is not judged again. Navigations and the uses of components
+        are always judged. A navigation to the screen itself is a 400 with `rule = self`
+        in `navigations[i].targetScreenId`. The name must be free in the application:
+        409 DUPLICATE_NAME with `details.container = application`.
         When the application is archived it is read-only (CP-01): this operation
         returns 422 APPLICATION_ARCHIVED for every role.
         Context variables belong to their origin screen (CP-07): from any other screen
         a context variable can only be written (WRITE, as Navigate does);
-        READ/READ_WRITE links and UpdateContext assignments elsewhere, and any link to
-        a context variable without origin, return 422 CONTEXT_SCREEN_MISMATCH.
-        Enforced by the database at commit (migration context_screen_rule).
+        READ/READ_WRITE links elsewhere, and any link to a context variable without
+        origin, return 422 CONTEXT_SCREEN_MISMATCH. Enforced by the service before
+        writing, and by the database at commit (migration context_screen_rule) as a
+        backstop.
+        The App (OnStart) screen cannot be renamed: 422 APP_CONTEXT_PROTECTED with the
+        message "The App (OnStart) screen can't be renamed."; its template, Miro link,
+        components, links and status are edited normally.
         A screen IN_REVIEW cannot be edited (CP-08): 422 SCREEN_IN_REVIEW. Withdraw it
         from review (PUT /screens/{id}/status, IN_PROGRESS) or wait for the decision.
       parameters:
@@ -1224,12 +1330,16 @@ paths:
       x-capability: 'Create and edit screens (template)'
       x-roles: [ADMINISTRATOR, DEVELOPER]
       summary: Delete a screen
-      x-error-codes: [APPLICATION_ARCHIVED, APP_CONTEXT_PROTECTED]
+      x-error-codes: [APPLICATION_ARCHIVED, APP_CONTEXT_PROTECTED, SCREEN_IN_REVIEW]
       description: |
         Roles: Administrator, Developer. Components, links, comments and local
         ticket records are deleted in cascade (the Jira issues stay in Jira);
         variables created in it keep existing without origin. The App (OnStart)
-        screen cannot be deleted (422 APP_CONTEXT_PROTECTED).
+        screen cannot be deleted (422 APP_CONTEXT_PROTECTED). A screen IN_REVIEW
+        cannot be deleted either (422 SCREEN_IN_REVIEW): the decision on the version
+        sent to review comes first.
+        The errors are checked in this order: 404, 422 APPLICATION_ARCHIVED, 422
+        APP_CONTEXT_PROTECTED, 422 SCREEN_IN_REVIEW. The operation takes no `If-Match`.
         When the application is archived it is read-only (CP-01): this operation
         returns 422 APPLICATION_ARCHIVED for every role.
       responses:
@@ -1253,7 +1363,18 @@ paths:
         UNDOCUMENTED <-> DRAFT <-> IN_PROGRESS -> IN_REVIEW (submit),
         IN_REVIEW -> IN_PROGRESS (withdraw), APPROVED -> IN_PROGRESS (reopen).
         APPROVED is reached only through `POST /screens/{id}/review`.
-        Submitting requires the seven template fields to have content.
+        Submitting requires the seven template fields to have content (not null and
+        not empty after trimming spaces).
+        The errors are checked in this order: 400, 404, 422 APPLICATION_ARCHIVED,
+        412, 422 INVALID_TRANSITION, 422 TEMPLATE_INCOMPLETE. `If-Match` is optional;
+        when sent it is compared with the screen locked inside the transaction.
+        Asking for the status the screen already has is a 422 INVALID_TRANSITION
+        (`details { from, to }`, with `to` equal to `from`). TEMPLATE_INCOMPLETE applies
+        only to IN_PROGRESS -> IN_REVIEW and lists in `details.fields` the template
+        fields without content, in the order of the template (`onStart`,
+        `workingProcess`, `architecture`, `dataModel`, `requirements`, `knownIssues`,
+        `risks`). A change of status through this operation is recorded in the audit
+        history by the database, with no business event.
         When the application is archived it is read-only (CP-01): this operation
         returns 422 APPLICATION_ARCHIVED for every role.
       parameters:
@@ -1271,8 +1392,9 @@ paths:
             example: { status: IN_REVIEW }
       responses:
         '200':
-          description: New status
+          description: New status (the `ETag` is that of the screen with its new status)
           headers:
+            ETag: { $ref: '#/components/headers/ETag' }
             X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
@@ -1299,10 +1421,46 @@ paths:
         1. creates the screen's Epic in Jira if it does not exist yet;
         2. uses the Story given by `storyId`, or creates `newStory` under the Epic;
         3. creates the Subtask under that Story.
-        Each issue is saved locally as soon as Jira confirms it. If Jira fails
-        midway, the response is 502 JIRA_PARTIAL_FAILURE with the issues already
-        created in `details`; retrying with the returned `storyId` never
-        duplicates them.
+        The issues are created in the project of the application
+        (`jiraProjectKey`) or, when it has none, in the department's default
+        project. The summary of the Epic is `<screen> (<application>)`; when it
+        is longer than 255 characters the screen name is cut and ends in "…", and
+        the application stays complete. Creating tickets is allowed on a screen
+        IN_REVIEW. The Epic of a screen is created only once: requests for the
+        same screen wait for each other while the Epic is created (the server
+        assumes a single instance).
+
+        Each issue is saved locally as soon as Jira confirms it. The creation is
+        never retried. If Jira fails after something was created, the response is
+        502 JIRA_PARTIAL_FAILURE with the issues already created in `details`;
+        retrying with the returned `storyId` never duplicates them, and an Epic
+        already saved is never created again. When only the Epic was created,
+        `details` has no `storyId` and the retry reuses that Epic. A Subtask that
+        fails under a Story that already existed created nothing new: it is 502
+        JIRA_UNAVAILABLE, as is a request that fails before creating anything
+        (Jira not configured for creating, circuit breaker open, an error of Jira).
+        If an issue was created in Jira but cannot be saved here, the response is
+        502 JIRA_PARTIAL_FAILURE with `details { created, unsaved, reason }`:
+        `reason` is `SCREEN_DELETED` when the screen was deleted meanwhile (every
+        issue of the request is then in `unsaved`) or `SAVE_FAILED` (only the
+        issue that could not be saved is in `unsaved`). Those issues must be
+        deleted in Jira by hand. If the application is archived after the request
+        started, the issues already created are saved anyway.
+
+        The errors are checked in this order: 401, 403, 400 (shape of the body),
+        400 (summaries), 404 (screen), 422 APPLICATION_ARCHIVED, 422
+        STORY_NOT_IN_SCREEN, 502 JIRA_UNAVAILABLE (nothing was created), the
+        creation, 502 JIRA_PARTIAL_FAILURE (something was created).
+        `STORY_NOT_IN_SCREEN` (`details { storyId }`) covers a `storyId` that does
+        not exist (also one beyond the range of an integer) and one that is not a
+        Story of this screen: a Story of another screen, an Epic or a Subtask.
+        The summaries of the Story and of the Subtask must not be blank
+        (400 `required`, also for text of only spaces or line breaks), must not
+        be empty (400 `minLength`, from the schema), must be a single line (400
+        `singleLine`, message `Summary must be a single line.`) and must not
+        exceed 255 characters, counted as Jira counts them, in UTF-16 units: an
+        emoji counts as 2 (400 `maxLength`). The field is `newStory.summary` or
+        `subtask.summary`.
         When the application is archived it is read-only (CP-01): this operation
         returns 422 APPLICATION_ARCHIVED for every role.
       requestBody:
@@ -1315,7 +1473,19 @@ paths:
               subtask: { summary: Validar el formato del correo antes de guardar, description: Hoy se guarda sin validar (ver Known issues). }
       responses:
         '201':
-          description: Subtask created (and Epic/Story when they were missing)
+          description: |
+            Subtask created (and Epic/Story when they were missing). `epic`, `story`
+            and `subtask` are always present, also the ones that already existed;
+            `created` lists only the levels created by this request, in the order
+            `EPIC`, `STANDARD`, `SUBTASK`. Each issue is saved with provisional
+            values until Jira reports its state: `status` "To Do", `statusCategory`
+            `TO_DO` and `issueType` `Epic`, `Story` or `Subtask`. One final search
+            by key, with a single attempt, replaces them with the state, type and
+            summary Jira reports; if that search fails the response is still 201
+            with the provisional values, and the next refresh of the tickets
+            (`refresh=true`) or the webhook corrects them. Existing issues are returned as stored. The
+            response has no `Location` (the tickets have no URL of their own; the
+            list is `GET /screens/{id}/jira-tickets`) and no `ETag`.
           headers:
             X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
@@ -1338,12 +1508,49 @@ paths:
       summary: Jira tickets of a screen as a tree (FR-12)
       description: |
         Roles: all (Reader: query only). Served from the local copy kept up to
-        date by the webhook. `refresh=true` also queries Jira (JQL search); if
-        Jira is unavailable the local copy is returned with `sync.stale = true`
-        instead of failing (NFR-14).
+        date by the webhook, without calling Jira. The tree is
+        `{ epic, stories[ { …, subtasks[] } ], sync }`; a screen without an Epic
+        has `epic: null` and `stories: []`. Stories, and the Subtasks of each Story,
+        are ordered by `id` ascending (creation order, which does not change when
+        Jira changes a key).
+
+        `refresh=true` first brings the local copy up to date from Jira: one JQL
+        search by key (batches of 100 keys, following the pages, with the read
+        retries of the Jira client). Issues are matched by their Jira id, so an
+        issue that was moved gets its new key (if another local ticket already has
+        that key, the key is left as it is). The refresh updates `status`,
+        `statusCategory`, `summary`, `jiraIssueKey` and `issueType`; it does not
+        update the parent or the level of a ticket and it never deletes a ticket
+        (only the webhook does). A ticket is written only when one of those values
+        changes, so a refresh without changes leaves nothing in the audit history,
+        and a ticket that the webhook updated after the refresh began is not
+        overwritten. Everything is written in one transaction: if any page fails,
+        nothing is written. Any role, Reader included, may ask for `refresh`; its
+        writes are attributed to the reserved integration account, not to the
+        caller. On an archived application nothing is written and Jira is not
+        called.
+
+        If the refresh cannot be completed, for any reason (Jira not configured,
+        circuit breaker open, network error, timeout, 5xx, 429, 401 or 403, an
+        unreadable answer or an archived application), the answer is still 200 with
+        the local copy, never 502 (NFR-14). `sync` says what happened:
+        - `jiraAvailable`: Jira is configured and the circuit breaker is not open,
+          measured after the call.
+        - `stale`: `true` whenever `refresh=true` was asked and was not completed,
+          for any reason; `false` in every other case, also without `refresh` while
+          Jira is down (that is what `jiraAvailable` says).
+        - `lastSyncedAt`: after a completed refresh, the instant just before the
+          first search began; in every other case, the newest `lastSyncedAt` of the
+          local tickets, or `null` when there are none. A screen without tickets
+          completes the refresh without calling Jira.
+
+        The `ETag` is a weak hash of the body and `If-None-Match` is answered with
+        304 when the body is identical, `sync` included. Every completed refresh
+        changes `sync.lastSyncedAt` and, with it, the `ETag`.
       parameters:
         - name: refresh
           in: query
+          description: true = also bring the local copy up to date from Jira before answering. false is the same as omitting it.
           schema: { type: boolean, default: false }
         - $ref: '#/components/parameters/IfNoneMatch'
       responses:
@@ -1471,9 +1678,20 @@ paths:
         RETURN -> IN_PROGRESS and requires a comment. The decision's comment is
         stored as a review comment on the screen, with `reviewDecision` = the
         decision (CP-11): RETURN always creates one; APPROVE creates one only when
-        a non-empty comment is sent. Only this operation writes `reviewDecision`.
+        a comment with content is sent. The comment is stored as it arrives; trimming
+        spaces only decides whether it has content. Only this operation writes
+        `reviewDecision`.
         Each decision is recorded as a business event
-        (DOCUMENTATION_APPROVED / DOCUMENTATION_RETURNED).
+        (DOCUMENTATION_APPROVED / DOCUMENTATION_RETURNED; its payload is described in
+        `AuditEntry`). The new status, the comment and the event are written in one
+        transaction.
+        The operation takes no `If-Match`, so it never answers 412, but the screen is
+        locked while the decision is applied. The errors are checked in this order: 400,
+        404, 422 APPLICATION_ARCHIVED, 422 NOT_IN_REVIEW, 422 COMMENT_REQUIRED.
+        A RETURN without `comment`, with `""` or with `null` is a 400 from the
+        validator, not COMMENT_REQUIRED. A RETURN whose comment has only spaces is a 422
+        COMMENT_REQUIRED, and an APPROVE whose comment has only spaces creates no
+        comment.
         When the application is archived it is read-only (CP-01): this operation
         returns 422 APPLICATION_ARCHIVED for every role.
       requestBody:
@@ -1484,8 +1702,9 @@ paths:
             example: { decision: RETURN, comment: Falta documentar los riesgos de la galería. }
       responses:
         '200':
-          description: Decision applied
+          description: Decision applied (the `ETag` is that of the screen with its new status)
           headers:
+            ETag: { $ref: '#/components/headers/ETag' }
             X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
@@ -1919,27 +2138,62 @@ paths:
       x-rule: JIRA_SIGNATURE
       summary: Receive issue events from Jira Cloud (FR-12, NFR-14)
       description: |
-        Called by Jira, not by users. Registered as an admin webhook on project
-        TECHEA (JQL `project = TECHEA`, events issue updated and issue deleted)
-        with a secret. The server verifies `X-Hub-Signature` (HMAC-SHA256 of the
-        raw body, timing-safe comparison) before parsing; ignores issues not
-        tracked locally; ignores events older than the local copy (`timestamp`
-        earlier than `last_synced_at`), which makes repeated and out-of-order
-        deliveries harmless; and updates status, status category, summary, key,
-        and parent, or deletes the local record when the issue was deleted.
-        `X-Atlassian-Webhook-Identifier` is only logged for tracing.
-        Writes are attributed to the reserved integration account (SDD D-31): the
-        user whose e-mail is `INTEGRATION_USER_EMAIL` (CP-06; READER, INACTIVE).
-        It always answers quickly; heavy work is never done inline.
+        Called by Jira, not by users. Meant to be registered by a Jira
+        administrator, once the API has a public URL, on the department's default
+        project and on any project configured for an application, as an admin
+        webhook with a secret and the events issue updated and issue deleted.
+
+        The rules are applied in this order:
+        1. The raw body is read (up to 1 MB) and `X-Hub-Signature` (HMAC-SHA256 of
+           the raw body, timing-safe comparison) is verified before the body is
+           parsed. A signature that is missing, malformed or wrong is 401
+           INVALID_SIGNATURE, also when the server has no webhook secret
+           configured. A malformed header is a 401, not a 400. The path is
+           handled in this way whatever its capitalization or a trailing "/". A
+           body over 1 MB is 413 PAYLOAD_TOO_LARGE, answered before the signature
+           is checked.
+        2. The body is parsed and validated: it must be a JSON object, with a
+           known `webhookEvent`, an `issue` with an `id` (a string of 1 to 32
+           characters) and, when present, an integer `timestamp`. Otherwise 400
+           VALIDATION_ERROR with `details.fields`. Other properties are ignored,
+           and a `statusCategory.key` or `hierarchyLevel` outside the listed values
+           is not a 400.
+        3. `jira:issue_created` is accepted and ignored (204): the webhook is
+           registered for updates and deletions only.
+        4. An issue that is not tracked locally is ignored (204).
+        5. An event for a ticket of an archived application is ignored (204).
+        6. An event older than the local copy (`timestamp` earlier than the ticket's
+           last sync) is ignored (204), which makes repeated and out-of-order
+           deliveries harmless; an event with an equal `timestamp` is applied. An
+           event without `timestamp` uses the moment it was received.
+        7. Updated: copies only the fields present: `status`, status category,
+           `summary`, key and parent (not `issueType`, which only the refresh
+           corrects). A status category outside the listed values is skipped and the
+           rest is applied. A key that another local ticket already has is not
+           copied. A parent or level that no longer fits the local hierarchy of the
+           screen (a parent not tracked, of another screen or of the wrong level, a
+           different level, or a Story or Subtask without a parent) is not applied:
+           the local structure is kept and the other fields are updated. When no
+           tracked value changes nothing is written (204). Deleted: deletes the
+           local ticket; deleting an Epic or a Story deletes its children too.
+        All of these answer 204 with no body. The writes are attributed to the
+        reserved integration account (SDD D-31): the user whose e-mail is
+        `INTEGRATION_USER_EMAIL` (CP-06; READER, INACTIVE). An unexpected error
+        answers 500 INTERNAL_ERROR, and Jira retries the delivery.
+        `X-Atlassian-Webhook-Identifier` is only logged for tracing, as
+        `deliveryId`, when it has up to 100 letters, digits or `. _ : -`; any
+        other value is not rejected, just not logged.
       security: [{ jiraSignature: [] }]
       parameters:
         - name: X-Hub-Signature
           in: header
           required: true
+          description: A missing or malformed value is a 401 INVALID_SIGNATURE, not a 400.
           schema: { type: string, pattern: '^sha256=[0-9a-f]{64}$' }
         - name: X-Atlassian-Webhook-Identifier
           in: header
           required: false
+          description: Only logged for tracing; a longer or unsafe value is not rejected, only not logged.
           schema: { type: string, maxLength: 100 }
       requestBody:
         required: true
@@ -1958,10 +2212,10 @@ paths:
                   issuetype: { name: Subtask, hierarchyLevel: -1 }
                   parent: { id: '10002', key: TECHEA-2 }
       responses:
-        '204': { description: 'Processed, ignored, or duplicate', headers: { X-Request-Id: { $ref: '#/components/headers/XRequestId' } } }
+        '204': { description: 'Processed or ignored (event created, issue not tracked, application archived, event older than the local copy, or nothing changed). No body.', headers: { X-Request-Id: { $ref: '#/components/headers/XRequestId' } } }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401':
-          description: Missing or invalid signature
+          description: Missing, malformed or invalid signature, or no webhook secret configured on the server
           headers:
             X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
@@ -2053,12 +2307,102 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
-          example:
-            code: VALIDATION_ERROR
-            message: Check the highlighted fields.
-            details:
-              fields:
-                - { field: environments, rule: minItems, message: must NOT have fewer than 1 items }
+          examples:
+            MIN_ITEMS:
+              value:
+                code: VALIDATION_ERROR
+                message: Check the highlighted fields.
+                details:
+                  fields:
+                    - { field: environments, rule: minItems, message: must NOT have fewer than 1 items }
+            SCREEN_REPEATED_COMPONENT_NAME:
+              summary: A repeated value in a screen payload is reported at the position of the repetition (the first one is not)
+              value:
+                code: VALIDATION_ERROR
+                message: Check the highlighted fields.
+                details:
+                  fields:
+                    - { field: 'components[1].name', rule: unique, message: 'This value is repeated. Each one must be unique.' }
+            JIRA_SUMMARY_REQUIRED:
+              summary: POST /screens/{id}/jira-ticket, a summary of only spaces or line breaks
+              value:
+                code: VALIDATION_ERROR
+                message: Check the highlighted fields.
+                details:
+                  fields:
+                    - { field: subtask.summary, rule: required, message: This value is required. }
+            JIRA_SUMMARY_EMPTY:
+              summary: POST /screens/{id}/jira-ticket, an empty summary (rule of the schema)
+              value:
+                code: VALIDATION_ERROR
+                message: Check the highlighted fields.
+                details:
+                  fields:
+                    - { field: newStory.summary, rule: minLength, message: must NOT have fewer than 1 characters }
+                    - { field: subtask.summary, rule: minLength, message: must NOT have fewer than 1 characters }
+            JIRA_SUMMARY_SINGLE_LINE:
+              summary: POST /screens/{id}/jira-ticket, a summary with line breaks
+              value:
+                code: VALIDATION_ERROR
+                message: Check the highlighted fields.
+                details:
+                  fields:
+                    - { field: newStory.summary, rule: singleLine, message: Summary must be a single line. }
+                    - { field: subtask.summary, rule: singleLine, message: Summary must be a single line. }
+            JIRA_SUMMARY_TOO_LONG:
+              summary: POST /screens/{id}/jira-ticket, more than 255 characters as Jira counts them (150 emoji are 300)
+              value:
+                code: VALIDATION_ERROR
+                message: Check the highlighted fields.
+                details:
+                  fields:
+                    - { field: subtask.summary, rule: maxLength, message: must NOT have more than 255 characters }
+            JIRA_WEBHOOK_INVALID_EVENT:
+              summary: POST /integrations/jira/webhook, a signed body with an unknown event
+              value:
+                code: VALIDATION_ERROR
+                message: Check the highlighted fields.
+                details:
+                  fields:
+                    - { field: webhookEvent, rule: enum, message: must be equal to one of the allowed values }
+            SCREEN_REPEATED_USE_TARGET:
+              value:
+                code: VALIDATION_ERROR
+                message: Check the highlighted fields.
+                details:
+                  fields:
+                    - { field: 'components[0].uses[1].targetId', rule: unique, message: 'This value is repeated. Each one must be unique.' }
+            SCREEN_REPEATED_LINK:
+              summary: The same element with the same `usedIn` twice (variableLinks and collectionLinks)
+              value:
+                code: VALIDATION_ERROR
+                message: Check the highlighted fields.
+                details:
+                  fields:
+                    - { field: 'variableLinks[2].usedIn', rule: unique, message: 'This value is repeated. Each one must be unique.' }
+            SCREEN_REPEATED_NAVIGATION:
+              value:
+                code: VALIDATION_ERROR
+                message: Check the highlighted fields.
+                details:
+                  fields:
+                    - { field: 'navigations[1].targetScreenId', rule: unique, message: 'This value is repeated. Each one must be unique.' }
+            SCREEN_NAVIGATES_TO_ITSELF:
+              summary: Only in PUT /screens/{id}, where the screen has an id
+              value:
+                code: VALIDATION_ERROR
+                message: Check the highlighted fields.
+                details:
+                  fields:
+                    - { field: 'navigations[1].targetScreenId', rule: self, message: A screen cannot navigate to itself. }
+            SCREEN_RESERVED_USED_IN:
+              summary: '`usedIn` = origin is reserved for the links the variables module maintains'
+              value:
+                code: VALIDATION_ERROR
+                message: Check the highlighted fields.
+                details:
+                  fields:
+                    - { field: 'variableLinks[1].usedIn', rule: pattern, message: 'must match pattern "^(?!origin$)[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$"' }
     RefreshInvalid:
       description: Missing, expired, revoked or already rotated refresh token, or the account is no longer active
       headers:
@@ -2120,6 +2464,12 @@ components:
             nested:
               summary: A reference inside the request body that does not exist; `field` is its position
               value: { code: NOT_FOUND, message: "This collection field doesn't exist. It may have been deleted.", details: { element: collection field, id: 31, field: 'fields[2].id' } }
+            nested_screen_row:
+              summary: An id of the body that is not an editable row of the screen (another screen's, nonexistent, or an `origin` row); `element` is component, component use, variable link, collection link or navigation
+              value: { code: NOT_FOUND, message: "This variable link doesn't exist. It may have been deleted.", details: { element: variable link, id: 87, field: 'variableLinks[0].id' } }
+            nested_screen_reference:
+              summary: A variable, collection or screen the body points at that does not exist
+              value: { code: NOT_FOUND, message: "This screen doesn't exist. It may have been deleted.", details: { element: screen, id: 912, field: 'navigations[0].targetScreenId' } }
     Conflict:
       description: |
         Uniqueness conflict (duplicate name or e-mail). For `DUPLICATE_NAME`, `details.application`
@@ -2141,6 +2491,8 @@ components:
               value: { code: DUPLICATE_NAME, message: "A context variable named locFiltro already exists in SAR.", details: { field: name, type: context variable, name: locFiltro, application: SAR, container: application } }
             DUPLICATE_NAME_COLLECTION:
               value: { code: DUPLICATE_NAME, message: "A collection named colSolicitudes already exists in SAR.", details: { field: name, type: collection, name: colSolicitudes, application: SAR, container: application } }
+            DUPLICATE_NAME_SCREEN:
+              value: { code: DUPLICATE_NAME, message: "A screen named Solicitudes already exists in SAR.", details: { field: name, type: screen, name: Solicitudes, application: SAR, container: application } }
             DUPLICATE_NAME_APPLICATION:
               value: { code: DUPLICATE_NAME, message: "An application named SAR already exists in Documentación técnica.", details: { field: name, type: application, name: SAR, application: Documentación técnica, container: system } }
             EMAIL_TAKEN:
@@ -2168,6 +2520,9 @@ components:
             CROSS_APPLICATION:
               summary: In a collection, `field` names the item; the database trigger answers without `details`
               value: { code: CROSS_APPLICATION, message: "You can only link elements of the same application.", details: { field: 'variableAssignments[0].screenId' } }
+            CROSS_APPLICATION_SCREEN:
+              summary: In a screen, `field` is `variableLinks[i].variableId`, `collectionLinks[i].collectionId`, `navigations[i].targetScreenId` or `components[i].uses[j].targetId`
+              value: { code: CROSS_APPLICATION, message: "You can only link elements of the same application.", details: { field: 'navigations[0].targetScreenId' } }
             INVALID_ORIGIN_SCREEN:
               value: { code: INVALID_ORIGIN_SCREEN, message: "Context variables are created inside a screen, not in App (OnStart).", details: { field: originScreenId } }
             INVALID_ORIGIN_SCREEN_OTHER_APPLICATION:
@@ -2177,6 +2532,14 @@ components:
               value: { code: CONTEXT_SCREEN_MISMATCH, message: "locFiltro belongs to Solicitudes. From here you can only write it with Navigate.", details: { variableId: 15, variable: locFiltro, originScreenId: 3, screen: Solicitudes, screenId: 4, targetScreen: Detalle, field: 'variableAssignments[0].screenId' } }
             CONTEXT_SCREEN_MISMATCH_NO_ORIGIN:
               value: { code: CONTEXT_SCREEN_MISMATCH, message: "locFiltro has no origin screen. Set its origin screen before linking it.", details: { variableId: 15, variable: locFiltro, originScreenId: null, screenId: 4, targetScreen: Detalle, field: 'variableAssignments[0].screenId' } }
+            CONTEXT_SCREEN_MISMATCH_SCREEN:
+              summary: In a screen, `field` is `variableLinks[i].variableId`; `screenId` is the screen that is being edited
+              value: { code: CONTEXT_SCREEN_MISMATCH, message: "locFiltro belongs to Solicitudes. From here you can only write it with Navigate.", details: { variableId: 15, variable: locFiltro, originScreenId: 3, screen: Solicitudes, screenId: 4, targetScreen: Detalle, field: 'variableLinks[0].variableId' } }
+            CONTEXT_SCREEN_MISMATCH_SCREEN_CREATE:
+              summary: In POST /screens the screen has no id yet, so `screenId` is null and `targetScreen` is the name in the body
+              value: { code: CONTEXT_SCREEN_MISMATCH, message: "locFiltro belongs to Solicitudes. From here you can only write it with Navigate.", details: { variableId: 15, variable: locFiltro, originScreenId: 3, screen: Solicitudes, screenId: null, targetScreen: Detalle, field: 'variableLinks[0].variableId' } }
+            CONTEXT_SCREEN_MISMATCH_SCREEN_CREATE_NO_ORIGIN:
+              value: { code: CONTEXT_SCREEN_MISMATCH, message: "locFiltro has no origin screen. Set its origin screen before linking it.", details: { variableId: 15, variable: locFiltro, originScreenId: null, screenId: null, targetScreen: Detalle, field: 'variableLinks[0].variableId' } }
             LAST_ACTIVE_ADMIN:
               value: { code: LAST_ACTIVE_ADMIN, message: "There must be at least one active administrator. Promote another user first.", details: null }
             CANNOT_DEACTIVATE_SELF:
@@ -2186,19 +2549,24 @@ components:
             APPLICATION_ARCHIVED:
               value: { code: APPLICATION_ARCHIVED, message: "This application is archived, so its documentation can't be changed.", details: { applicationId: 1 } }
             INVALID_TRANSITION:
+              summary: '`to` is the status asked for; it can equal `from`'
               value: { code: INVALID_TRANSITION, message: "This screen changed status meanwhile. Reload to see its current status.", details: { from: DRAFT, to: IN_REVIEW } }
             NOT_IN_REVIEW:
               value: { code: NOT_IN_REVIEW, message: "This screen is no longer in review. Reload to see its status.", details: null }
             SCREEN_IN_REVIEW:
               value: { code: SCREEN_IN_REVIEW, message: "This screen is in review. Edit it after the review, or withdraw it from review.", details: null }
             TEMPLATE_INCOMPLETE:
-              value: { code: TEMPLATE_INCOMPLETE, message: "Complete all seven template fields to submit for review. Missing: risks, knownIssues.", details: { fields: [risks, knownIssues] } }
+              summary: '`fields` follows the order of the template: onStart, workingProcess, architecture, dataModel, requirements, knownIssues, risks'
+              value: { code: TEMPLATE_INCOMPLETE, message: "Complete all seven template fields to submit for review. Missing: knownIssues, risks.", details: { fields: [knownIssues, risks] } }
             COMMENT_REQUIRED:
               value: { code: COMMENT_REQUIRED, message: "Write a comment: it is required to return the documentation.", details: null }
             REVIEW_COMMENT_LOCKED:
               value: { code: REVIEW_COMMENT_LOCKED, message: "Review decisions can't be edited.", details: null }
             APP_CONTEXT_PROTECTED:
               value: { code: APP_CONTEXT_PROTECTED, message: "The App (OnStart) screen can't be deleted.", details: null }
+            APP_CONTEXT_PROTECTED_RENAME:
+              summary: PUT /screens/{id} that changes the name of the App (OnStart) screen
+              value: { code: APP_CONTEXT_PROTECTED, message: "The App (OnStart) screen can't be renamed.", details: null }
             STORY_NOT_IN_SCREEN:
               value: { code: STORY_NOT_IN_SCREEN, message: "That story doesn't belong to this screen. Refresh the list and pick again.", details: { storyId: 7 } }
     RateLimited:
@@ -2231,7 +2599,17 @@ components:
             unavailable:
               value: { code: JIRA_UNAVAILABLE, message: "Jira isn't responding. The to-do wasn't created. Try again in a few minutes.", details: null }
             partial:
+              summary: Epic and Story created, Subtask failed (storyId is the local id of the Story)
               value: { code: JIRA_PARTIAL_FAILURE, message: "The story TECHEA-2 was created, but the to-do wasn't. Try again to add it to that story.", details: { key: TECHEA-2, created: { epic: TECHEA-1, story: TECHEA-2 }, storyId: 2 } }
+            partialEpicOnly:
+              summary: Only the Epic was created (no storyId; the retry reuses the Epic)
+              value: { code: JIRA_PARTIAL_FAILURE, message: "The epic TECHEA-1 was created, but the story and the to-do weren't. Try again to add them to that epic.", details: { key: TECHEA-1, created: { epic: TECHEA-1 } } }
+            unsavedScreenDeleted:
+              summary: The screen was deleted while the tickets were being created
+              value: { code: JIRA_PARTIAL_FAILURE, message: "The screen was deleted while the tickets were being created. These Jira issues weren't saved here: TECHEA-1, TECHEA-2. Delete them in Jira if you don't need them.", details: { created: { epic: TECHEA-1, story: TECHEA-2 }, unsaved: [TECHEA-1, TECHEA-2], reason: SCREEN_DELETED } }
+            unsavedSaveFailed:
+              summary: An issue was created in Jira but could not be saved here
+              value: { code: JIRA_PARTIAL_FAILURE, message: "These Jira issues were created but couldn't be saved here: TECHEA-2. Delete them in Jira, then try again.", details: { created: { epic: TECHEA-1, story: TECHEA-2 }, unsaved: [TECHEA-2], reason: SAVE_FAILED } }
     ReportAccepted:
       description: Report accepted and queued (NFR-12)
       headers:
@@ -2628,7 +3006,10 @@ components:
     # ---------------------------------------------------- shared (M4-M11)
     DocumentationStatus: { type: string, enum: [UNDOCUMENTED, DRAFT, IN_PROGRESS, IN_REVIEW, APPROVED] }
     ElementType: { type: string, enum: [SCREEN, VARIABLE, COLLECTION, COMPONENT] }
-    JiraHierarchyLevel: { type: string, enum: [EPIC, STANDARD, SUBTASK] }
+    JiraHierarchyLevel:
+      type: string
+      enum: [EPIC, STANDARD, SUBTASK]
+      description: 'Level of the issue type in Jira (`hierarchyLevel`): 1 is EPIC, 0 is STANDARD (a Story) and -1 is SUBTASK.'
     JiraStatusCategory: { type: string, enum: [TO_DO, IN_PROGRESS, DONE] }
     ReportFormat: { type: string, enum: [PDF, XLSX] }
     ReportStatus: { type: string, enum: [PENDING, READY, FAILED] }
@@ -2700,6 +3081,14 @@ components:
         description: { type: [string, 'null'], maxLength: 2000 }
     ScreenWrite:
       type: object
+      description: |
+        Editable representation of a screen. The four lists are required (an empty
+        list is valid; leaving one out is a 400); only `uses` of a component is
+        optional. Limits: 300 components, 100 uses per component, 500 variable links,
+        500 collection links and 100 navigations. The links maintained by the variables
+        module (`usedIn` = origin, `isOrigin` = true in the response) are never part of
+        a write: they are not sent, are not deleted when missing, and their id is a 404
+        `variable link`. The `id` of a nested item is used by PUT and ignored by POST.
       required: [name, template, components, variableLinks, collectionLinks, navigations]
       properties:
         name: { type: string, minLength: 1, maxLength: 150 }
@@ -2775,7 +3164,7 @@ components:
                   variable: { $ref: '#/components/schemas/Ref' }
                   accessMode: { $ref: '#/components/schemas/AccessMode' }
                   usedIn: { type: string }
-                  isOrigin: { type: boolean, description: Row maintained by the variables module (read-only here) }
+                  isOrigin: { type: boolean, description: 'Row maintained by the variables module (read-only here): a write never updates or deletes it and does not reconcile it' }
             collectionLinks:
               type: array
               items:
@@ -2807,7 +3196,11 @@ components:
       required: [summary]
       additionalProperties: false
       properties:
-        summary: { type: string, minLength: 1, maxLength: 255 }
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: One line, not blank. The server also rejects (400 `maxLength`) a summary over 255 UTF-16 units, the way Jira counts it (an emoji is 2), and blank text (400 `required`) or line breaks (400 `singleLine`).
         description: { type: [string, 'null'], maxLength: 10000, description: Plain text; converted to Atlassian Document Format by the server }
     JiraTicketCreate:
       type: object
@@ -2832,7 +3225,7 @@ components:
         summary: { type: string }
         status: { type: string }
         statusCategory: { $ref: '#/components/schemas/JiraStatusCategory' }
-        url: { type: string, format: uri, description: Link to the issue in Jira Cloud }
+        url: { type: string, format: uri, description: 'Link to the issue in Jira Cloud: the base URL of Jira followed by /browse/<key>' }
         lastSyncedAt: { type: string, format: date-time }
     JiraTicketCreatedEnvelope:
       type: object
@@ -2845,7 +3238,7 @@ components:
             epic: { $ref: '#/components/schemas/JiraTicket' }
             story: { $ref: '#/components/schemas/JiraTicket' }
             subtask: { $ref: '#/components/schemas/JiraTicket' }
-            created: { type: array, description: Levels created by this request, items: { $ref: '#/components/schemas/JiraHierarchyLevel' } }
+            created: { type: array, description: 'Levels created by this request, in the order EPIC, STANDARD, SUBTASK (only the ones that did not exist)', items: { $ref: '#/components/schemas/JiraHierarchyLevel' } }
     JiraTreeEnvelope:
       type: object
       required: [data]
@@ -2868,21 +3261,21 @@ components:
               type: object
               required: [jiraAvailable, stale, lastSyncedAt]
               properties:
-                jiraAvailable: { type: boolean }
-                stale: { type: boolean, description: true when Jira could not be reached and the local copy is shown (NFR-14) }
-                lastSyncedAt: { type: [string, 'null'], format: date-time }
+                jiraAvailable: { type: boolean, description: Jira is configured and the circuit breaker is not open (measured after the call) }
+                stale: { type: boolean, description: 'true whenever refresh=true was asked and could not be completed, for any reason (NFR-14); false in every other case' }
+                lastSyncedAt: { type: [string, 'null'], format: date-time, description: 'After a completed refresh, the instant before the first search began; otherwise the newest lastSyncedAt of the local tickets, or null when there are none' }
     JiraWebhookEvent:
       type: object
-      description: Subset of the Jira Cloud webhook payload that the server reads; other properties are ignored.
+      description: Subset of the Jira Cloud webhook payload that the server reads; other properties are ignored. The server requires `webhookEvent` and `issue.id`; every other field is optional and only the ones present are copied.
       required: [webhookEvent, issue]
       properties:
-        webhookEvent: { type: string, enum: ['jira:issue_updated', 'jira:issue_deleted', 'jira:issue_created'] }
-        timestamp: { type: integer }
+        webhookEvent: { type: string, enum: ['jira:issue_updated', 'jira:issue_deleted', 'jira:issue_created'], description: 'jira:issue_created is accepted and ignored (204)' }
+        timestamp: { type: integer, minimum: 0, description: Milliseconds. An event without it uses the moment it was received. }
         issue:
           type: object
-          required: [id, key]
+          required: [id]
           properties:
-            id: { type: string }
+            id: { type: string, minLength: 1, maxLength: 32 }
             key: { type: string }
             fields:
               type: object
@@ -3057,7 +3450,12 @@ components:
       properties:
         id: { type: string, description: BIGINT serialized as text }
         action: { type: string, enum: [CREATE, UPDATE, DELETE, EVENT] }
-        eventName: { type: [string, 'null'] }
+        eventName:
+          type: [string, 'null']
+          description: |
+            Name of a business event (`action` = EVENT). The review of a screen records
+            `DOCUMENTATION_APPROVED` or `DOCUMENTATION_RETURNED`, with `entityType` =
+            `screen` and the id of the screen in `entityId`; `newValue` carries its payload.
         entityType: { type: string }
         entityId: { type: string }
         entityLabel: { type: [string, 'null'] }
@@ -3066,7 +3464,13 @@ components:
         dbRole: { type: string, description: Administrator only }
         changedFields: { type: array, items: { type: string } }
         oldValue: { type: [object, 'null'] }
-        newValue: { type: [object, 'null'] }
+        newValue:
+          type: [object, 'null']
+          description: |
+            For an EVENT, the payload of the event. `DOCUMENTATION_APPROVED` and
+            `DOCUMENTATION_RETURNED` use `{ from, to, commentId }`: the status before and
+            after the decision and the id of the review comment, which is null when an
+            APPROVE created no comment.
         createdAt: { type: string, format: date-time }
 
     # ------------------------------------------------------------ reports

@@ -475,16 +475,38 @@ export interface paths {
         /**
          * Document a new screen with the standard template (FR-10, FR-11, FR-13)
          * @description Roles: Administrator, Developer. The caller becomes the author. The screen
-         *     starts as UNDOCUMENTED, or DRAFT when any template field has content.
+         *     starts as UNDOCUMENTED, or DRAFT when any template field has content: a
+         *     field has content when it is not null and is not empty after trimming
+         *     spaces (the text is stored as it arrives).
          *     Components, their uses (component -> variable/collection), variable and
          *     collection links, and navigations are written in the same request (SDD D-29).
+         *     The four lists (`components`, `variableLinks`, `collectionLinks`,
+         *     `navigations`) are required, empty or not; only `uses` of a component is
+         *     optional. The `id` of a nested item is ignored. `usedIn = origin` is reserved
+         *     for the links the variables module maintains and is a 400.
+         *     404 when `applicationId`, or a variable, collection or screen referenced by the
+         *     body, does not exist; `details.field` gives the position of the reference.
+         *     The name must be free in the application: 409 DUPLICATE_NAME with
+         *     `details.container = application`. A repeated component name, a repeated
+         *     target in the uses of a component, a repeated element and `usedIn` pair in the
+         *     links, or a repeated navigation target is a 400 with its position, not
+         *     DUPLICATE_NAME.
+         *     The errors are checked in this order: 400, 404, 422 APPLICATION_ARCHIVED,
+         *     the 422 business rules and 409 DUPLICATE_NAME. The 422 rules are applied one
+         *     rule at a time, each one from the first item to the last, and the first item
+         *     that fails in the first rule that fails is reported with its position in
+         *     `details.field`. Order: CROSS_APPLICATION (`variableLinks`, `collectionLinks`,
+         *     `navigations`, then the uses of each component), then CONTEXT_SCREEN_MISMATCH
+         *     (`variableLinks`). Every link is judged on create.
          *     When the application is archived it is read-only (CP-01): this operation
          *     returns 422 APPLICATION_ARCHIVED for every role.
          *     Context variables belong to their origin screen (CP-07): from any other screen
          *     a context variable can only be written (WRITE, as Navigate does);
-         *     READ/READ_WRITE links and UpdateContext assignments elsewhere, and any link to
-         *     a context variable without origin, return 422 CONTEXT_SCREEN_MISMATCH.
-         *     Enforced by the database at commit (migration context_screen_rule).
+         *     READ/READ_WRITE links elsewhere, and any link to a context variable without
+         *     origin, return 422 CONTEXT_SCREEN_MISMATCH. The screen has no id yet, so its
+         *     `details.screenId` is null and `details.targetScreen` is the name in the body.
+         *     Enforced by the service before writing, and by the database at commit
+         *     (migration context_screen_rule) as a backstop.
          */
         post: operations["createScreen"];
         delete?: never;
@@ -509,19 +531,61 @@ export interface paths {
         get: operations["getScreen"];
         /**
          * Replace a screen's documentation
-         * @description Roles: Administrator, Developer. Nested arrays are matched by `id`
-         *     (update / create / delete). Links with `usedIn = origin` are maintained by
-         *     the variables module and are neither required nor deletable here.
-         *     Editing the template of an APPROVED screen returns it to IN_PROGRESS; an
-         *     UNDOCUMENTED screen that receives content becomes DRAFT. Status itself is
-         *     changed only through `/status` and `/review`.
+         * @description Roles: Administrator, Developer. The body replaces the whole editable
+         *     representation: an omitted `miroLink`, `onSelect` or `description` is stored
+         *     as null, and the four lists (`components`, `variableLinks`, `collectionLinks`,
+         *     `navigations`) are required, so leaving one out is a 400. Only `uses` of a
+         *     component is optional: leaving it out deletes the uses of that component.
+         *     Nested items are matched by `id`: items with an id are updated, items without
+         *     one are created, and existing items left out are deleted, so the audit log
+         *     keeps one history per row. An `id` that does not belong to this screen (it
+         *     belongs to another screen or application, does not exist, is the id of a use
+         *     under another component, or is the id of an `origin` row) is 404 with
+         *     `details { element, id, field }`, for example `variableLinks[2].id`, where
+         *     `element` is `component`, `component use`, `variable link`, `collection link`
+         *     or `navigation`. The same id twice in the body is a 400 with its position.
+         *     When an update swaps or rotates the targets of two or more uses of a component,
+         *     or of two or more navigations, the one row that breaks the cycle is deleted and
+         *     created again with a new id, and the audit log records DELETE and CREATE for it.
+         *     Links with `usedIn = origin` are maintained by the variables module: they come
+         *     back with `isOrigin = true`, are never read as editable, and are never updated
+         *     or deleted here, even when they are missing from the body. `usedIn = origin` in
+         *     the body is a 400.
+         *     `If-Match` is always checked when sent, also when the body changes nothing.
+         *     An update that changes nothing writes nothing: it answers 200 with the same
+         *     `ETag`, `updatedAt` and status. A change in any nested array also moves the
+         *     `ETag` of the screen.
+         *     Resulting status: editing an APPROVED screen in any way (a column or a nested
+         *     item) returns it to IN_PROGRESS; an UNDOCUMENTED screen in which a template
+         *     field goes from no content to content (not null and not empty after trimming
+         *     spaces) becomes DRAFT; in every other case the status does not change. Status
+         *     itself is changed only through `/status` and `/review`.
+         *     The errors are checked in this order: 400, 404 (the screen, then the nested
+         *     ids, then the variables, collections and screens the body points at), 422
+         *     APPLICATION_ARCHIVED, 412, the 422 business rules and 409 DUPLICATE_NAME. The
+         *     422 rules, in order: APP_CONTEXT_PROTECTED (renaming the App (OnStart) screen),
+         *     SCREEN_IN_REVIEW, CROSS_APPLICATION (`variableLinks`, `collectionLinks`,
+         *     `navigations`, then the uses of each component), CONTEXT_SCREEN_MISMATCH
+         *     (`variableLinks`). Each one goes from the first item to the last and reports
+         *     the first item that fails, with its position in `details.field`. In
+         *     `variableLinks` and `collectionLinks` only the links that are new or modified
+         *     (the element, the access mode or `usedIn` changes) are judged by
+         *     CROSS_APPLICATION and CONTEXT_SCREEN_MISMATCH: a link that already existed
+         *     and did not change is not judged again. Navigations and the uses of components
+         *     are always judged. A navigation to the screen itself is a 400 with `rule = self`
+         *     in `navigations[i].targetScreenId`. The name must be free in the application:
+         *     409 DUPLICATE_NAME with `details.container = application`.
          *     When the application is archived it is read-only (CP-01): this operation
          *     returns 422 APPLICATION_ARCHIVED for every role.
          *     Context variables belong to their origin screen (CP-07): from any other screen
          *     a context variable can only be written (WRITE, as Navigate does);
-         *     READ/READ_WRITE links and UpdateContext assignments elsewhere, and any link to
-         *     a context variable without origin, return 422 CONTEXT_SCREEN_MISMATCH.
-         *     Enforced by the database at commit (migration context_screen_rule).
+         *     READ/READ_WRITE links elsewhere, and any link to a context variable without
+         *     origin, return 422 CONTEXT_SCREEN_MISMATCH. Enforced by the service before
+         *     writing, and by the database at commit (migration context_screen_rule) as a
+         *     backstop.
+         *     The App (OnStart) screen cannot be renamed: 422 APP_CONTEXT_PROTECTED with the
+         *     message "The App (OnStart) screen can't be renamed."; its template, Miro link,
+         *     components, links and status are edited normally.
          *     A screen IN_REVIEW cannot be edited (CP-08): 422 SCREEN_IN_REVIEW. Withdraw it
          *     from review (PUT /screens/{id}/status, IN_PROGRESS) or wait for the decision.
          */
@@ -532,7 +596,11 @@ export interface paths {
          * @description Roles: Administrator, Developer. Components, links, comments and local
          *     ticket records are deleted in cascade (the Jira issues stay in Jira);
          *     variables created in it keep existing without origin. The App (OnStart)
-         *     screen cannot be deleted (422 APP_CONTEXT_PROTECTED).
+         *     screen cannot be deleted (422 APP_CONTEXT_PROTECTED). A screen IN_REVIEW
+         *     cannot be deleted either (422 SCREEN_IN_REVIEW): the decision on the version
+         *     sent to review comes first.
+         *     The errors are checked in this order: 404, 422 APPLICATION_ARCHIVED, 422
+         *     APP_CONTEXT_PROTECTED, 422 SCREEN_IN_REVIEW. The operation takes no `If-Match`.
          *     When the application is archived it is read-only (CP-01): this operation
          *     returns 422 APPLICATION_ARCHIVED for every role.
          */
@@ -558,7 +626,18 @@ export interface paths {
          *     UNDOCUMENTED <-> DRAFT <-> IN_PROGRESS -> IN_REVIEW (submit),
          *     IN_REVIEW -> IN_PROGRESS (withdraw), APPROVED -> IN_PROGRESS (reopen).
          *     APPROVED is reached only through `POST /screens/{id}/review`.
-         *     Submitting requires the seven template fields to have content.
+         *     Submitting requires the seven template fields to have content (not null and
+         *     not empty after trimming spaces).
+         *     The errors are checked in this order: 400, 404, 422 APPLICATION_ARCHIVED,
+         *     412, 422 INVALID_TRANSITION, 422 TEMPLATE_INCOMPLETE. `If-Match` is optional;
+         *     when sent it is compared with the screen locked inside the transaction.
+         *     Asking for the status the screen already has is a 422 INVALID_TRANSITION
+         *     (`details { from, to }`, with `to` equal to `from`). TEMPLATE_INCOMPLETE applies
+         *     only to IN_PROGRESS -> IN_REVIEW and lists in `details.fields` the template
+         *     fields without content, in the order of the template (`onStart`,
+         *     `workingProcess`, `architecture`, `dataModel`, `requirements`, `knownIssues`,
+         *     `risks`). A change of status through this operation is recorded in the audit
+         *     history by the database, with no business event.
          *     When the application is archived it is read-only (CP-01): this operation
          *     returns 422 APPLICATION_ARCHIVED for every role.
          */
@@ -588,10 +667,46 @@ export interface paths {
          *     1. creates the screen's Epic in Jira if it does not exist yet;
          *     2. uses the Story given by `storyId`, or creates `newStory` under the Epic;
          *     3. creates the Subtask under that Story.
-         *     Each issue is saved locally as soon as Jira confirms it. If Jira fails
-         *     midway, the response is 502 JIRA_PARTIAL_FAILURE with the issues already
-         *     created in `details`; retrying with the returned `storyId` never
-         *     duplicates them.
+         *     The issues are created in the project of the application
+         *     (`jiraProjectKey`) or, when it has none, in the department's default
+         *     project. The summary of the Epic is `<screen> (<application>)`; when it
+         *     is longer than 255 characters the screen name is cut and ends in "…", and
+         *     the application stays complete. Creating tickets is allowed on a screen
+         *     IN_REVIEW. The Epic of a screen is created only once: requests for the
+         *     same screen wait for each other while the Epic is created (the server
+         *     assumes a single instance).
+         *
+         *     Each issue is saved locally as soon as Jira confirms it. The creation is
+         *     never retried. If Jira fails after something was created, the response is
+         *     502 JIRA_PARTIAL_FAILURE with the issues already created in `details`;
+         *     retrying with the returned `storyId` never duplicates them, and an Epic
+         *     already saved is never created again. When only the Epic was created,
+         *     `details` has no `storyId` and the retry reuses that Epic. A Subtask that
+         *     fails under a Story that already existed created nothing new: it is 502
+         *     JIRA_UNAVAILABLE, as is a request that fails before creating anything
+         *     (Jira not configured for creating, circuit breaker open, an error of Jira).
+         *     If an issue was created in Jira but cannot be saved here, the response is
+         *     502 JIRA_PARTIAL_FAILURE with `details { created, unsaved, reason }`:
+         *     `reason` is `SCREEN_DELETED` when the screen was deleted meanwhile (every
+         *     issue of the request is then in `unsaved`) or `SAVE_FAILED` (only the
+         *     issue that could not be saved is in `unsaved`). Those issues must be
+         *     deleted in Jira by hand. If the application is archived after the request
+         *     started, the issues already created are saved anyway.
+         *
+         *     The errors are checked in this order: 401, 403, 400 (shape of the body),
+         *     400 (summaries), 404 (screen), 422 APPLICATION_ARCHIVED, 422
+         *     STORY_NOT_IN_SCREEN, 502 JIRA_UNAVAILABLE (nothing was created), the
+         *     creation, 502 JIRA_PARTIAL_FAILURE (something was created).
+         *     `STORY_NOT_IN_SCREEN` (`details { storyId }`) covers a `storyId` that does
+         *     not exist (also one beyond the range of an integer) and one that is not a
+         *     Story of this screen: a Story of another screen, an Epic or a Subtask.
+         *     The summaries of the Story and of the Subtask must not be blank
+         *     (400 `required`, also for text of only spaces or line breaks), must not
+         *     be empty (400 `minLength`, from the schema), must be a single line (400
+         *     `singleLine`, message `Summary must be a single line.`) and must not
+         *     exceed 255 characters, counted as Jira counts them, in UTF-16 units: an
+         *     emoji counts as 2 (400 `maxLength`). The field is `newStory.summary` or
+         *     `subtask.summary`.
          *     When the application is archived it is read-only (CP-01): this operation
          *     returns 422 APPLICATION_ARCHIVED for every role.
          */
@@ -614,9 +729,45 @@ export interface paths {
         /**
          * Jira tickets of a screen as a tree (FR-12)
          * @description Roles: all (Reader: query only). Served from the local copy kept up to
-         *     date by the webhook. `refresh=true` also queries Jira (JQL search); if
-         *     Jira is unavailable the local copy is returned with `sync.stale = true`
-         *     instead of failing (NFR-14).
+         *     date by the webhook, without calling Jira. The tree is
+         *     `{ epic, stories[ { …, subtasks[] } ], sync }`; a screen without an Epic
+         *     has `epic: null` and `stories: []`. Stories, and the Subtasks of each Story,
+         *     are ordered by `id` ascending (creation order, which does not change when
+         *     Jira changes a key).
+         *
+         *     `refresh=true` first brings the local copy up to date from Jira: one JQL
+         *     search by key (batches of 100 keys, following the pages, with the read
+         *     retries of the Jira client). Issues are matched by their Jira id, so an
+         *     issue that was moved gets its new key (if another local ticket already has
+         *     that key, the key is left as it is). The refresh updates `status`,
+         *     `statusCategory`, `summary`, `jiraIssueKey` and `issueType`; it does not
+         *     update the parent or the level of a ticket and it never deletes a ticket
+         *     (only the webhook does). A ticket is written only when one of those values
+         *     changes, so a refresh without changes leaves nothing in the audit history,
+         *     and a ticket that the webhook updated after the refresh began is not
+         *     overwritten. Everything is written in one transaction: if any page fails,
+         *     nothing is written. Any role, Reader included, may ask for `refresh`; its
+         *     writes are attributed to the reserved integration account, not to the
+         *     caller. On an archived application nothing is written and Jira is not
+         *     called.
+         *
+         *     If the refresh cannot be completed, for any reason (Jira not configured,
+         *     circuit breaker open, network error, timeout, 5xx, 429, 401 or 403, an
+         *     unreadable answer or an archived application), the answer is still 200 with
+         *     the local copy, never 502 (NFR-14). `sync` says what happened:
+         *     - `jiraAvailable`: Jira is configured and the circuit breaker is not open,
+         *       measured after the call.
+         *     - `stale`: `true` whenever `refresh=true` was asked and was not completed,
+         *       for any reason; `false` in every other case, also without `refresh` while
+         *       Jira is down (that is what `jiraAvailable` says).
+         *     - `lastSyncedAt`: after a completed refresh, the instant just before the
+         *       first search began; in every other case, the newest `lastSyncedAt` of the
+         *       local tickets, or `null` when there are none. A screen without tickets
+         *       completes the refresh without calling Jira.
+         *
+         *     The `ETag` is a weak hash of the body and `If-None-Match` is answered with
+         *     304 when the body is identical, `sync` included. Every completed refresh
+         *     changes `sync.lastSyncedAt` and, with it, the `ETag`.
          */
         get: operations["listJiraTickets"];
         put?: never;
@@ -697,9 +848,20 @@ export interface paths {
          *     RETURN -> IN_PROGRESS and requires a comment. The decision's comment is
          *     stored as a review comment on the screen, with `reviewDecision` = the
          *     decision (CP-11): RETURN always creates one; APPROVE creates one only when
-         *     a non-empty comment is sent. Only this operation writes `reviewDecision`.
+         *     a comment with content is sent. The comment is stored as it arrives; trimming
+         *     spaces only decides whether it has content. Only this operation writes
+         *     `reviewDecision`.
          *     Each decision is recorded as a business event
-         *     (DOCUMENTATION_APPROVED / DOCUMENTATION_RETURNED).
+         *     (DOCUMENTATION_APPROVED / DOCUMENTATION_RETURNED; its payload is described in
+         *     `AuditEntry`). The new status, the comment and the event are written in one
+         *     transaction.
+         *     The operation takes no `If-Match`, so it never answers 412, but the screen is
+         *     locked while the decision is applied. The errors are checked in this order: 400,
+         *     404, 422 APPLICATION_ARCHIVED, 422 NOT_IN_REVIEW, 422 COMMENT_REQUIRED.
+         *     A RETURN without `comment`, with `""` or with `null` is a 400 from the
+         *     validator, not COMMENT_REQUIRED. A RETURN whose comment has only spaces is a 422
+         *     COMMENT_REQUIRED, and an APPROVE whose comment has only spaces creates no
+         *     comment.
          *     When the application is archived it is read-only (CP-01): this operation
          *     returns 422 APPLICATION_ARCHIVED for every role.
          */
@@ -985,18 +1147,51 @@ export interface paths {
         put?: never;
         /**
          * Receive issue events from Jira Cloud (FR-12, NFR-14)
-         * @description Called by Jira, not by users. Registered as an admin webhook on project
-         *     TECHEA (JQL `project = TECHEA`, events issue updated and issue deleted)
-         *     with a secret. The server verifies `X-Hub-Signature` (HMAC-SHA256 of the
-         *     raw body, timing-safe comparison) before parsing; ignores issues not
-         *     tracked locally; ignores events older than the local copy (`timestamp`
-         *     earlier than `last_synced_at`), which makes repeated and out-of-order
-         *     deliveries harmless; and updates status, status category, summary, key,
-         *     and parent, or deletes the local record when the issue was deleted.
-         *     `X-Atlassian-Webhook-Identifier` is only logged for tracing.
-         *     Writes are attributed to the reserved integration account (SDD D-31): the
-         *     user whose e-mail is `INTEGRATION_USER_EMAIL` (CP-06; READER, INACTIVE).
-         *     It always answers quickly; heavy work is never done inline.
+         * @description Called by Jira, not by users. Meant to be registered by a Jira
+         *     administrator, once the API has a public URL, on the department's default
+         *     project and on any project configured for an application, as an admin
+         *     webhook with a secret and the events issue updated and issue deleted.
+         *
+         *     The rules are applied in this order:
+         *     1. The raw body is read (up to 1 MB) and `X-Hub-Signature` (HMAC-SHA256 of
+         *        the raw body, timing-safe comparison) is verified before the body is
+         *        parsed. A signature that is missing, malformed or wrong is 401
+         *        INVALID_SIGNATURE, also when the server has no webhook secret
+         *        configured. A malformed header is a 401, not a 400. The path is
+         *        handled in this way whatever its capitalization or a trailing "/". A
+         *        body over 1 MB is 413 PAYLOAD_TOO_LARGE, answered before the signature
+         *        is checked.
+         *     2. The body is parsed and validated: it must be a JSON object, with a
+         *        known `webhookEvent`, an `issue` with an `id` (a string of 1 to 32
+         *        characters) and, when present, an integer `timestamp`. Otherwise 400
+         *        VALIDATION_ERROR with `details.fields`. Other properties are ignored,
+         *        and a `statusCategory.key` or `hierarchyLevel` outside the listed values
+         *        is not a 400.
+         *     3. `jira:issue_created` is accepted and ignored (204): the webhook is
+         *        registered for updates and deletions only.
+         *     4. An issue that is not tracked locally is ignored (204).
+         *     5. An event for a ticket of an archived application is ignored (204).
+         *     6. An event older than the local copy (`timestamp` earlier than the ticket's
+         *        last sync) is ignored (204), which makes repeated and out-of-order
+         *        deliveries harmless; an event with an equal `timestamp` is applied. An
+         *        event without `timestamp` uses the moment it was received.
+         *     7. Updated: copies only the fields present: `status`, status category,
+         *        `summary`, key and parent (not `issueType`, which only the refresh
+         *        corrects). A status category outside the listed values is skipped and the
+         *        rest is applied. A key that another local ticket already has is not
+         *        copied. A parent or level that no longer fits the local hierarchy of the
+         *        screen (a parent not tracked, of another screen or of the wrong level, a
+         *        different level, or a Story or Subtask without a parent) is not applied:
+         *        the local structure is kept and the other fields are updated. When no
+         *        tracked value changes nothing is written (204). Deleted: deletes the
+         *        local ticket; deleting an Epic or a Story deletes its children too.
+         *     All of these answer 204 with no body. The writes are attributed to the
+         *     reserved integration account (SDD D-31): the user whose e-mail is
+         *     `INTEGRATION_USER_EMAIL` (CP-06; READER, INACTIVE). An unexpected error
+         *     answers 500 INTERNAL_ERROR, and Jira retries the delivery.
+         *     `X-Atlassian-Webhook-Identifier` is only logged for tracing, as
+         *     `deliveryId`, when it has up to 100 letters, digits or `. _ : -`; any
+         *     other value is not rejected, just not logged.
          */
         post: operations["receiveJiraWebhook"];
         delete?: never;
@@ -1274,7 +1469,10 @@ export interface components {
         DocumentationStatus: "UNDOCUMENTED" | "DRAFT" | "IN_PROGRESS" | "IN_REVIEW" | "APPROVED";
         /** @enum {string} */
         ElementType: "SCREEN" | "VARIABLE" | "COLLECTION" | "COMPONENT";
-        /** @enum {string} */
+        /**
+         * @description Level of the issue type in Jira (`hierarchyLevel`): 1 is EPIC, 0 is STANDARD (a Story) and -1 is SUBTASK.
+         * @enum {string}
+         */
         JiraHierarchyLevel: "EPIC" | "STANDARD" | "SUBTASK";
         /** @enum {string} */
         JiraStatusCategory: "TO_DO" | "IN_PROGRESS" | "DONE";
@@ -1331,6 +1529,15 @@ export interface components {
             targetScreenId: number;
             description?: string | null;
         };
+        /**
+         * @description Editable representation of a screen. The four lists are required (an empty
+         *     list is valid; leaving one out is a 400); only `uses` of a component is
+         *     optional. Limits: 300 components, 100 uses per component, 500 variable links,
+         *     500 collection links and 100 navigations. The links maintained by the variables
+         *     module (`usedIn` = origin, `isOrigin` = true in the response) are never part of
+         *     a write: they are not sent, are not deleted when missing, and their id is a 404
+         *     `variable link`. The `id` of a nested item is used by PUT and ignored by POST.
+         */
         ScreenWrite: {
             name: string;
             /** @description FR-13 */
@@ -1375,7 +1582,7 @@ export interface components {
                 variable: components["schemas"]["Ref"];
                 accessMode: components["schemas"]["AccessMode"];
                 usedIn: string;
-                /** @description Row maintained by the variables module (read-only here) */
+                /** @description Row maintained by the variables module (read-only here): a write never updates or deletes it and does not reconcile it */
                 isOrigin: boolean;
             }[];
             collectionLinks: {
@@ -1394,6 +1601,7 @@ export interface components {
             data: components["schemas"]["Screen"];
         };
         JiraIssueText: {
+            /** @description One line, not blank. The server also rejects (400 `maxLength`) a summary over 255 UTF-16 units, the way Jira counts it (an emoji is 2), and blank text (400 `required`) or line breaks (400 `singleLine`). */
             summary: string;
             /** @description Plain text; converted to Atlassian Document Format by the server */
             description?: string | null;
@@ -1416,7 +1624,7 @@ export interface components {
             statusCategory: components["schemas"]["JiraStatusCategory"];
             /**
              * Format: uri
-             * @description Link to the issue in Jira Cloud
+             * @description Link to the issue in Jira Cloud: the base URL of Jira followed by /browse/<key>
              */
             url: string;
             /** Format: date-time */
@@ -1427,7 +1635,7 @@ export interface components {
                 epic: components["schemas"]["JiraTicket"];
                 story: components["schemas"]["JiraTicket"];
                 subtask: components["schemas"]["JiraTicket"];
-                /** @description Levels created by this request */
+                /** @description Levels created by this request, in the order EPIC, STANDARD, SUBTASK (only the ones that did not exist) */
                 created: components["schemas"]["JiraHierarchyLevel"][];
             };
         };
@@ -1438,22 +1646,30 @@ export interface components {
                     subtasks: components["schemas"]["JiraTicket"][];
                 })[];
                 sync: {
+                    /** @description Jira is configured and the circuit breaker is not open (measured after the call) */
                     jiraAvailable: boolean;
-                    /** @description true when Jira could not be reached and the local copy is shown (NFR-14) */
+                    /** @description true whenever refresh=true was asked and could not be completed, for any reason (NFR-14); false in every other case */
                     stale: boolean;
-                    /** Format: date-time */
+                    /**
+                     * Format: date-time
+                     * @description After a completed refresh, the instant before the first search began; otherwise the newest lastSyncedAt of the local tickets, or null when there are none
+                     */
                     lastSyncedAt: string | null;
                 };
             };
         };
-        /** @description Subset of the Jira Cloud webhook payload that the server reads; other properties are ignored. */
+        /** @description Subset of the Jira Cloud webhook payload that the server reads; other properties are ignored. The server requires `webhookEvent` and `issue.id`; every other field is optional and only the ones present are copied. */
         JiraWebhookEvent: {
-            /** @enum {string} */
+            /**
+             * @description jira:issue_created is accepted and ignored (204)
+             * @enum {string}
+             */
             webhookEvent: "jira:issue_updated" | "jira:issue_deleted" | "jira:issue_created";
+            /** @description Milliseconds. An event without it uses the moment it was received. */
             timestamp?: number;
             issue: {
                 id: string;
-                key: string;
+                key?: string;
                 fields?: {
                     summary?: string;
                     status?: {
@@ -1603,6 +1819,11 @@ export interface components {
             id: string;
             /** @enum {string} */
             action: "CREATE" | "UPDATE" | "DELETE" | "EVENT";
+            /**
+             * @description Name of a business event (`action` = EVENT). The review of a screen records
+             *     `DOCUMENTATION_APPROVED` or `DOCUMENTATION_RETURNED`, with `entityType` =
+             *     `screen` and the id of the screen in `entityId`; `newValue` carries its payload.
+             */
             eventName?: string | null;
             entityType: string;
             entityId: string;
@@ -1614,6 +1835,12 @@ export interface components {
             dbRole?: string;
             changedFields: string[];
             oldValue?: Record<string, never> | null;
+            /**
+             * @description For an EVENT, the payload of the event. `DOCUMENTATION_APPROVED` and
+             *     `DOCUMENTATION_RETURNED` use `{ from, to, commentId }`: the status before and
+             *     after the decision and the id of the review comment, which is null when an
+             *     APPROVE created no comment.
+             */
             newValue?: Record<string, never> | null;
             /** Format: date-time */
             createdAt: string;
@@ -1714,21 +1941,6 @@ export interface components {
                 [name: string]: unknown;
             };
             content: {
-                /**
-                 * @example {
-                 *       "code": "VALIDATION_ERROR",
-                 *       "message": "Check the highlighted fields.",
-                 *       "details": {
-                 *         "fields": [
-                 *           {
-                 *             "field": "environments",
-                 *             "rule": "minItems",
-                 *             "message": "must NOT have fewer than 1 items"
-                 *           }
-                 *         ]
-                 *       }
-                 *     }
-                 */
                 "application/json": components["schemas"]["Error"];
             };
         };
@@ -3005,6 +3217,7 @@ export interface operations {
             201: {
                 headers: {
                     Location: components["headers"]["Location"];
+                    ETag: components["headers"]["ETag"];
                     "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
@@ -3139,9 +3352,10 @@ export interface operations {
             };
         };
         responses: {
-            /** @description New status */
+            /** @description New status (the `ETag` is that of the screen with its new status) */
             200: {
                 headers: {
+                    ETag: components["headers"]["ETag"];
                     "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
@@ -3183,7 +3397,20 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Subtask created (and Epic/Story when they were missing) */
+            /**
+             * @description Subtask created (and Epic/Story when they were missing). `epic`, `story`
+             *     and `subtask` are always present, also the ones that already existed;
+             *     `created` lists only the levels created by this request, in the order
+             *     `EPIC`, `STANDARD`, `SUBTASK`. Each issue is saved with provisional
+             *     values until Jira reports its state: `status` "To Do", `statusCategory`
+             *     `TO_DO` and `issueType` `Epic`, `Story` or `Subtask`. One final search
+             *     by key, with a single attempt, replaces them with the state, type and
+             *     summary Jira reports; if that search fails the response is still 201
+             *     with the provisional values, and the next refresh of the tickets
+             *     (`refresh=true`) or the webhook corrects them. Existing issues are returned as stored. The
+             *     response has no `Location` (the tickets have no URL of their own; the
+             *     list is `GET /screens/{id}/jira-tickets`) and no `ETag`.
+             */
             201: {
                 headers: {
                     "X-Request-Id": components["headers"]["XRequestId"];
@@ -3204,6 +3431,7 @@ export interface operations {
     listJiraTickets: {
         parameters: {
             query?: {
+                /** @description true = also bring the local copy up to date from Jira before answering. false is the same as omitting it. */
                 refresh?: boolean;
             };
             header?: {
@@ -3358,9 +3586,10 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Decision applied */
+            /** @description Decision applied (the `ETag` is that of the screen with its new status) */
             200: {
                 headers: {
+                    ETag: components["headers"]["ETag"];
                     "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
@@ -3805,7 +4034,9 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description A missing or malformed value is a 401 INVALID_SIGNATURE, not a 400. */
                 "X-Hub-Signature": string;
+                /** @description Only logged for tracing; a longer or unsafe value is not rejected, only not logged. */
                 "X-Atlassian-Webhook-Identifier"?: string;
             };
             path?: never;
@@ -3844,7 +4075,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Processed, ignored, or duplicate */
+            /** @description Processed or ignored (event created, issue not tracked, application archived, event older than the local copy, or nothing changed). No body. */
             204: {
                 headers: {
                     "X-Request-Id": components["headers"]["XRequestId"];
@@ -3853,7 +4084,7 @@ export interface operations {
                 content?: never;
             };
             400: components["responses"]["ValidationError"];
-            /** @description Missing or invalid signature */
+            /** @description Missing, malformed or invalid signature, or no webhook secret configured on the server */
             401: {
                 headers: {
                     "X-Request-Id": components["headers"]["XRequestId"];
