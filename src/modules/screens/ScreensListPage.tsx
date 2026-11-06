@@ -6,7 +6,9 @@
 // server error state with a retry. The page subtitle says why writing is disabled when the application is
 // archived (S-09b): the counts stay and the reason follows them. The counts line is never blank: a skeleton while
 // they load, "Couldn't load the counts." with a retry if they fail.
-import { ListFilter, Monitor, X } from 'lucide-react';
+// "New screen" (Administrator and Developer) opens the creation modal (?new=1); it is disabled with the reason
+// when the application is archived or the browser is offline (useWriteBlock).
+import { ListFilter, Monitor, Plus, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 
@@ -25,10 +27,11 @@ import {
   Skeleton,
   useDelayedLoading,
 } from '../../components/ui';
-import { ARCHIVED_WRITE_REASON } from '../../hooks/useWriteBlock';
+import { ARCHIVED_WRITE_REASON, useWriteBlock } from '../../hooks/useWriteBlock';
 import { useCurrentUser } from '../../session/useCurrentUser';
 import { countText } from '../variables/variableLabels';
 
+import { CreateScreenModal } from './CreateScreenModal';
 import { ScreenFilters } from './ScreenFilters';
 import { ScreenTable } from './ScreenTable';
 import type { ScreenSummary } from './screenTypes';
@@ -52,6 +55,19 @@ export function ScreensListPage() {
 function ScreensList() {
   const client = useApi();
   const user = useCurrentUser();
+  const canWrite = user !== null && user.role !== 'READER';
+  const { blocked, reason } = useWriteBlock();
+  const [search, setSearch] = useSearchParams();
+  // The creation modal is part of the URL (?new=1), so it can be linked and the back button closes it.
+  const creating = canWrite && search.get('new') === '1';
+  const setCreating = (open: boolean) => {
+    setSearch((current) => {
+      const next = new URLSearchParams(current);
+      if (open) next.set('new', '1');
+      else next.delete('new');
+      return next;
+    });
+  };
   const { currentApplication, currentApplicationId } = useApplication();
   const { params, setParams, clearFilters, hasFilters } = useScreenListParams();
   const archived = currentApplication?.status === 'ARCHIVED';
@@ -108,6 +124,21 @@ function ScreensList() {
             )}
             {archived && <span> · {ARCHIVED_WRITE_REASON}</span>}
           </>
+        }
+        actions={
+          canWrite && (
+            <Button
+              variant="primary"
+              disabled={blocked}
+              title={reason ?? undefined}
+              iconLeft={<Plus aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+              onClick={() => {
+                setCreating(true);
+              }}
+            >
+              New screen
+            </Button>
+          )
         }
       />
 
@@ -190,6 +221,14 @@ function ScreensList() {
           </>
         )}
       </SectionCard>
+
+      {creating && (
+        <CreateScreenModal
+          onClose={() => {
+            setCreating(false);
+          }}
+        />
+      )}
     </>
   );
 }
