@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router';
 
 import { isApiError } from '../../api/ApiError';
 import { useApi } from '../../api/useApi';
+import { notifyScreensChanged } from '../../application/useScreenCount';
 import { useApplication } from '../../application/useApplication';
 import {
   Banner,
@@ -85,6 +86,7 @@ export function CreateScreenModal({ onClose }: CreateScreenModalProps) {
       });
       const { id, name } = created.data;
       toast.show({ message: `${name} created.` });
+      notifyScreensChanged();
       void navigate(`/screens/${id}`);
     } catch (thrown) {
       if (isApiError(thrown)) fail(mapScreenError(thrown));

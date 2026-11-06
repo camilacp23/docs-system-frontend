@@ -93,8 +93,14 @@ describe('screen list', () => {
     await table();
 
     expect(await screen.findByText(/5 screens · 1 approved/)).toBeInTheDocument();
+    // The two counts of the subtitle (the application card reads its own total, D-98).
+    expect(
+      api
+        .callsTo('GET /screens')
+        .filter((c) => c.options.query?.pageSize === 1 && c.options.query.documentationStatus),
+    ).toHaveLength(1);
     expect(api.callsTo('GET /screens').filter((c) => c.options.query?.pageSize === 1)).toHaveLength(
-      2,
+      3,
     );
   });
 
@@ -224,7 +230,9 @@ describe('screen list', () => {
     const grid = await table();
 
     // Not valid: dropped (default sort and page size); valid: kept.
-    expect(api.callsTo('GET /screens')[0]?.options.query).toMatchObject({
+    expect(
+      api.callsTo('GET /screens').find((c) => c.options.query?.pageSize !== 1)?.options.query,
+    ).toMatchObject({
       documentationStatus: 'DRAFT',
       sort: 'name',
       pageSize: 20,
@@ -318,8 +326,18 @@ describe('screen list', () => {
   it('shows the server error state with a retry', async () => {
     const user = userEvent.setup();
     await renderScreens({
-      prepare: (api) => {
-        api.failNext('GET /screens', new ApiError({ status: 500, code: 'INTERNAL_ERROR' }));
+      prepare: (fake) => {
+        // Only the read of the list fails once (the counts and the application card read /screens too).
+        const read = fake.client.get.bind(fake.client);
+        let failed = false;
+        fake.client.get = (path: string, options?: unknown) => {
+          const query = (options as { query?: { pageSize?: number } } | undefined)?.query;
+          if (!failed && path === '/screens' && query?.pageSize === 20) {
+            failed = true;
+            return Promise.reject(new ApiError({ status: 500, code: 'INTERNAL_ERROR' }));
+          }
+          return read(path as never, options as never);
+        };
       },
     });
 

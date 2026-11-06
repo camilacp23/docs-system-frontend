@@ -3,15 +3,19 @@
 // "Archived · read-only" instead, as in S-09b) and a button that opens the list of applications.
 // Picking one calls selectApplication of ApplicationProvider (the id sent as `applicationId`).
 // Props: collapsed (only the initials tile, which expands the sidebar via onExpand), onExpand.
-// The screen count of the frame arrives with the Screens module.
+// The platform line also says how many screens the application has ("Power Apps · 24 screens"): the total of
+// GET /screens, App (OnStart) included (D-98); it is left out while unknown. The archived chip replaces the whole line.
 import { Check, ChevronsUpDown } from 'lucide-react';
 import { useId } from 'react';
 
 import { useApplication } from '../application/useApplication';
+import { useScreenCount } from '../application/useScreenCount';
 import { cx, ICON_STROKE_WIDTH } from '../components/ui';
 
-import { applicationInitials } from './applicationInitials';
 import { usePopover } from '../hooks/usePopover';
+import { countText } from '../modules/variables/variableLabels';
+
+import { applicationInitials } from './applicationInitials';
 
 export interface ApplicationCardProps {
   collapsed?: boolean;
@@ -21,6 +25,7 @@ export interface ApplicationCardProps {
 export function ApplicationCard({ collapsed = false, onExpand }: ApplicationCardProps) {
   const { currentApplication, applications, selectApplication } = useApplication();
   const { open, setOpen, containerRef, triggerRef } = usePopover();
+  const screenCount = useScreenCount(currentApplication?.id ?? null);
   const listId = useId();
   const archived = currentApplication?.status === 'ARCHIVED';
   const canSwitch = applications.length > 1;
@@ -69,7 +74,10 @@ export function ApplicationCard({ collapsed = false, onExpand }: ApplicationCard
                   aria-hidden="true"
                   className="size-1.5 shrink-0 rounded-pill bg-sidebar-live-dot shadow-live-dot"
                 />
-                <span className="min-w-0 truncate">{currentApplication.platform}</span>
+                <span className="min-w-0 truncate">
+                  {currentApplication.platform}
+                  {screenCount !== null && ` · ${countText(screenCount, 'screen')}`}
+                </span>
               </div>
             ))}
         </div>
