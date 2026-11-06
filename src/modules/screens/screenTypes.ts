@@ -6,3 +6,4 @@ export type Screen = components['schemas']['Screen'];
 export type ScreenCreate = components['schemas']['ScreenCreate'];
 export type ScreenTemplate = components['schemas']['ScreenTemplate'];
 export type ApiDocumentationStatus = components['schemas']['DocumentationStatus'];
+export type ScreenUpdate = components['schemas']['ScreenUpdate'];
