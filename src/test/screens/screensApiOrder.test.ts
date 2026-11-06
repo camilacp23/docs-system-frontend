@@ -2,6 +2,7 @@
 // real one (contract 0.3.5, D-82, D-84): POST 400 -> 404 -> 422 APPLICATION_ARCHIVED -> 409 DUPLICATE_NAME and
 // DELETE 404 -> 422 APPLICATION_ARCHIVED -> 422 APP_CONTEXT_PROTECTED -> 422 SCREEN_IN_REVIEW. The page tests rely on
 // it: a fake that checked in another order would let a test pass for a reason the server never produces.
+// The order of PUT /screens/{id} is in screensApiPutOrder.test.ts.
 import { describe, expect, it } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';

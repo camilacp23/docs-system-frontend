@@ -2,10 +2,11 @@
 // makeScreensApi(apps, init) -> { state, client, calls, callsTo, failNext, hold, etagOf, collectionsApi }
 //   GET /screens (filters q, documentationStatus, authorId, sort name | documentationStatus | updatedAt |
 //   pendingSubtasks, page, pageSize; App (OnStart) is always first; an unknown applicationId is 404, D-70),
-//   GET /screens/{id} (with a weak ETag that moves when a write changes something), POST /screens and
-//   DELETE /screens/{id}. Everything else (variables, collections, applications) goes to the collections fake.
+//   GET /screens/{id} (with a weak ETag that moves when a write changes something), POST /screens,
+//   PUT /screens/{id} (fakeScreenUpdate: the rules of the real server in its order) and DELETE /screens/{id}. Everything else (variables, collections, applications) goes to the collections fake.
 //   Writes check in the order of the real server (contract 0.3.5):
 //     POST    400 (name, Miro link) -> 404 (application) -> 422 APPLICATION_ARCHIVED -> 409 DUPLICATE_NAME
+//     PUT     400 -> 404 -> 422 APPLICATION_ARCHIVED -> 412 -> 422 rules -> 409 DUPLICATE_NAME (see fakeScreenUpdate)
 //     DELETE  404 -> 422 APPLICATION_ARCHIVED -> 422 APP_CONTEXT_PROTECTED -> 422 SCREEN_IN_REVIEW (D-82)
 //   POST starts the screen as UNDOCUMENTED, or DRAFT when a template field has content (D-81). DELETE leaves the
 //   variables created in the screen without an origin.
@@ -13,9 +14,20 @@ import { vi } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';
 import type { ApiClient } from '../../api/client';
-import type { Screen, ScreenCreate, ScreenSummary } from '../../modules/screens/screenTypes';
+import type {
+  Screen,
+  ScreenCreate,
+  ScreenSummary,
+  ScreenUpdate,
+} from '../../modules/screens/screenTypes';
 
 import { makeCollectionsApi, type CollectionsApiInit } from './fakeCollectionsApi';
+import {
+  applyScreenUpdate,
+  checkScreenUpdateBody,
+  checkScreenUpdateRequest,
+  type ScreenUpdateEnv,
+} from './fakeScreenUpdate';
 import type { RecordedApiCall } from './fakeVariablesApi';
 import type { makeApplicationsClient } from './renderApp';
 
@@ -106,6 +118,7 @@ export function makeScreensApi(
     screens: screenDetails,
     versions: new Map<number, number>(),
     nextId: 2000,
+    nextNestedId: 5000,
   };
   const calls: RecordedApiCall[] = [];
   const failures = new Map<string, ApiError[]>();
@@ -247,6 +260,29 @@ export function makeScreensApi(
       });
       state.screens = [...state.screens, created];
       return response({ data: created }, etagOf(id), 201);
+    }
+    if (method === 'PUT' && path === '/screens/{id}') {
+      const body = options.body as ScreenUpdate;
+      // 400 -> 404 (the screen, the nested ids, the references) -> 422 APPLICATION_ARCHIVED -> 412 -> 422 -> 409.
+      checkScreenUpdateBody(body, Number(options.path?.id));
+      const current = find(options.path?.id);
+      const application = checkApplication(current.applicationId);
+      const env: ScreenUpdateEnv = {
+        screens: state.screens,
+        variables: collectionsApi.variablesApi.state.variables,
+        collections: collectionsApi.state.collections,
+        application: { name: application.name, archived: application.archived },
+        etagOf,
+        nextNestedId: () => state.nextNestedId++,
+        now: () => new Date().toISOString(),
+      };
+      checkScreenUpdateRequest(body, current, env);
+      const { screen, changed } = applyScreenUpdate(env, current, body, options.ifMatch);
+      if (changed) {
+        state.screens = state.screens.map((s) => (s.id === screen.id ? screen : s));
+        state.versions.set(screen.id, (state.versions.get(screen.id) ?? 1) + 1);
+      }
+      return response({ data: screen }, etagOf(screen.id));
     }
     if (method === 'DELETE' && path === '/screens/{id}') {
       const current = find(options.path?.id);
