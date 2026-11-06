@@ -6,12 +6,12 @@
 // server error state with a retry. The page subtitle says why writing is disabled when the application is
 // archived (S-09b): the counts stay and the reason follows them. The counts line is never blank: a skeleton while
 // they load, "Couldn't load the counts." with a retry if they fail.
-// The row menu (Administrator and Developer) has View and Delete; Delete is disabled with the reason when the screen
-// is App (OnStart) or in review, the application is archived or the browser is offline (deleteBlockReason); the API
-// stays the authority. After a deletion the list and the counts are read again.
+// The row menu (Administrator and Developer) has View, Edit and Delete; Edit is disabled with the reason when the
+// screen is in review, the application is archived or the browser is offline (editBlockReason); Delete also when the
+// screen is App (OnStart) (deleteBlockReason); the API stays the authority. After a deletion the list and the counts are read again.
 // "New screen" (Administrator and Developer) opens the creation modal (?new=1); it is disabled with the reason
 // when the application is archived or the browser is offline (useWriteBlock).
-import { Eye, ListFilter, Monitor, Plus, Trash2, X } from 'lucide-react';
+import { Eye, ListFilter, Monitor, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 
@@ -39,7 +39,7 @@ import { CreateScreenModal } from './CreateScreenModal';
 import { DeleteScreenModal } from './DeleteScreenModal';
 import { ScreenFilters } from './ScreenFilters';
 import { ScreenTable } from './ScreenTable';
-import { deleteBlockReason } from './screenActionBlock';
+import { deleteBlockReason, editBlockReason } from './screenActionBlock';
 import type { ScreenSummary } from './screenTypes';
 import { useScreenCounts } from './useScreenCounts';
 import { useScreenListParams } from './useScreenListParams';
@@ -214,6 +214,7 @@ function ScreensList() {
                 canWrite
                   ? (row) => {
                       const blockedReason = deleteBlockReason(row, reason);
+                      const editReason = editBlockReason(row, reason);
                       return (
                         <ActionMenu
                           label={`Actions for ${row.name}`}
@@ -224,6 +225,16 @@ function ScreensList() {
                               icon: <Eye {...ACTION_ICON} />,
                               onSelect: () => {
                                 void navigate(`/screens/${row.id}`);
+                              },
+                            },
+                            {
+                              key: 'edit',
+                              label: 'Edit',
+                              icon: <Pencil {...ACTION_ICON} />,
+                              disabled: editReason !== null,
+                              reason: editReason ?? undefined,
+                              onSelect: () => {
+                                void navigate(`/screens/${row.id}/edit`);
                               },
                             },
                             {

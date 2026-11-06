@@ -4,14 +4,15 @@
 // (`?tab=components`, `?tab=links`; Template is the default and leaves no parameter), so a tab can be linked and
 // the back button returns to the previous one. Future to do and Comments are not drawn yet; editing and the workflow
 // actions are not on this page yet either.
-// Delete (Administrator and Developer) opens the confirmation with the impact; it is disabled with the reason for
-// App (OnStart), a screen in review, an archived application or no connection (deleteBlockReason); after deleting,
-// the page goes back to the list.
+// Edit (Administrator and Developer) opens /screens/:id/edit; it is disabled with the reason for a screen in review, an
+// archived application or no connection (editBlockReason). Delete opens the confirmation with the impact; it is
+// disabled with the reason for App (OnStart) and for the same cases (deleteBlockReason); after deleting, the page goes
+// back to the list.
 // A screen of another application than the selected one selects that application and says so (D-78); switching
 // application from the shell while the page is open goes back to the list.
 // The breadcrumb reads "Screens / <name>". Loading shows a skeleton after 300 ms; unknown id: "This screen doesn't
 // exist" (S-41a); other failures: the server error state with a retry. The read revalidates with the ETag (D-72).
-import { Monitor, Trash2 } from 'lucide-react';
+import { Monitor, Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 
@@ -39,7 +40,7 @@ import { MiroLink } from './MiroLink';
 import { ScreenComponentsTab } from './ScreenComponentsTab';
 import { ScreenLinksTab } from './ScreenLinksTab';
 import { ScreenTemplateTab } from './ScreenTemplateTab';
-import { deleteBlockReason } from './screenActionBlock';
+import { deleteBlockReason, editBlockReason } from './screenActionBlock';
 import { RESERVED_LABEL, toTagStatus } from './screenLabels';
 import { useScreen } from './useScreen';
 
@@ -102,6 +103,7 @@ export function ScreenDetailPage() {
   }
 
   const blockReason = deleteBlockReason(loaded, writeReason);
+  const editReason = editBlockReason(loaded, writeReason);
 
   return (
     <>
@@ -122,6 +124,22 @@ export function ScreenDetailPage() {
             <MiroLink href={loaded.miroLink}>Open in Miro</MiroLink>
             {canWrite && (
               <>
+                <Button
+                  disabled={editReason !== null}
+                  title={editReason ?? undefined}
+                  aria-describedby={editReason === null ? undefined : 'screen-edit-reason'}
+                  iconLeft={<Pencil aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+                  onClick={() => {
+                    void navigate(`/screens/${loaded.id}/edit`);
+                  }}
+                >
+                  Edit
+                </Button>
+                {editReason !== null && (
+                  <span id="screen-edit-reason" className="sr-only">
+                    {editReason}
+                  </span>
+                )}
                 <Button
                   variant="danger"
                   disabled={blockReason !== null}
