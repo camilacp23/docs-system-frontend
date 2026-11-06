@@ -34,6 +34,8 @@ export { PAGE_SIZES, visiblePages } from './pageNumbers';
 export type { PaginationProps } from './Pagination';
 export { PasswordField } from './PasswordField';
 export type { PasswordFieldProps } from './PasswordField';
+export { SearchPicker } from './SearchPicker';
+export type { SearchPickerOption, SearchPickerProps } from './SearchPicker';
 export { SectionCard } from './SectionCard';
 export type { SectionCardProps } from './SectionCard';
 export { SECTION_TONE_TILE } from './sectionTones';
