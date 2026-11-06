@@ -96,9 +96,13 @@ describe('placeholders', () => {
       "You can't change the scope while collections assign this variable with UpdateContext. Update those assignments first.",
     );
     expect(getErrorMessage(err('TEMPLATE_INCOMPLETE', { fields: ['risks', 'knownIssues'] }))).toBe(
-      'Complete all seven template fields to submit for review. Missing: risks, knownIssues.',
+      'Complete all seven template fields to submit for review. Missing: Known issues, Risks.',
     );
-    expect(getErrorMessage(err('JIRA_PARTIAL_FAILURE', { key: 'TECHEA-2' }, { status: 502 }))).toBe(
+    expect(
+      getErrorMessage(
+        err('JIRA_PARTIAL_FAILURE', { key: 'TECHEA-2', storyId: 2 }, { status: 502 }),
+      ),
+    ).toBe(
       "The story TECHEA-2 was created, but the to-do wasn't. Try again to add it to that story.",
     );
     expect(getErrorMessage(err('RATE_LIMITED', { minutes: 15 }, { status: 429 }))).toBe(
@@ -207,6 +211,10 @@ describe('catalog against the contract', () => {
   const VARIANT_DETAILS: Record<string, ErrorDetails> = {
     'FORBIDDEN (origin)': { reason: 'ORIGIN' },
   };
+  // Rows whose text depends on what the page was doing.
+  const VARIANT_CTX: Record<string, { action: 'rename' }> = {
+    'APP_CONTEXT_PROTECTED (rename)': { action: 'rename' },
+  };
 
   it('matches every contract message that has no placeholder', () => {
     const rows = [
@@ -215,13 +223,16 @@ describe('catalog against the contract', () => {
     expect(rows.length).toBeGreaterThan(25);
     let compared = 0;
     for (const [, label, status, cell] of rows) {
-      // The table cell is "<text> (`details`: ...)": the text alone is what the catalog must produce.
-      const message = cell?.replace(/ \(`details`: .*\)$/, '');
+      // The table cell is "<text> (`details`: ...)" or "<text> (<when it happens>)": the text alone is what the catalog must produce.
+      const message = cell?.replace(/ \((?:`details`: |Jira not configured).*\)$/, '');
       if (!label || !message || message.includes('<')) continue;
       const code = label.split(' ')[0] ?? label;
       if (['UNAUTHENTICATED', 'INVALID_SIGNATURE'].includes(code)) continue;
       const details = VARIANT_DETAILS[label] ?? null;
-      expect(getErrorMessage(err(code, details, { status: Number(status) })), label).toBe(message);
+      expect(
+        getErrorMessage(err(code, details, { status: Number(status) }), VARIANT_CTX[label]),
+        label,
+      ).toBe(message);
       compared++;
     }
     expect(compared).toBeGreaterThan(20);
@@ -542,6 +553,125 @@ describe('field errors: unique and self rules (D-74, D-65)', () => {
     expect(getFieldErrors(validation(fields))[0]?.message).toBe(
       "This field can't point to itself.",
     );
+  });
+});
+
+describe('screens API errors (contract 0.3.5)', () => {
+  it('tells the two APP_CONTEXT_PROTECTED texts apart by what the page was doing', () => {
+    const e = err('APP_CONTEXT_PROTECTED');
+    expect(getErrorMessage(e)).toBe("The App (OnStart) screen can't be deleted.");
+    expect(getErrorMessage(e, { action: 'delete' })).toBe(
+      "The App (OnStart) screen can't be deleted.",
+    );
+    expect(getErrorMessage(e, { action: 'rename' })).toBe(
+      "The App (OnStart) screen can't be renamed.",
+    );
+  });
+
+  it('lists the missing template fields with readable labels in template order', () => {
+    const fields = ['risks', 'onStart', 'dataModel', 'workingProcess', 'knownIssues'];
+    expect(getErrorMessage(err('TEMPLATE_INCOMPLETE', { fields }))).toBe(
+      'Complete all seven template fields to submit for review. Missing: OnStart, Working process, Data model, Known issues, Risks.',
+    );
+  });
+
+  it('keeps the plain texts of the workflow and Jira codes', () => {
+    expect(getErrorMessage(err('SCREEN_IN_REVIEW'))).toBe(
+      'This screen is in review. Edit it after the review, or withdraw it from review.',
+    );
+    expect(getErrorMessage(err('INVALID_TRANSITION', { from: 'DRAFT', to: 'DRAFT' }))).toBe(
+      'This screen changed status meanwhile. Reload to see its current status.',
+    );
+    expect(getErrorMessage(err('NOT_IN_REVIEW'))).toBe(
+      'This screen is no longer in review. Reload to see its status.',
+    );
+    expect(getErrorMessage(err('COMMENT_REQUIRED'))).toBe(
+      'Write a comment: it is required to return the documentation.',
+    );
+    expect(getErrorMessage(err('STORY_NOT_IN_SCREEN', { storyId: 4 }))).toBe(
+      "That story doesn't belong to this screen. Refresh the list and pick again.",
+    );
+    expect(getErrorMessage(err('JIRA_UNAVAILABLE', null, { status: 502 }))).toBe(
+      "Jira isn't responding. The to-do wasn't created. Try again in a few minutes.",
+    );
+  });
+
+  describe('JIRA_PARTIAL_FAILURE', () => {
+    const partial = (details: ErrorDetails | null) =>
+      err('JIRA_PARTIAL_FAILURE', details, { status: 502 });
+
+    it('writes the four cases from their details', () => {
+      expect(
+        getErrorMessage(
+          partial({
+            key: 'TECHEA-2',
+            created: { epic: 'TECHEA-1', story: 'TECHEA-2' },
+            storyId: 2,
+          }),
+        ),
+      ).toBe(
+        "The story TECHEA-2 was created, but the to-do wasn't. Try again to add it to that story.",
+      );
+      expect(getErrorMessage(partial({ key: 'TECHEA-1', created: { epic: 'TECHEA-1' } }))).toBe(
+        "The epic TECHEA-1 was created, but the story and the to-do weren't. Try again to add them to that epic.",
+      );
+      expect(
+        getErrorMessage(
+          partial({ unsaved: ['TECHEA-1', 'TECHEA-2'], reason: 'SCREEN_DELETED', created: {} }),
+        ),
+      ).toBe(
+        "The screen was deleted while the tickets were being created. These Jira issues weren't saved here: TECHEA-1, TECHEA-2. Delete them in Jira if you don't need them.",
+      );
+      expect(
+        getErrorMessage(partial({ unsaved: ['TECHEA-2'], reason: 'SAVE_FAILED', created: {} })),
+      ).toBe(
+        "These Jira issues were created but couldn't be saved here: TECHEA-2. Delete them in Jira, then try again.",
+      );
+    });
+
+    it('drops a missing key or list and warns in DEV', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      expect(getErrorMessage(partial(null))).toBe(
+        "The story was created, but the to-do wasn't. Try again to add it to that story.",
+      );
+      expect(getErrorMessage(partial({ reason: 'SAVE_FAILED' }))).toBe(
+        "These Jira issues were created but couldn't be saved here. Delete them in Jira, then try again.",
+      );
+      expect(getErrorMessage(partial({ reason: 'SCREEN_DELETED' }))).toBe(
+        "The screen was deleted while the tickets were being created. These Jira issues weren't saved here. Delete them in Jira if you don't need them.",
+      );
+      expect(warn).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  it('writes the singleLine rule of the Jira summaries', () => {
+    const e = err(
+      'VALIDATION_ERROR',
+      { fields: [{ field: 'newStory.summary', rule: 'singleLine', message: 'server text' }] },
+      { status: 400 },
+    );
+    expect(getFieldErrors(e, { 'newStory.summary': 'Summary' })[0]?.message).toBe(
+      'Summary must be a single line.',
+    );
+    expect(getRuleMessage('singleLine', 'Summary')).toBe('Summary must be a single line.');
+  });
+
+  it('writes the self rule of a navigation with the label of the screen', () => {
+    const e = err(
+      'VALIDATION_ERROR',
+      {
+        fields: [{ field: 'navigations[1].targetScreenId', rule: 'self', message: 'server text' }],
+      },
+      { status: 400 },
+    );
+    expect(getFieldErrors(e, { 'navigations[].targetScreenId': 'Navigation target' })).toEqual([
+      {
+        field: 'navigations[1].targetScreenId',
+        index: 1,
+        rule: 'self',
+        message: "Navigation target can't point to itself.",
+      },
+    ]);
   });
 });
 
