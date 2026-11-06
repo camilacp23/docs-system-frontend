@@ -33,6 +33,8 @@ export const APP_ROUTES: readonly AppRoute[] = [
   { path: '/dashboard', title: 'Dashboard', roles: EVERY_ROLE },
   { path: '/screens', title: 'Screens', roles: EVERY_ROLE },
   { path: '/screens/:id', title: 'Screens', roles: EVERY_ROLE },
+  // The edit page has its own route (D-57). Writing is not for the Reader (Table 56): S-41b.
+  { path: '/screens/:id/edit', title: 'Screens', roles: NOT_READER },
   { path: '/variables', title: 'Variables', roles: EVERY_ROLE },
   { path: '/variables/:id', title: 'Variables', roles: EVERY_ROLE },
   // The edit page has its own route (D-57). Writing is not for the Reader (Table 56): S-41b.

@@ -39,7 +39,7 @@ import { MiroLink } from './MiroLink';
 import { ScreenComponentsTab } from './ScreenComponentsTab';
 import { ScreenLinksTab } from './ScreenLinksTab';
 import { ScreenTemplateTab } from './ScreenTemplateTab';
-import { deleteBlockReason } from './screenDeleteBlock';
+import { deleteBlockReason } from './screenActionBlock';
 import { RESERVED_LABEL, toTagStatus } from './screenLabels';
 import { useScreen } from './useScreen';
 

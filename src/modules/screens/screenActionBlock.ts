@@ -1,6 +1,8 @@
-// screenDeleteBlock: why Delete is disabled for a screen right now, if it is (SDD Table 56: the interface disables,
-// with the reason, what the role may do but the state prevents).
-// deleteBlockReason(screen, writeReason) -> the text to show, or null when the action is available.
+// screenActionBlock: why Edit or Delete is disabled for a screen right now, if it is (SDD Table 56: the interface
+// disables, with the reason, what the role may do but the state prevents).
+// deleteBlockReason(screen, writeReason) and editBlockReason(screen, writeReason) -> the text to show, or null when the
+// action is available.
+// Edit has the same reasons as Delete except App (OnStart): that screen is edited (only its name is locked, D-87).
 //   writeReason  the reason of useWriteBlock (archived application or offline), the first the server would give
 //   App (OnStart)  the text of APP_CONTEXT_PROTECTED (it can't be deleted)
 //   In review      the text of SCREEN_IN_REVIEW
@@ -22,6 +24,15 @@ export function deleteBlockReason(
 ): string | null {
   if (writeReason !== null) return writeReason;
   if (screen.isAppContext) return catalogText('APP_CONTEXT_PROTECTED');
+  if (screen.documentationStatus === 'IN_REVIEW') return catalogText('SCREEN_IN_REVIEW');
+  return null;
+}
+
+export function editBlockReason(
+  screen: { documentationStatus: ApiDocumentationStatus },
+  writeReason: string | null,
+): string | null {
+  if (writeReason !== null) return writeReason;
   if (screen.documentationStatus === 'IN_REVIEW') return catalogText('SCREEN_IN_REVIEW');
   return null;
 }

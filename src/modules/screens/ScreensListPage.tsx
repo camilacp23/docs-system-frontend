@@ -39,7 +39,7 @@ import { CreateScreenModal } from './CreateScreenModal';
 import { DeleteScreenModal } from './DeleteScreenModal';
 import { ScreenFilters } from './ScreenFilters';
 import { ScreenTable } from './ScreenTable';
-import { deleteBlockReason } from './screenDeleteBlock';
+import { deleteBlockReason } from './screenActionBlock';
 import type { ScreenSummary } from './screenTypes';
 import { useScreenCounts } from './useScreenCounts';
 import { useScreenListParams } from './useScreenListParams';
