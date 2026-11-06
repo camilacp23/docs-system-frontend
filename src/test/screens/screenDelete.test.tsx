@@ -140,6 +140,55 @@ describe('delete screen: the impact', () => {
     });
   });
 
+  it('counts the comments and the pending to-do records that the detail gives, and only those', async () => {
+    const user = userEvent.setup();
+    const { api } = await listReady({
+      screens: [
+        ...sampleScreens(),
+        makeScreenDetail(61, 'Revisada', {
+          documentationStatus: 'DRAFT',
+          commentCount: 2,
+          pendingSubtasks: 3,
+          components: AJUSTES.components,
+        }),
+      ],
+    });
+
+    const dialog = await openDeleteFromList(user, 'Revisada');
+
+    expect(
+      await dialog.findByText(
+        'Its 2 components, 2 comments and 3 pending to-do records are deleted too. The Jira issues stay in Jira.',
+      ),
+    ).toBeInTheDocument();
+    // Nothing is calculated: the numbers are the ones of GET /screens/{id}.
+    expect(api.callsTo('GET /screens/{id}').at(-1)?.options.path).toEqual({ id: 61 });
+  });
+
+  it('uses the singular for one comment and one pending to-do record, and leaves out zeros', async () => {
+    const user = userEvent.setup();
+    await listReady({
+      screens: [
+        ...sampleScreens(),
+        makeScreenDetail(62, 'Comentada', { commentCount: 1, pendingSubtasks: 1 }),
+        makeScreenDetail(63, 'Sola', { commentCount: 1 }),
+      ],
+    });
+
+    const first = await openDeleteFromList(user, 'Comentada');
+    expect(
+      await first.findByText(
+        'Its 1 comment and 1 pending to-do record are deleted too. The Jira issues stay in Jira.',
+      ),
+    ).toBeInTheDocument();
+    await user.click(first.getByRole('button', { name: 'Cancel' }));
+
+    const second = await openDeleteFromList(user, 'Sola');
+    expect(
+      await second.findByText('Its 1 comment is deleted too. The Jira issues stay in Jira.'),
+    ).toBeInTheDocument();
+  });
+
   it('says "1 variable ... stays" and uses the singular', async () => {
     const user = userEvent.setup();
     await listReady({ screens: screensWithAjustes(), variables: [ORPHAN] });

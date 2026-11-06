@@ -1,9 +1,10 @@
 // DeleteScreenModal: confirmation to delete a screen, with the impact (S-26).
 // Props: screen ({ id, name }), onClose, onDeleted (called after DELETE succeeded; the page decides where to go).
 // It reads GET /screens/{id} and the total of GET /variables?originScreenId=<id> when it opens and says how many
-// components and links the screen has and how many variables will stay without an origin screen ("Its 3
-// components and 5 links are deleted too. 1 variable created in it stays without an origin screen. The Jira
-// issues stay in Jira. The audit log keeps a record of everything deleted."). Only what the API gives is counted.
+// components, links, comments and pending to-do records the screen has and how many variables will stay without
+// an origin screen ("Its 3 components, 5 links, 2 comments and 3 pending to-do records are deleted too. 1 variable
+// created in it stays without an origin screen. The Jira issues stay in Jira. The audit log keeps a record of
+// everything deleted."). Only what the API gives is counted.
 // Delete stays disabled until the impact is known (an unknown impact is never deleted blindly); if a read fails the
 // modal offers to try again. Delete is also disabled, with the reason, when the application is archived or the
 // browser is offline. The API stays the authority: a refusal (APP_CONTEXT_PROTECTED, SCREEN_IN_REVIEW,
