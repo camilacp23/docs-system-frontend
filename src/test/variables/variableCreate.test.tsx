@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../api/ApiError';
 import { makeApplication } from '../helpers/renderApp';
 import { renderVariables } from '../helpers/renderVariables';
+import { setupUser } from '../helpers/setupUser';
 
 /** The page once the selected application is known (the list is rebuilt when it becomes known). */
 async function appReady() {
@@ -106,8 +107,31 @@ describe('New variable modal', () => {
     expect(api.callsTo('POST /variables')).toHaveLength(0);
   });
 
-  it('sends the complete POST, says it was created and refreshes the list and the counters', async () => {
+  // The only test of this form that types key by key (the others paste: how fast a text is typed is not their subject).
+  it('follows the name key by key: the counter changes with each key and the format error is gone once it is typed right', async () => {
     const user = userEvent.setup();
+    const { api } = await renderVariables();
+    const dialog = await openModal(user);
+
+    await user.type(dialog.getByLabelText(/^Name/), '9bad');
+    expect(dialog.getByText('4/150')).toBeInTheDocument();
+    await user.click(dialog.getByRole('button', { name: 'Create variable' }));
+    expect(await dialog.findByText("Name isn't in a valid format.")).toBeInTheDocument();
+    expect(dialog.getByLabelText(/^Name/)).toHaveAttribute('aria-invalid', 'true');
+
+    await user.clear(dialog.getByLabelText(/^Name/));
+    await user.type(dialog.getByLabelText(/^Name/), 'gEscrita');
+    expect(dialog.getByText('8/150')).toBeInTheDocument();
+    await user.click(dialog.getByRole('button', { name: 'Create variable' }));
+
+    // The name is accepted now: the next rule that fails is another field's.
+    expect(await dialog.findByText('Add at least one item to Environments.')).toBeInTheDocument();
+    expect(dialog.queryByText("Name isn't in a valid format.")).not.toBeInTheDocument();
+    expect(api.callsTo('POST /variables')).toHaveLength(0);
+  });
+
+  it('sends the complete POST, says it was created and refreshes the list and the counters', async () => {
+    const user = setupUser();
     const { api, router } = await renderVariables();
     const dialog = await openModal(user);
     await user.click(dialog.getByRole('checkbox', { name: 'DEV' }));
