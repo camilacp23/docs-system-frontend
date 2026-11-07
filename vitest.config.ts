@@ -12,5 +12,8 @@ export default defineConfig({
     // which had about 2 GB of its 8 GB free, slowed the tests down 2-3 times and the 1 s waits of findBy / waitFor
     // failed at random (5 of 5 runs had one failure). With three workers 5 of 5 runs pass, in about 40 s.
     maxWorkers: 3,
+    // The longest page tests type into dozens of controls; the default 5 s is too tight on a loaded machine. A test
+    // that passes ends at once, so this only matters to one that is slow.
+    testTimeout: 20_000,
   },
 });
