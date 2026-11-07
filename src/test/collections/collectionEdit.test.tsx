@@ -158,22 +158,28 @@ describe('edit collection: the form', () => {
     await render();
     await ready();
 
-    const options = within(screen.getByLabelText('Variable (assignment 1)'))
-      .getAllByRole('option')
-      .map((option) => option.textContent);
-    expect(options).toEqual([
-      'Choose a variable',
-      'gFiltroActivo',
-      'gRegistroSel',
-      'gUsuario',
-      'locMostrarDetalle',
-      'locOrden',
-    ]);
-    expect(
-      within(screen.getByLabelText('Screen (assignment 1)'))
-        .getAllByRole('option')
-        .map((option) => option.textContent),
-    ).toEqual(['Choose a screen', 'App (OnStart)', 'Inicio', 'Detalle']);
+    // The options come from their own reads, which can finish after the form is on screen.
+    await waitFor(() => {
+      expect(
+        within(screen.getByLabelText('Variable (assignment 1)'))
+          .getAllByRole('option')
+          .map((option) => option.textContent),
+      ).toEqual([
+        'Choose a variable',
+        'gFiltroActivo',
+        'gRegistroSel',
+        'gUsuario',
+        'locMostrarDetalle',
+        'locOrden',
+      ]);
+    });
+    await waitFor(() => {
+      expect(
+        within(screen.getByLabelText('Screen (assignment 1)'))
+          .getAllByRole('option')
+          .map((option) => option.textContent),
+      ).toEqual(['Choose a screen', 'App (OnStart)', 'Inicio', 'Detalle']);
+    });
   });
 });
 
