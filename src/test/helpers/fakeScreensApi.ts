@@ -3,11 +3,14 @@
 //   GET /screens (filters q, documentationStatus, authorId, sort name | documentationStatus | updatedAt |
 //   pendingSubtasks, page, pageSize; App (OnStart) is always first; an unknown applicationId is 404, D-70),
 //   GET /screens/{id} (with a weak ETag that moves when a write changes something), POST /screens,
-//   PUT /screens/{id} (fakeScreenUpdate: the rules of the real server in its order) and DELETE /screens/{id}. Everything else (variables, collections, applications) goes to the collections fake.
+//   PUT /screens/{id} (fakeScreenUpdate: the rules of the real server in its order), DELETE /screens/{id},
+//   PUT /screens/{id}/status and POST /screens/{id}/review (fakeScreenStatus). Everything else (variables, collections, applications) goes to the collections fake.
 //   Writes check in the order of the real server (contract 0.3.5):
 //     POST    400 (name, Miro link) -> 404 (application) -> 422 APPLICATION_ARCHIVED -> 409 DUPLICATE_NAME
 //     PUT     400 -> 404 -> 422 APPLICATION_ARCHIVED -> 412 -> 422 rules -> 409 DUPLICATE_NAME (see fakeScreenUpdate)
 //     DELETE  404 -> 422 APPLICATION_ARCHIVED -> 422 APP_CONTEXT_PROTECTED -> 422 SCREEN_IN_REVIEW (D-82)
+//     status  400 -> 404 -> 422 APPLICATION_ARCHIVED -> 412 -> 422 INVALID_TRANSITION -> 422 TEMPLATE_INCOMPLETE (D-88)
+//     review  400 -> 404 -> 422 APPLICATION_ARCHIVED -> 422 NOT_IN_REVIEW -> 422 COMMENT_REQUIRED (D-88)
 //   POST starts the screen as UNDOCUMENTED, or DRAFT when a template field has content (D-81). DELETE leaves the
 //   variables created in the screen without an origin.
 import { vi } from 'vitest';
@@ -28,6 +31,13 @@ import {
   checkScreenUpdateRequest,
   type ScreenUpdateEnv,
 } from './fakeScreenUpdate';
+import {
+  applyReview,
+  applyStatusChange,
+  checkReviewBody,
+  checkStatusBody,
+  type ScreenStatusEnv,
+} from './fakeScreenStatus';
 import type { RecordedApiCall } from './fakeVariablesApi';
 import type { makeApplicationsClient } from './renderApp';
 
@@ -205,7 +215,8 @@ export function makeScreensApi(
     Object.values(template).some((text) => typeof text === 'string' && text.trim() !== '');
 
   async function handle(method: string, path: string, options: RecordedApiCall['options'] = {}) {
-    if (path !== '/screens' && path !== '/screens/{id}') {
+    const own = ['/screens', '/screens/{id}', '/screens/{id}/status', '/screens/{id}/review'];
+    if (!own.includes(path)) {
       const fallback = collectionsApi.client as unknown as Record<
         string,
         (p: string, o?: unknown) => Promise<unknown>
@@ -302,6 +313,28 @@ export function makeScreensApi(
             : v,
       );
       return response(null, null, 204);
+    }
+    if (
+      (method === 'PUT' && path === '/screens/{id}/status') ||
+      (method === 'POST' && path === '/screens/{id}/review')
+    ) {
+      // 400 (the body) -> 404 (the screen) -> the rules of the operation, in their order.
+      const isStatus = path.endsWith('/status');
+      const parsedStatus = isStatus ? checkStatusBody(options.body) : null;
+      const parsedReview = isStatus ? null : checkReviewBody(options.body);
+      const current = find(options.path?.id);
+      const env: ScreenStatusEnv = {
+        application: { archived: checkApplication(current.applicationId).archived },
+        etagOf,
+        now: () => new Date().toISOString(),
+      };
+      const screen =
+        parsedStatus !== null
+          ? applyStatusChange(env, current, parsedStatus.status, options.ifMatch)
+          : applyReview(env, current, parsedReview as NonNullable<typeof parsedReview>);
+      state.screens = state.screens.map((s) => (s.id === screen.id ? screen : s));
+      state.versions.set(screen.id, (state.versions.get(screen.id) ?? 1) + 1);
+      return response({ data: screen }, etagOf(screen.id));
     }
     throw new Error(`fakeScreensApi: unhandled ${method} ${path}`);
   }
