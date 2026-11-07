@@ -2,6 +2,7 @@
 // kept and the origin rows left out, new and removed rows, swapping the names of two components, the client checks and
 // the tab that holds an error, the status after saving (D-81, D-71) and App (OnStart) with its name locked (D-87).
 import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import { makeVariable } from '../helpers/fakeVariablesApi';
@@ -270,16 +271,74 @@ describe('screen edit: saving', () => {
   });
 });
 
-describe('screen edit: keyboard', () => {
-  it('adds, fills, moves between the controls of a row and removes it without the mouse', async () => {
-    const { user, api } = await openEdit({ tab: 'components' });
+/** Presses Tab until the button called `name` has the focus: the keyboard way to reach it, no .focus() shortcut. */
+async function tabTo(user: ReturnType<typeof userEvent.setup>, name: string) {
+  const button = screen.getByRole('button', { name });
+  for (let presses = 0; presses < 150 && document.activeElement !== button; presses++) {
+    await user.tab();
+  }
+  expect(button).toHaveFocus();
+}
 
-    screen.getByRole('button', { name: 'Add navigation' }).focus();
+describe('screen edit: keyboard', () => {
+  // The focus after "Add" must not depend on how the button was pressed: Tab to it, Enter, and the first control of
+  // the new row has the focus (the same through the mouse, see the tests of saving).
+  it.each([
+    ['components', 'Add component', 'Name of component 4'],
+    ['components', 'Add use to component 1', 'Type of use 3 of component 1'],
+    ['components', 'Add navigation', 'Target screen of navigation 2'],
+    ['links', 'Add variable', 'Variable (link 2)'],
+    ['links', 'Add collection', 'Collection (link 2)'],
+  ])('on %s, Tab to "%s" and Enter puts the focus on "%s"', async (tabName, add, first) => {
+    const user = userEvent.setup({ delay: null });
+    await openEdit({ tab: tabName });
+
+    await tabTo(user, add);
+    await user.keyboard('{Enter}');
+
+    expect(screen.getByLabelText(first)).toHaveFocus();
+  });
+
+  // Regression: React can flush the effects of the render that just painted the page right after the key that asks for
+  // the focus and before the render that adds the row. The request must survive that run: a button reached and pressed
+  // at once (here, with no Tab between the render and Enter) used to leave the focus on "Add".
+  it.each([
+    ['components', 'Add component', 'Name of component 4'],
+    ['components', 'Add use to component 1', 'Type of use 3 of component 1'],
+    ['components', 'Add navigation', 'Target screen of navigation 2'],
+    ['links', 'Add variable', 'Variable (link 2)'],
+    ['links', 'Add collection', 'Collection (link 2)'],
+  ])(
+    'on %s, Enter on "%s" right after the page rendered focuses "%s"',
+    async (tabName, add, first) => {
+      const user = userEvent.setup();
+      await openEdit({ tab: tabName });
+
+      screen.getByRole('button', { name: add }).focus();
+      await user.keyboard('{Enter}');
+
+      expect(screen.getByLabelText(first)).toHaveFocus();
+    },
+  );
+
+  it('puts the focus on the new row also when the button is pressed with Space', async () => {
+    const user = userEvent.setup({ delay: null });
+    await openEdit({ tab: 'components' });
+
+    await tabTo(user, 'Add navigation');
+    await user.keyboard(' ');
+
+    expect(screen.getByLabelText('Target screen of navigation 2')).toHaveFocus();
+  });
+
+  it('adds, fills, moves between the controls of a row and removes it without the mouse', async () => {
+    const user = userEvent.setup({ delay: null });
+    const { api } = await openEdit({ tab: 'components' });
+
+    await tabTo(user, 'Add navigation');
     await user.keyboard('{Enter}');
     const target = screen.getByRole('combobox', { name: 'Target screen of navigation 2' });
-    // The focus that follows "Add" is asserted with the mouse in the test above; user-event hands it back to a button
-    // activated with the keyboard, so the keyboard flow continues from the new row.
-    target.focus();
+    expect(target).toHaveFocus();
 
     // Search, choose with the arrow keys and Enter (which must not submit the form), then Tab to the next control.
     await user.keyboard('Busq{ArrowDown}{Enter}');
