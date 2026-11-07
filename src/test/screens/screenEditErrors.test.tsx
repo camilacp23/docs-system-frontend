@@ -5,7 +5,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';
-import { choose, openEdit, tab, type ScreensApi } from '../helpers/screenEditHelpers';
+import { choose, openEdit, replaceText, tab, type ScreensApi } from '../helpers/screenEditHelpers';
 
 const PUT = 'PUT /screens/{id}';
 const textbox = (name: string) => screen.getByRole('textbox', { name });
@@ -24,8 +24,7 @@ const saved = (api: ScreensApi) => api.state.screens.find((s) => s.id === 12);
 describe('screen edit: 400 on the exact field and row', () => {
   it('marks a repeated component name on its row, switches to its tab and focuses it', async () => {
     const { user, api } = await openEdit({ tab: 'components' });
-    await user.clear(textbox('Name of component 2'));
-    await user.type(textbox('Name of component 2'), 'btnGuardar');
+    await replaceText(user, textbox('Name of component 2'), 'btnGuardar');
     await user.click(tab('Template'));
 
     await user.click(save());

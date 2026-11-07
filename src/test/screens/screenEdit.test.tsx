@@ -8,7 +8,8 @@ import { describe, expect, it } from 'vitest';
 import { makeVariable } from '../helpers/fakeVariablesApi';
 import { renderScreens } from '../helpers/renderScreens';
 import { sampleVariables } from '../helpers/renderVariables';
-import { choose, lastPut, openEdit, tab } from '../helpers/screenEditHelpers';
+import { choose, lastPut, openEdit, replaceText, tab } from '../helpers/screenEditHelpers';
+import { setupUser, type User } from '../helpers/setupUser';
 
 const textbox = (name: string) => screen.getByRole('textbox', { name });
 const pickerValue = (name: string) =>
@@ -150,38 +151,21 @@ describe('screen edit: saving', () => {
     expect(api.etagOf(12)).toBe(before);
   });
 
-  it('adds components, uses, navigations and links without id and moves the focus to each new row', async () => {
+  it('adds a component with a use and a navigation without id and moves the focus to each new row', async () => {
     const { user, api } = await openEdit({ tab: 'components' });
 
     await user.click(screen.getByRole('button', { name: 'Add component' }));
     expect(textbox('Name of component 4')).toHaveFocus();
-    await user.type(textbox('Name of component 4'), 'btnNuevo');
-    await user.type(textbox('Type of component 4'), 'Button');
-    await user.type(textbox('OnSelect of component 4'), 'Navigate(Inicio)');
+    await replaceText(user, textbox('Name of component 4'), 'btnNuevo');
+    await replaceText(user, textbox('Type of component 4'), 'Button');
+    await replaceText(user, textbox('OnSelect of component 4'), 'Navigate(Inicio)');
     await user.click(screen.getByRole('button', { name: 'Add use to component 4' }));
     expect(screen.getByRole('combobox', { name: 'Type of use 1 of component 4' })).toHaveFocus();
     await choose(user, 'Target of use 1 of component 4', /gUsuario/);
-    await user.type(textbox('Description of use 1 of component 4'), 'Reads the user');
+    await replaceText(user, textbox('Description of use 1 of component 4'), 'Reads the user');
     await user.click(screen.getByRole('button', { name: 'Add navigation' }));
     expect(screen.getByRole('combobox', { name: 'Target screen of navigation 2' })).toHaveFocus();
     await choose(user, 'Target screen of navigation 2', /Busqueda/);
-
-    await user.click(tab('Variables & collections'));
-    await user.click(screen.getByRole('button', { name: 'Add variable' }));
-    expect(screen.getByRole('combobox', { name: 'Variable (link 2)' })).toHaveFocus();
-    await choose(user, 'Variable (link 2)', /gFiltroActivo/);
-    await user.type(textbox('Used in (variable link 2)'), 'OnVisible');
-    await user.click(screen.getByRole('button', { name: 'Add collection' }));
-    await choose(user, 'Collection (link 2)', /colActivos/);
-    await user.click(
-      within(screen.getByRole('radiogroup', { name: 'Access (collection link 2)' })).getByRole(
-        'radio',
-        {
-          name: 'Write',
-        },
-      ),
-    );
-    await user.type(textbox('Used in (collection link 2)'), 'galNueva.Items');
 
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
     await backAtDetail();
@@ -195,6 +179,35 @@ describe('screen edit: saving', () => {
       uses: [{ targetType: 'VARIABLE', targetId: 1, description: 'Reads the user' }],
     });
     expect(body.navigations[1]).toEqual({ targetScreenId: 13, description: null });
+    // The new rows reached the server: the detail shows them.
+    expect(api.state.screens.find((s) => s.id === 12)?.components.map((c) => c.name)).toContain(
+      'btnNuevo',
+    );
+  });
+
+  it('adds a variable link and a collection link without id and moves the focus to each new row', async () => {
+    const { user, api } = await openEdit({ tab: 'links' });
+
+    await user.click(screen.getByRole('button', { name: 'Add variable' }));
+    expect(screen.getByRole('combobox', { name: 'Variable (link 2)' })).toHaveFocus();
+    await choose(user, 'Variable (link 2)', /gFiltroActivo/);
+    await replaceText(user, textbox('Used in (variable link 2)'), 'OnVisible');
+    await user.click(screen.getByRole('button', { name: 'Add collection' }));
+    await choose(user, 'Collection (link 2)', /colActivos/);
+    await user.click(
+      within(screen.getByRole('radiogroup', { name: 'Access (collection link 2)' })).getByRole(
+        'radio',
+        {
+          name: 'Write',
+        },
+      ),
+    );
+    await replaceText(user, textbox('Used in (collection link 2)'), 'galNueva.Items');
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await backAtDetail();
+
+    const { body } = lastPut(api);
     expect(body.variableLinks[1]).toEqual({
       variableId: 2,
       accessMode: 'READ',
@@ -205,10 +218,6 @@ describe('screen edit: saving', () => {
       accessMode: 'WRITE',
       usedIn: 'galNueva.Items',
     });
-    // The new rows reached the server: the detail shows them.
-    expect(api.state.screens.find((s) => s.id === 12)?.components.map((c) => c.name)).toContain(
-      'btnNuevo',
-    );
   });
 
   it('does not send a removed row and removes the uses when none is left', async () => {
@@ -255,12 +264,13 @@ describe('screen edit: saving', () => {
   it('keeps the edited tabs together: one save sends the changes of every tab', async () => {
     const { user, api } = await openEdit();
 
-    await user.type(textbox('Known issues'), 'The save is slow.');
+    await user.click(textbox('Known issues'));
+    await user.paste('The save is slow.');
     await user.click(tab('Components & navigation'));
-    await user.type(textbox('Description of navigation 1'), ' the list');
+    await user.click(textbox('Description of navigation 1'));
+    await user.paste(' the list');
     await user.click(tab('Variables & collections'));
-    await user.clear(textbox('Used in (collection link 1)'));
-    await user.type(textbox('Used in (collection link 1)'), 'galClientes.Selected');
+    await replaceText(user, textbox('Used in (collection link 1)'), 'galClientes.Selected');
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
     await backAtDetail();
 
@@ -272,7 +282,7 @@ describe('screen edit: saving', () => {
 });
 
 /** Presses Tab until the button called `name` has the focus: the keyboard way to reach it, no .focus() shortcut. */
-async function tabTo(user: ReturnType<typeof userEvent.setup>, name: string) {
+async function tabTo(user: User, name: string) {
   const button = screen.getByRole('button', { name });
   for (let presses = 0; presses < 150 && document.activeElement !== button; presses++) {
     await user.tab();
@@ -290,7 +300,7 @@ describe('screen edit: keyboard', () => {
     ['links', 'Add variable', 'Variable (link 2)'],
     ['links', 'Add collection', 'Collection (link 2)'],
   ])('on %s, Tab to "%s" and Enter puts the focus on "%s"', async (tabName, add, first) => {
-    const user = userEvent.setup({ delay: null });
+    const user = setupUser();
     await openEdit({ tab: tabName });
 
     await tabTo(user, add);
@@ -311,6 +321,8 @@ describe('screen edit: keyboard', () => {
   ])(
     'on %s, Enter on "%s" right after the page rendered focuses "%s"',
     async (tabName, add, first) => {
+      // The default pause of user-event (not setupUser) is what lets the effects of the render flush between the
+      // focus and the key, which is the case this test guards; without it the race does not always happen.
       const user = userEvent.setup();
       await openEdit({ tab: tabName });
 
@@ -322,7 +334,7 @@ describe('screen edit: keyboard', () => {
   );
 
   it('puts the focus on the new row also when the button is pressed with Space', async () => {
-    const user = userEvent.setup({ delay: null });
+    const user = setupUser();
     await openEdit({ tab: 'components' });
 
     await tabTo(user, 'Add navigation');
@@ -332,7 +344,7 @@ describe('screen edit: keyboard', () => {
   });
 
   it('adds, fills, moves between the controls of a row and removes it without the mouse', async () => {
-    const user = userEvent.setup({ delay: null });
+    const user = setupUser();
     const { api } = await openEdit({ tab: 'components' });
 
     await tabTo(user, 'Add navigation');
