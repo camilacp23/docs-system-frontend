@@ -6,7 +6,8 @@
 // The workflow actions of the status and the role (screenWorkflow, Table 61, S-25b) are in the header: buttons next to
 // Edit and the less frequent ones in the "…" menu. A change goes through PUT /screens/{id}/status with the ETag of the
 // detail; the answer and its new ETag replace the copy (no second read) and a toast says what happened. A 412 shows the
-// S-44 banner with Reload, INVALID_TRANSITION shows its text and reads the screen again. The actions are disabled with the
+// S-44 banner with Reload, INVALID_TRANSITION shows its text and reads the screen again, and TEMPLATE_INCOMPLETE opens
+// the edit page (`?tab=template&submit=1`), which says which template fields are missing (S-25a). The actions are disabled with the
 // reason when the application is archived or there is no connection (useWriteBlock); a Reader sees none.
 // Edit (Administrator and Developer) opens /screens/:id/edit; it is disabled with the reason for a screen in review, an
 // archived application or no connection (editBlockReason). Delete opens the confirmation with the impact; it is
@@ -82,6 +83,10 @@ export function ScreenDetailPage() {
     etag: screen.etag,
     apply: screen.apply,
     reload: screen.reload,
+    onTemplateIncomplete: () => {
+      // S-25a: the edit page shows what is missing, computed from the screen's own data (`submit=1` is only the signal).
+      void navigate(`/screens/${id ?? 0}/edit?tab=template&submit=1`);
+    },
     onDone: () => {
       // The button that was pressed may be gone (Submit after submitting): the focus goes to the title.
       titleRef.current?.focus();

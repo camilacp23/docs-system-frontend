@@ -14,6 +14,11 @@
 //    danger banner says "N fields need attention." with a link to each control of the tab (Table 58).
 //  - An APPROVED screen shows an info banner before saving: editing it returns it to In progress (D-81).
 //  - A screen IN_REVIEW opened by its URL shows the form; Save is disabled with the text of SCREEN_IN_REVIEW.
+//  - Coming from "Submit for review" with an incomplete template (`?submit=1`, S-25a): while the screen is In progress,
+//    a danger banner names the template fields without content ("Missing: Known issues, Risks.") and each one shows
+//    "Required to submit for review."; the first one gets the focus. They are computed from the screen's own data (and
+//    follow what the user types), not passed from the detail, so they survive a reload. Nothing is sent to review from
+//    here: the user saves, goes back to the detail and sends it again.
 // Save is disabled with the reason when the application is archived, the browser is offline or the screen is in review.
 // On success a toast says "Screen saved." (and its new status when it changed) and the page goes to the detail.
 // Another application selected from the shell goes back to the list (D-78). The breadcrumb reads "<name> / Edit".
@@ -22,7 +27,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 
-import { isApiError, type ApiError } from '../../api/ApiError';
+import { ApiError, isApiError } from '../../api/ApiError';
 import { getErrorMessage, getThrownMessage } from '../../api/messages';
 import { useApi } from '../../api/useApi';
 import { useApplication } from '../../application/useApplication';
@@ -79,6 +84,7 @@ import {
 } from './screenEditForm';
 import { mapScreenEditError } from './screenEditErrors';
 import { toTagStatus } from './screenLabels';
+import { hasContent, TEMPLATE_FIELDS, type TemplateKey } from './templateFields';
 import { ScreenTemplateFields } from './ScreenTemplateFields';
 import type { Screen } from './screenTypes';
 import { useScreen } from './useScreen';
@@ -88,6 +94,7 @@ const TAB_PREFIX = 'screen-edit';
 const CONFLICT_EXTRA = 'Your changes will be lost, so copy anything you need first.';
 const APPROVED_LEAD = 'This screen is approved.';
 const APPROVED_TEXT = 'Saving changes returns it to In progress.';
+const SUBMIT_REQUIRED_TEXT = 'Required to submit for review.';
 
 /** The read shape of the uses of a component: the contract types them as an intersection (pending in the contract). */
 function readUses(component: Screen['components'][number]) {
@@ -171,6 +178,21 @@ export function ScreenEditPage() {
       : draft !== null && draft.key === dataKey
         ? draft.values
         : valuesFromScreen(loaded);
+
+  // Coming from "Submit for review" (S-25a): the template fields without content, in template order.
+  const fromSubmit = search.get('submit') === '1';
+  const missingForSubmit: TemplateKey[] =
+    fromSubmit && values !== null && loaded?.documentationStatus === 'IN_PROGRESS'
+      ? TEMPLATE_FIELDS.filter((field) => !hasContent(values.template[field.key])).map(
+          (field) => field.key,
+        )
+      : [];
+  const focusMissing = useRef(fromSubmit);
+  useEffect(() => {
+    if (!focusMissing.current || loaded === null || tab !== 'template') return;
+    focusMissing.current = false;
+    focusFirstInvalid(formRef.current);
+  }, [loaded, tab]);
 
   const edit = (next: ScreenEditValues) => {
     setDraft({ key: dataKey, values: next });
@@ -374,6 +396,17 @@ export function ScreenEditPage() {
           {conflictMessage} {CONFLICT_EXTRA}
         </Banner>
       )}
+      {missingForSubmit.length > 0 && (
+        <Banner tone="danger">
+          {getErrorMessage(
+            new ApiError({
+              status: 422,
+              code: 'TEMPLATE_INCOMPLETE',
+              details: { fields: missingForSubmit },
+            }),
+          )}
+        </Banner>
+      )}
       {loaded.documentationStatus === 'APPROVED' && (
         <Banner tone="info" lead={APPROVED_LEAD}>
           {APPROVED_TEXT}
@@ -426,7 +459,19 @@ export function ScreenEditPage() {
           <ScreenTemplateFields
             values={values}
             onChange={edit}
-            errors={errors}
+            errors={
+              missingForSubmit.length === 0
+                ? errors
+                : {
+                    ...errors,
+                    template: {
+                      ...Object.fromEntries(
+                        missingForSubmit.map((key) => [key, SUBMIT_REQUIRED_TEXT]),
+                      ),
+                      ...errors.template,
+                    },
+                  }
+            }
             applicationName={applicationName}
             isAppContext={loaded.isAppContext}
             disabled={saving}
