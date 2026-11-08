@@ -1,8 +1,11 @@
 // ScreenDetailPage: /screens/:id (S-19, S-19r), read only. Header with the name (IBM Plex Mono), the status tag,
 // "Reserved" for App (OnStart), the author and the last update, and the link to the Miro diagram (another tab).
-// Three tabs: Template, Components & navigation and Variables & collections. The tab is part of the URL
-// (`?tab=components`, `?tab=links`; Template is the default and leaves no parameter), so a tab can be linked and
-// the back button returns to the previous one. Future to do and Comments are not drawn yet.
+// Four tabs: Template, Components & navigation, Variables & collections and Future to do (the Jira to-dos, with the
+// pending count as a badge). The tab is part of the URL (`?tab=components`, `?tab=links`, `?tab=todo`; Template is the
+// default and leaves no parameter), so a tab can be linked and the back button returns to the previous one. Comments is
+// not drawn yet. The pending to-dos shown in the badge and in the side card are the detail's `pendingSubtasks` until the
+// Future to do tab has read the tree; from then on they are the tree's count. (The ETag of the detail follows `updatedAt`,
+// which a Jira change does not move, so a read that revalidates could bring a count older than the tree.)
 // The workflow actions of the status and the role (screenWorkflow, Table 61, S-25b) are in the header: buttons next to
 // Edit and the less frequent ones in the "…" menu. A change goes through PUT /screens/{id}/status with the ETag of the
 // detail; the answer and its new ETag replace the copy (no second read) and a toast says what happened. A 412 shows the
@@ -20,7 +23,7 @@
 // The breadcrumb reads "Screens / <name>". Loading shows a skeleton after 300 ms; unknown id: "This screen doesn't
 // exist" (S-41a); other failures: the server error state with a retry. The read revalidates with the ETag (D-72).
 import { Monitor, Pencil, Trash2 } from 'lucide-react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 
 import { getErrorMessage } from '../../api/messages';
@@ -46,6 +49,7 @@ import { parseId } from '../variables/parseId';
 import { formatTimestamp } from '../variables/variableLabels';
 
 import { DeleteScreenModal } from './DeleteScreenModal';
+import { JiraTicketsTab } from './JiraTicketsTab';
 import { MiroLink } from './MiroLink';
 import { ScreenComponentsTab } from './ScreenComponentsTab';
 import { ScreenLinksTab } from './ScreenLinksTab';
@@ -53,6 +57,7 @@ import { ScreenTemplateTab } from './ScreenTemplateTab';
 import { ReviewModal } from './ReviewModal';
 import { WorkflowButtons, WorkflowMenu } from './ScreenWorkflowControls';
 import { deleteBlockReason, editBlockReason } from './screenActionBlock';
+import { FUTURE_TODO_LABEL } from './jiraTree';
 import { RESERVED_LABEL, toTagStatus } from './screenLabels';
 import { workflowActions, workflowToast, type WorkflowAction } from './screenWorkflow';
 import { useScreen } from './useScreen';
@@ -61,8 +66,8 @@ import { useScreenStatusChange } from './useScreenStatusChange';
 const LIST_PATH = '/screens';
 const TAB_PREFIX = 'screen';
 
-type TabKey = 'template' | 'components' | 'links';
-const TAB_KEYS: readonly TabKey[] = ['template', 'components', 'links'];
+type TabKey = 'template' | 'components' | 'links' | 'todo';
+const TAB_KEYS: readonly TabKey[] = ['template', 'components', 'links', 'todo'];
 
 export function ScreenDetailPage() {
   const { id: rawId } = useParams();
@@ -73,6 +78,11 @@ export function ScreenDetailPage() {
   const canWrite = user !== null && user.role !== 'READER';
   const { reason: writeReason } = useWriteBlock();
   const [deleting, setDeleting] = useState(false);
+  // The pending to-dos the Future to do tab computed from the tree (null until the tab has been opened).
+  const [livePending, setLivePending] = useState<number | null>(null);
+  const onPendingChange = useCallback((count: number) => {
+    setLivePending(count);
+  }, []);
 
   const tab: TabKey = TAB_KEYS.find((key) => key === search.get('tab')) ?? 'template';
   const screen = useScreen(id);
@@ -139,6 +149,7 @@ export function ScreenDetailPage() {
     ) : null;
   }
 
+  const pendingSubtasks = livePending ?? loaded.pendingSubtasks;
   const blockReason = deleteBlockReason(loaded, writeReason);
   const editReason = editBlockReason(loaded, writeReason);
   const actions = workflowActions(loaded.documentationStatus, user?.role);
@@ -263,13 +274,23 @@ export function ScreenDetailPage() {
           { key: 'template', label: 'Template' },
           { key: 'components', label: 'Components & navigation' },
           { key: 'links', label: 'Variables & collections' },
+          {
+            key: 'todo',
+            label: FUTURE_TODO_LABEL,
+            count: pendingSubtasks > 0 ? pendingSubtasks : undefined,
+          },
         ]}
       />
 
       <div {...tabPanelProps(TAB_PREFIX, tab)}>
-        {tab === 'template' && <ScreenTemplateTab screen={loaded} />}
+        {tab === 'template' && (
+          <ScreenTemplateTab screen={loaded} pendingSubtasks={pendingSubtasks} />
+        )}
         {tab === 'components' && <ScreenComponentsTab screen={loaded} />}
         {tab === 'links' && <ScreenLinksTab screen={loaded} />}
+        {tab === 'todo' && (
+          <JiraTicketsTab screen={loaded} canWrite={canWrite} onPendingChange={onPendingChange} />
+        )}
       </div>
 
       {reviewing !== null && (

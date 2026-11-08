@@ -3,8 +3,10 @@
 // their text (OnStart in IBM Plex Mono, "Not documented yet." when a field has no content) and the side card with
 // the progress "n of 7", the status, the author, the Miro link and the elements the screen is linked to. A field
 // has content when it is not null and not empty after trimming (D-81, the rule of the server).
-// The pending to-dos and the comments of the frame belong to the tabs that are not drawn yet.
-// Props: screen.
+// The side card has the "Pending to-dos" row of the frame ("3 in Jira", "—" when none); the comments row belongs to the
+// Comments tab, which is not drawn yet.
+// Props: screen, pendingSubtasks (the count to show: the detail's `pendingSubtasks`, or the one the Future to do tab computed
+// from the tree once it has been read).
 import { Check, Circle, FileText, Layers, Link2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -40,7 +42,13 @@ function unique(names: readonly string[]): string[] {
   return [...new Set(names)];
 }
 
-export function ScreenTemplateTab({ screen }: { screen: Screen }) {
+export function ScreenTemplateTab({
+  screen,
+  pendingSubtasks,
+}: {
+  screen: Screen;
+  pendingSubtasks: number;
+}) {
   const done = templateProgress(screen.template);
   const total = TEMPLATE_FIELDS.length;
   const missing = TEMPLATE_FIELDS.filter((field) => !hasContent(screen.template[field.key])).map(
@@ -175,6 +183,9 @@ export function ScreenTemplateTab({ screen }: { screen: Screen }) {
             <Row label="Author">{screen.author.name}</Row>
             <Row label="Miro diagram">
               {screen.miroLink === null ? '—' : <MiroLink href={screen.miroLink}>Open</MiroLink>}
+            </Row>
+            <Row label="Pending to-dos">
+              {pendingSubtasks > 0 ? `${pendingSubtasks} in Jira` : '—'}
             </Row>
           </dl>
           <section aria-label="Linked elements" className="flex flex-col gap-2">

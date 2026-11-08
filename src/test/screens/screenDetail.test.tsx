@@ -1,6 +1,6 @@
-// Screen detail (S-19, S-19r): header, the Miro link, the three tabs in the URL, the template with its progress,
+// Screen detail (S-19, S-19r): header, the Miro link, the tabs in the URL, the template with its progress,
 // components and navigation, variables and collections with their origin rows, loading and error states, the
-// breadcrumb and the Reader view. Future to do and Comments are not drawn yet.
+// breadcrumb and the Reader view. Comments is not drawn yet; Future to do has its own file (screenJiraTab).
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
@@ -80,12 +80,24 @@ describe('screen detail: header', () => {
     );
   });
 
-  it('does not draw Future to do, Comments or Add to-do, which belong to later tasks', async () => {
+  it('draws Future to do with the pending count, and no Comments tab yet', async () => {
     await open();
 
-    expect(screen.queryByRole('tab', { name: /Future to do/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /^Future to do\s*3$/ })).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: /Comments/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Add to-do/ })).not.toBeInTheDocument();
+  });
+
+  it('leaves the count out of the Future to do tab when nothing is pending', async () => {
+    await renderScreens({ path: '/screens/13' });
+    await screen.findByRole('heading', { name: 'Busqueda', level: 1 });
+
+    expect(screen.getByRole('tab', { name: 'Future to do' })).toBeInTheDocument();
+    expect(screen.getByText('Pending to-dos').nextElementSibling).toHaveTextContent('—');
+  });
+
+  it('shows the pending to-dos in the side card', async () => {
+    await open();
+    expect(screen.getByText('Pending to-dos').nextElementSibling).toHaveTextContent('3 in Jira');
   });
 });
 
