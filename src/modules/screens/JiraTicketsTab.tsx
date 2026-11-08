@@ -8,9 +8,13 @@
 // Degraded state (S-23b, NFR-14): when the last refresh could not complete (`sync.stale`) or Jira is not available
 // (`sync.jiraAvailable` false) a warning banner says so with the date of the saved copy and the Epic gets the "Stale" tag.
 // It is never a global alarm: the rest of the screen keeps working. Without an Epic the tab is an empty state.
+// "Add to-do" (Administrator and Developer) opens AddTodoModal. It is disabled with the reason when the application is
+// archived, there is no connection or Jira is not available (the last availability the shell knows, D-100); a screen in
+// review can have to-dos (D-92). A creation puts the answer in the tree, draws the new Subtask with a light background,
+// says so in a toast with a link to the issue (P-04) and reads the tree again in the background.
 // Loading shows a skeleton after 300 ms; a failure of the first read shows the server error state with a retry.
-import { ListTodo, RefreshCw } from 'lucide-react';
-import { useEffect, useId } from 'react';
+import { ListTodo, Plus, RefreshCw } from 'lucide-react';
+import { useEffect, useId, useState } from 'react';
 
 import {
   Banner,
@@ -25,21 +29,28 @@ import {
   useToast,
 } from '../../components/ui';
 import { ARCHIVED_WRITE_REASON, useWriteBlock } from '../../hooks/useWriteBlock';
+import { useJiraStatus } from '../../layout/jiraStatusContext';
 import { countText, formatTimestamp } from '../variables/variableLabels';
 
+import { AddTodoModal } from './AddTodoModal';
 import { JiraLink } from './JiraLink';
 import { JiraTicketTable } from './JiraTicketTable';
 import {
+  ADD_TODO_LABEL,
+  addTodoBlockReason,
   EMPTY_TEXT,
   EMPTY_TITLE,
   FUTURE_TODO_LABEL,
   JIRA_DOWN_LEAD,
+  mergeCreated,
+  OPEN_IN_JIRA_LABEL,
   pendingCount,
+  safeJiraUrl,
   REFRESH_ARCHIVED_REASON,
   REFRESH_LABEL,
   STALE_LABEL,
 } from './jiraTree';
-import type { JiraTree } from './jiraTypes';
+import type { JiraCreated, JiraTree } from './jiraTypes';
 import type { Screen } from './screenTypes';
 import { useJiraTickets } from './useJiraTickets';
 
@@ -63,6 +74,10 @@ export function JiraTicketsTab({ screen, canWrite, onPendingChange }: JiraTicket
   const { reason: writeReason } = useWriteBlock();
   const toast = useToast();
   const refreshReasonId = useId();
+  const addReasonId = useId();
+  const { status: jiraStatus } = useJiraStatus();
+  const [adding, setAdding] = useState(false);
+  const [highlightId, setHighlightId] = useState<number | null>(null);
   const { showSkeleton } = useDelayedLoading(jira.loading && jira.tree === null);
   const { tree } = jira;
 
@@ -98,6 +113,42 @@ export function JiraTicketsTab({ screen, canWrite, onPendingChange }: JiraTicket
   };
 
   const epic = tree.epic;
+  const addReason = addTodoBlockReason(writeReason, jiraStatus === 'unavailable');
+  const onCreated = (created: JiraCreated) => {
+    jira.apply(mergeCreated(tree, created));
+    setHighlightId(created.subtask.id);
+    setAdding(false);
+    const href = safeJiraUrl(created.subtask.url);
+    toast.show({
+      message: `${created.subtask.jiraIssueKey} created.`,
+      action: href === null ? undefined : { label: OPEN_IN_JIRA_LABEL, href, external: true },
+    });
+    // The answer is the tree for now; the read brings the state Jira reported after the creation.
+    jira.reload();
+  };
+  const addButton = (
+    <>
+      <Button
+        variant="primary"
+        size={epic === null ? 'md' : 'sm'}
+        disabled={addReason !== null}
+        title={addReason ?? undefined}
+        aria-describedby={addReason === null ? undefined : addReasonId}
+        iconLeft={<Plus aria-hidden="true" size={14} strokeWidth={ICON_STROKE_WIDTH} />}
+        onClick={() => {
+          setAdding(true);
+        }}
+      >
+        {ADD_TODO_LABEL}
+      </Button>
+      {addReason !== null && (
+        <span id={addReasonId} className="sr-only">
+          {addReason}
+        </span>
+      )}
+    </>
+  );
+
   return (
     <div className="flex flex-col gap-4">
       {degraded && (
@@ -149,6 +200,7 @@ export function JiraTicketsTab({ screen, canWrite, onPendingChange }: JiraTicket
                   {refreshReason}
                 </span>
               )}
+              {epic !== null && addButton}
             </>
           ) : undefined
         }
@@ -159,10 +211,11 @@ export function JiraTicketsTab({ screen, canWrite, onPendingChange }: JiraTicket
             icon={<ListTodo strokeWidth={ICON_STROKE_WIDTH} />}
             title={EMPTY_TITLE}
             description={EMPTY_TEXT}
+            action={canWrite ? addButton : undefined}
           />
         ) : (
           <>
-            <JiraTicketTable tree={tree} highlightId={null} />
+            <JiraTicketTable tree={tree} highlightId={highlightId} />
             <p className="border-t border-divider px-5 py-3 text-small text-ink-500">
               {countText(pending ?? 0, 'pending to-do')}
               {tree.sync.lastSyncedAt !== null &&
@@ -171,6 +224,17 @@ export function JiraTicketsTab({ screen, canWrite, onPendingChange }: JiraTicket
           </>
         )}
       </SectionCard>
+      {adding && (
+        <AddTodoModal
+          screen={screen}
+          tree={tree}
+          onClose={() => {
+            setAdding(false);
+          }}
+          onCreated={onCreated}
+          onReloadTree={jira.reload}
+        />
+      )}
     </div>
   );
 }

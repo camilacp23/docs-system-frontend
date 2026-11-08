@@ -18,6 +18,15 @@ export const EMPTY_TITLE = 'No to-dos yet';
 export const EMPTY_TEXT =
   "To-dos are Jira Subtasks. The first one creates this screen's Epic in Jira.";
 
+/**
+ * Why "Add to-do" is disabled right now, if it is: the write block first (archived application, no connection: what the
+ * server would answer first), then Jira not responding. Usability only: the API stays the authority.
+ */
+export function addTodoBlockReason(writeReason: string | null, jiraDown: boolean): string | null {
+  if (writeReason !== null) return writeReason;
+  return jiraDown ? JIRA_ADD_UNAVAILABLE_REASON : null;
+}
+
 /** The tag of a Subtask for its Jira status category (the tones of the frame S-23: grey, blue, green). */
 export const CATEGORY_TAG: Record<JiraStatusCategory, { label: string; tone: TagTone }> = {
   TO_DO: { label: 'To do', tone: 'neutral' },
