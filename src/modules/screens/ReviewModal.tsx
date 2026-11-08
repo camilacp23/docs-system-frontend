@@ -24,8 +24,8 @@ import { useWriteBlock } from '../../hooks/useWriteBlock';
 import type { Screen } from './screenTypes';
 
 const COMMENT_MAX_LENGTH = 4000;
-const COMMENT_HELP_RETURN = 'It is posted on the screen’s comments.';
-const COMMENT_HELP_APPROVE = 'Posted on the screen’s comments.';
+const COMMENT_HELP_RETURN = "It is posted on the screen's comments.";
+const COMMENT_HELP_APPROVE = "Posted on the screen's comments.";
 
 interface ReviewModalProps {
   screen: { id: number; name: string };

@@ -99,7 +99,7 @@ describe('Approve (S-37c)', () => {
       ),
     ).toBeVisible();
     expect(dialog.getByRole('textbox', { name: 'Comment (optional)' })).toHaveFocus();
-    expect(dialog.getByText('Posted on the screen’s comments.')).toBeVisible();
+    expect(dialog.getByText("Posted on the screen's comments.")).toBeVisible();
     expect(dialog.getByRole('button', { name: 'Cancel' })).toBeEnabled();
     expect(dialog.getByRole('button', { name: 'Approve' })).toBeEnabled();
   });
@@ -193,7 +193,7 @@ describe('Return (S-37b)', () => {
     expect(field).toHaveFocus();
     expect(field).toBeRequired();
     expect(field).toBeValid();
-    expect(dialog.getByText('It is posted on the screen’s comments.')).toBeVisible();
+    expect(dialog.getByText("It is posted on the screen's comments.")).toBeVisible();
     expect(dialog.getByText('0/4000')).toBeVisible();
     expect(field).toHaveAttribute('maxlength', '4000');
   });
