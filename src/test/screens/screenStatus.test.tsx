@@ -334,11 +334,13 @@ describe('errors of /status', () => {
 
     await user.click(screen.getByRole('button', { name: 'Mark in progress' }));
 
-    const banner = await screen.findByRole('alert');
-    expect(banner).toHaveTextContent(
+    // Found by its text, not as "the" alert: other alerts of the shell must not be mistaken for it.
+    const text = await screen.findByText(
       'Someone else saved changes to this screen after you opened it. Reload to see their version.',
     );
-    await user.click(within(banner).getByRole('button', { name: 'Reload' }));
+    const banner = text.closest<HTMLElement>('[role="alert"]');
+    expect(banner).not.toBeNull();
+    await user.click(within(banner as HTMLElement).getByRole('button', { name: 'Reload' }));
 
     await waitFor(() => {
       expect(button('Submit for review')).toBeInTheDocument();
