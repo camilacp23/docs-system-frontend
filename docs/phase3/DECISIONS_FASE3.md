@@ -61,6 +61,10 @@ Aprobadas por la autora el 18 de octubre de 2026. Deben incorporarse al SDD v1.1
 |---|---|---|
 | Color por tipo de elemento | El SDD pide "un color fijo por tipo de elemento" (§7.3.2 Tabla 54 y fila 2 de los cambios de diseño), pero el Figma no lo define (revisados S-10, S-27, S-31). | F-01: `ElementTypeIcon` solo con forma (monitor, braces, database, box) y color neutro heredado del texto. Cuando se defina, se añaden tokens `element-*` en `theme.css` y se aplican en un solo componente. |
 
+## Pendiente de configuración de herramientas
+
+- **Pruebas en CI (Vitest).** El runner de repositorios privados (ubuntu-24.04) tiene 2 procesadores, por lo que `vitest.config.ts` usa 2 workers cuando `CI` está definido (3 en local). Aun así, el render completo de la aplicación medido bajo carga tardó más que el valor por defecto de `findBy` / `waitFor`, y `src/test/setup.ts` amplía `asyncUtilTimeout` de Testing Library solo en CI. En local queda el valor por defecto y `testTimeout` no se toca. Revisar ambos ajustes si se cambia el runner.
+
 ## Pendiente de copiar al repositorio del backend
 
 D-78 (F-06, 24 de octubre de 2026), D-79 (F-07, 25 de octubre de 2026), D-98 y D-99 (F-09, 6 de noviembre de 2026) y D-100 (F-12, 7 de noviembre de 2026) se decidieron en el frontend y todavía no están en el `DECISIONS_FASE3.md` del backend: copiarlas allí **al cierre de la fase**, junto con su incorporación al SDD v1.1 (Tabla 70).
