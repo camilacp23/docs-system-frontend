@@ -68,12 +68,14 @@ async function menuItems(user: ReturnType<typeof setupUser>): Promise<string[]> 
   return names;
 }
 
-// The decisions of the review (Approve, Return) have their own tests (screenReview.test.tsx).
+// What the decisions do is in screenReview.test.tsx; here only who sees them.
 const WORKFLOW_BUTTONS = [
   'Start draft',
   'Mark in progress',
   'Submit for review',
   'Withdraw from review',
+  'Return',
+  'Approve',
 ];
 
 describe('workflow actions by status and role', () => {
@@ -115,7 +117,7 @@ describe('workflow actions by status and role', () => {
     {
       status: 'IN_REVIEW',
       role: 'ADMINISTRATOR',
-      buttons: [],
+      buttons: ['Return', 'Approve'],
       menu: ['Withdraw from review'],
     },
     {

@@ -1,7 +1,7 @@
 // useScreenStatusChange: sends a status change of a screen (PUT /screens/{id}/status, with If-Match = the ETag of
 // the detail) and says what happened.
 // useScreenStatusChange({ screen, etag, apply, reload, onTemplateIncomplete?, onDone? }) -> { running, problem,
-//   clearProblem, run(action) }
+//   clearProblem, showProblem(text), run(action) }
 //   running   the key of the action in flight (every action is disabled meanwhile, so two cannot overlap)
 //   problem   what the page shows when the change did not happen: { kind: 'conflict' | 'message', text }, the text from
 //             the catalog by `code` (never the server message)
@@ -91,5 +91,10 @@ export function useScreenStatusChange(options: Options) {
     setProblem(null);
   }, []);
 
-  return { running, problem, clearProblem, run };
+  /** Lets another part of the page (the review modal) report what happened in the same banner. */
+  const showProblem = useCallback((text: string) => {
+    setProblem({ kind: 'message', text });
+  }, []);
+
+  return { running, problem, clearProblem, showProblem, run };
 }

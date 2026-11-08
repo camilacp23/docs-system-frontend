@@ -9,6 +9,8 @@
 // S-44 banner with Reload, INVALID_TRANSITION shows its text and reads the screen again, and TEMPLATE_INCOMPLETE opens
 // the edit page (`?tab=template&submit=1`), which says which template fields are missing (S-25a). The actions are disabled with the
 // reason when the application is archived or there is no connection (useWriteBlock); a Reader sees none.
+// Approve and Return (the Administrator, in review) open ReviewModal (S-37c, S-37b); the answer replaces the copy like
+// any other change, and NOT_IN_REVIEW shows its text and reads the screen again.
 // Edit (Administrator and Developer) opens /screens/:id/edit; it is disabled with the reason for a screen in review, an
 // archived application or no connection (editBlockReason). Delete opens the confirmation with the impact; it is
 // disabled with the reason for App (OnStart) and for the same cases (deleteBlockReason); after deleting, the page goes
@@ -18,9 +20,10 @@
 // The breadcrumb reads "Screens / <name>". Loading shows a skeleton after 300 ms; unknown id: "This screen doesn't
 // exist" (S-41a); other failures: the server error state with a retry. The read revalidates with the ETag (D-72).
 import { Monitor, Pencil, Trash2 } from 'lucide-react';
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 
+import { getErrorMessage } from '../../api/messages';
 import { useFollowElementApplication } from '../../application/useFollowElementApplication';
 import {
   Banner,
@@ -34,6 +37,7 @@ import {
   Tag,
   tabPanelProps,
   useDelayedLoading,
+  useToast,
 } from '../../components/ui';
 import { useWriteBlock } from '../../hooks/useWriteBlock';
 import { useBreadcrumbLabel } from '../../layout/breadcrumbContext';
@@ -46,10 +50,11 @@ import { MiroLink } from './MiroLink';
 import { ScreenComponentsTab } from './ScreenComponentsTab';
 import { ScreenLinksTab } from './ScreenLinksTab';
 import { ScreenTemplateTab } from './ScreenTemplateTab';
+import { ReviewModal } from './ReviewModal';
 import { WorkflowButtons, WorkflowMenu } from './ScreenWorkflowControls';
 import { deleteBlockReason, editBlockReason } from './screenActionBlock';
 import { RESERVED_LABEL, toTagStatus } from './screenLabels';
-import { workflowActions, type WorkflowAction } from './screenWorkflow';
+import { workflowActions, workflowToast, type WorkflowAction } from './screenWorkflow';
 import { useScreen } from './useScreen';
 import { useScreenStatusChange } from './useScreenStatusChange';
 
@@ -73,6 +78,13 @@ export function ScreenDetailPage() {
   const screen = useScreen(id);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const workflowReasonId = useId();
+  const toast = useToast();
+  const [reviewing, setReviewing] = useState<'APPROVE' | 'RETURN' | null>(null);
+  // After a decision the button that opened the modal is gone: the focus goes to the title once the modal has closed.
+  const [focusTitle, setFocusTitle] = useState(0);
+  useEffect(() => {
+    if (focusTitle > 0) titleRef.current?.focus();
+  }, [focusTitle]);
 
   const loaded = screen.status === 'ready' ? screen.data : null;
   useFollowElementApplication(loaded?.applicationId ?? null, LIST_PATH);
@@ -129,10 +141,7 @@ export function ScreenDetailPage() {
 
   const blockReason = deleteBlockReason(loaded, writeReason);
   const editReason = editBlockReason(loaded, writeReason);
-  // Approve and Return (a decision of the review, with its own modal) are not drawn yet.
-  const actions: WorkflowAction[] = workflowActions(loaded.documentationStatus, user?.role).filter(
-    (action) => action.kind === 'status',
-  );
+  const actions = workflowActions(loaded.documentationStatus, user?.role);
   const controls = {
     actions,
     reason: writeReason,
@@ -140,6 +149,10 @@ export function ScreenDetailPage() {
     running: change.running,
     onRun: (action: WorkflowAction) => {
       if (action.kind === 'status') void change.run(action);
+      else {
+        change.clearProblem();
+        setReviewing(action.decision);
+      }
     },
   };
 
@@ -258,6 +271,29 @@ export function ScreenDetailPage() {
         {tab === 'components' && <ScreenComponentsTab screen={loaded} />}
         {tab === 'links' && <ScreenLinksTab screen={loaded} />}
       </div>
+
+      {reviewing !== null && (
+        <ReviewModal
+          screen={loaded}
+          decision={reviewing}
+          onClose={() => {
+            setReviewing(null);
+          }}
+          onReviewed={(reviewed, etag) => {
+            screen.apply(reviewed, etag);
+            toast.show({
+              message: workflowToast(reviewing === 'APPROVE' ? 'approve' : 'return', loaded.name),
+            });
+            setReviewing(null);
+            setFocusTitle((count) => count + 1);
+          }}
+          onRefused={(error) => {
+            setReviewing(null);
+            change.showProblem(getErrorMessage(error, { element: 'screen' }) ?? '');
+            screen.reload();
+          }}
+        />
+      )}
 
       {deleting && (
         <DeleteScreenModal
