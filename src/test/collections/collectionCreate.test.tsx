@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../api/ApiError';
 import { makeApplication } from '../helpers/renderApp';
 import { renderCollections } from '../helpers/renderCollections';
+import { setupUser } from '../helpers/setupUser';
 
 /** The page once the selected application is known (the list is rebuilt when it becomes known). */
 async function appReady() {
@@ -66,7 +67,7 @@ describe('New collection modal', () => {
   });
 
   it('checks only the rules of the contract and focuses the first error', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await renderCollections();
     const dialog = await openModal(user);
     const name = () => dialog.getByLabelText(/^Name\b(?! of)/);
@@ -94,8 +95,32 @@ describe('New collection modal', () => {
     expect(api.callsTo('POST /collections')).toHaveLength(0);
   });
 
-  it('sends the complete POST, says it was created and refreshes the list and the counts', async () => {
+  // The only test of this form that types key by key (the others paste: how fast a text is typed is not their subject).
+  it('follows the name key by key: the counter changes with each key and the format error is gone once it is typed right', async () => {
     const user = userEvent.setup();
+    const { api } = await renderCollections();
+    const dialog = await openModal(user);
+    const name = () => dialog.getByLabelText(/^Name\b(?! of)/);
+
+    await user.type(name(), '9bad');
+    expect(dialog.getByText('4/150')).toBeInTheDocument();
+    await user.click(dialog.getByRole('button', { name: 'Create collection' }));
+    expect(await dialog.findByText("Name isn't in a valid format.")).toBeInTheDocument();
+    expect(name()).toHaveAttribute('aria-invalid', 'true');
+
+    await user.clear(name());
+    await user.type(name(), 'colEscrita');
+    expect(dialog.getByText('10/150')).toBeInTheDocument();
+    await user.click(dialog.getByRole('button', { name: 'Create collection' }));
+
+    await waitFor(() => {
+      expect(api.callsTo('POST /collections')).toHaveLength(1);
+    });
+    expect(api.callsTo('POST /collections')[0]?.options.body).toMatchObject({ name: 'colEscrita' });
+  });
+
+  it('sends the complete POST, says it was created and refreshes the list and the counts', async () => {
+    const user = setupUser();
     const { api, router } = await renderCollections();
     const dialog = await openModal(user);
 

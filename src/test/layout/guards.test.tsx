@@ -19,12 +19,13 @@ const FORBIDDEN: Record<Role, string[]> = {
     '/admin/applications',
     '/variables/5/edit',
     '/collections/5/edit',
+    '/screens/5/edit',
   ],
 };
 
 /** Modules that already have their own pages: the placeholder text no longer applies to them. */
 const hasOwnPage = (path: string) =>
-  path.startsWith('/variables') || path.startsWith('/collections');
+  path.startsWith('/variables') || path.startsWith('/collections') || path.startsWith('/screens');
 
 const PROTECTED_PATHS = APP_ROUTES.map((route) => route.path.replace(':id', '5'));
 

@@ -1,10 +1,13 @@
 // useApiResource: loads one read (GET) for a component and keeps its result.
-// useApiResource(key, fetcher, enabled = true) -> { status, data, etag, error, loading, reload }
+// useApiResource(key, fetcher, enabled = true) -> { status, data, etag, error, loading, reload, apply }
 //   key      string that identifies the request (the serialized parameters). A new key starts a new load.
 //   fetcher  (signal) => Promise<{ body, etag }>; the latest function is used, it need not be memoized.
 //   enabled  false keeps the hook idle (loading stays true until it is enabled).
 // Races: each load owns an AbortController. A change of key, a reload or an unmount aborts the load in flight, and
 // its answer is discarded if it still arrives, so a slow answer of a previous filter never replaces the current one.
+// apply(body, etag) puts an answer received elsewhere (the response of a write that returns the resource) in place of
+// the copy, with its ETag, without another read: status becomes 'ready' and the error, if any, is cleared. A load
+// still in flight for the same key is aborted, because it started before the write and could bring the old copy.
 // `data` is the last answer received, also while a new load runs (`loading` tells it apart), so a list can stay on
 // screen without flashing; use `status` for the first load and for failures.
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -24,6 +27,7 @@ export interface ApiResource<T> {
   error: ApiError | null;
   loading: boolean;
   reload: () => void;
+  apply: (body: T, etag: string | null) => void;
 }
 
 interface Settled<T> {
@@ -42,14 +46,18 @@ export function useApiResource<T>(
   const [settled, setSettled] = useState<Settled<T> | null>(null);
   const fetcherRef = useRef(fetcher);
   const requestKey = `${key}#${tick}`;
+  const requestKeyRef = useRef(requestKey);
+  const controllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     fetcherRef.current = fetcher;
+    requestKeyRef.current = requestKey;
   });
 
   useEffect(() => {
     if (!enabled) return;
     const controller = new AbortController();
+    controllerRef.current = controller;
     fetcherRef.current(controller.signal).then(
       (answer) => {
         if (controller.signal.aborted) return;
@@ -77,6 +85,11 @@ export function useApiResource<T>(
     setTick((current) => current + 1);
   }, []);
 
+  const apply = useCallback((body: T, etag: string | null) => {
+    controllerRef.current?.abort();
+    setSettled({ requestKey: requestKeyRef.current, data: body, etag, error: null });
+  }, []);
+
   const current = enabled && settled?.requestKey === requestKey ? settled : null;
   return {
     status: current === null ? 'loading' : current.error ? 'error' : 'ready',
@@ -85,5 +98,6 @@ export function useApiResource<T>(
     error: current?.error ?? null,
     loading: current === null,
     reload,
+    apply,
   };
 }

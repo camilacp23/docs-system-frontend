@@ -12,6 +12,9 @@ import { ModulePlaceholder } from '../../modules/ModulePlaceholder';
 import { CollectionEditPage } from '../../modules/collections/CollectionEditPage';
 import { CollectionDetailPage } from '../../modules/collections/CollectionDetailPage';
 import { CollectionsListPage } from '../../modules/collections/CollectionsListPage';
+import { ScreenDetailPage } from '../../modules/screens/ScreenDetailPage';
+import { ScreenEditPage } from '../../modules/screens/ScreenEditPage';
+import { ScreensListPage } from '../../modules/screens/ScreensListPage';
 import { VariableEditPage } from '../../modules/variables/VariableEditPage';
 import { VariableDetailPage } from '../../modules/variables/VariableDetailPage';
 import { VariablesListPage } from '../../modules/variables/VariablesListPage';
@@ -29,6 +32,9 @@ const PAGES: Record<string, ReactNode> = {
   '/collections': <CollectionsListPage />,
   '/collections/:id': <CollectionDetailPage />,
   '/collections/:id/edit': <CollectionEditPage />,
+  '/screens': <ScreensListPage />,
+  '/screens/:id': <ScreenDetailPage />,
+  '/screens/:id/edit': <ScreenEditPage />,
 };
 
 const pageRoutes: RouteObject[] = APP_ROUTES.map((route) => ({

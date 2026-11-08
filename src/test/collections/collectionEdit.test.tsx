@@ -12,6 +12,7 @@ import type { CollectionWrite } from '../../modules/collections/collectionTypes'
 import { makeCollection, makeField } from '../helpers/fakeCollectionsApi';
 import { makeApplication } from '../helpers/renderApp';
 import { renderCollections, type RenderCollectionsOptions } from '../helpers/renderCollections';
+import { setupUser } from '../helpers/setupUser';
 
 type User = ReturnType<typeof userEvent.setup>;
 type Body = Required<CollectionWrite>;
@@ -158,22 +159,28 @@ describe('edit collection: the form', () => {
     await render();
     await ready();
 
-    const options = within(screen.getByLabelText('Variable (assignment 1)'))
-      .getAllByRole('option')
-      .map((option) => option.textContent);
-    expect(options).toEqual([
-      'Choose a variable',
-      'gFiltroActivo',
-      'gRegistroSel',
-      'gUsuario',
-      'locMostrarDetalle',
-      'locOrden',
-    ]);
-    expect(
-      within(screen.getByLabelText('Screen (assignment 1)'))
-        .getAllByRole('option')
-        .map((option) => option.textContent),
-    ).toEqual(['Choose a screen', 'App (OnStart)', 'Inicio', 'Detalle']);
+    // The options come from their own reads, which can finish after the form is on screen.
+    await waitFor(() => {
+      expect(
+        within(screen.getByLabelText('Variable (assignment 1)'))
+          .getAllByRole('option')
+          .map((option) => option.textContent),
+      ).toEqual([
+        'Choose a variable',
+        'gFiltroActivo',
+        'gRegistroSel',
+        'gUsuario',
+        'locMostrarDetalle',
+        'locOrden',
+      ]);
+    });
+    await waitFor(() => {
+      expect(
+        within(screen.getByLabelText('Screen (assignment 1)'))
+          .getAllByRole('option')
+          .map((option) => option.textContent),
+      ).toEqual(['Choose a screen', 'App (OnStart)', 'Inicio', 'Detalle']);
+    });
   });
 });
 
@@ -261,8 +268,33 @@ describe('edit collection: the PUT is the complete representation', () => {
     expect(sentBody(api)).toMatchObject({ fields: [], variableAssignments: [], derivedFrom: [] });
   });
 
-  it('keeps the id of an edited item and sends new items without id, never a client key', async () => {
+  // The only test of this form that types key by key (the others paste: how fast a text is typed is not their subject).
+  it('follows the name key by key: a format error is shown on it and the PUT carries the name typed right', async () => {
     const user = userEvent.setup();
+    const { api } = await render();
+    const { save } = await ready();
+    const name = () => screen.getByLabelText(/^Name\b(?! of)/);
+
+    await user.clear(name());
+    await user.type(name(), '9bad');
+    await user.click(save);
+    expect(await screen.findByText("Name isn't in a valid format.")).toBeInTheDocument();
+    expect(name()).toHaveFocus();
+    expect(name()).toHaveAttribute('aria-invalid', 'true');
+    expect(putCalls(api)).toHaveLength(0);
+
+    await user.clear(name());
+    await user.type(name(), 'colEscrita');
+    await user.click(save);
+
+    await waitFor(() => {
+      expect(putCalls(api)).toHaveLength(1);
+    });
+    expect(sentBody(api).name).toBe('colEscrita');
+  });
+
+  it('keeps the id of an edited item and sends new items without id, never a client key', async () => {
+    const user = setupUser();
     const { api } = await render();
     const { save } = await ready();
     await waitFor(() => {

@@ -1,5 +1,5 @@
 // useApiResource: result states, reload, abort on unmount and the race between two loads (a slow answer of an
-// old key never replaces the answer of the current one).
+// old key never replaces the answer of the current one) and apply (an answer received elsewhere replaces the copy).
 import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -163,5 +163,89 @@ describe('useApiResource', () => {
     });
 
     expect(screen.getByText('ready')).toBeInTheDocument();
+  });
+});
+
+describe('useApiResource apply', () => {
+  it('puts the given body and ETag in place of the copy without another read', async () => {
+    const fetcher = vi.fn(() => Promise.resolve(answer('one', 'W/"1"')));
+    const { result } = renderHook(() => useApiResource('a', fetcher));
+    await waitFor(() => {
+      expect(result.current.status).toBe('ready');
+    });
+
+    act(() => {
+      result.current.apply('two', 'W/"2"');
+    });
+
+    expect(result.current.data).toBe('two');
+    expect(result.current.etag).toBe('W/"2"');
+    expect(result.current.status).toBe('ready');
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears a previous error and becomes ready', async () => {
+    const { result } = renderHook(() =>
+      useApiResource<string>('a', () => Promise.reject(new ApiError({ status: 500, code: 'X' }))),
+    );
+    await waitFor(() => {
+      expect(result.current.status).toBe('error');
+    });
+
+    act(() => {
+      result.current.apply('fresh', 'W/"3"');
+    });
+
+    expect(result.current.status).toBe('ready');
+    expect(result.current.error).toBeNull();
+    expect(result.current.data).toBe('fresh');
+  });
+
+  it('aborts a load in flight and ignores its late answer', async () => {
+    let call!: Deferred<ResourceAnswer<string>>;
+    const { result } = renderHook(() =>
+      useApiResource('a', (signal) => {
+        call = deferred<ResourceAnswer<string>>(signal);
+        return call.promise;
+      }),
+    );
+
+    act(() => {
+      result.current.apply('written', 'W/"9"');
+    });
+    expect(call.signal.aborted).toBe(true);
+    await act(async () => {
+      call.resolve(answer('stale read', 'W/"1"'));
+      await call.promise;
+    });
+
+    expect(result.current.data).toBe('written');
+    expect(result.current.etag).toBe('W/"9"');
+  });
+
+  it('keeps the applied copy through a reload that fails', async () => {
+    let fail = false;
+    const { result } = renderHook(() =>
+      useApiResource('a', () =>
+        fail
+          ? Promise.reject(new ApiError({ status: 500, code: 'X' }))
+          : Promise.resolve(answer('one', 'W/"1"')),
+      ),
+    );
+    await waitFor(() => {
+      expect(result.current.status).toBe('ready');
+    });
+    act(() => {
+      result.current.apply('two', 'W/"2"');
+    });
+    fail = true;
+    act(() => {
+      result.current.reload();
+    });
+    await waitFor(() => {
+      expect(result.current.status).toBe('error');
+    });
+
+    expect(result.current.data).toBe('two');
   });
 });

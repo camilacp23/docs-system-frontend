@@ -19,6 +19,7 @@ import {
   Modal,
   Pagination,
   PasswordField,
+  SearchPicker,
   SegmentedControl,
   Select,
   Skeleton,
@@ -34,7 +35,7 @@ import {
   useDelayedLoading,
   useToast,
 } from '../components/ui';
-import type { ModalSize } from '../components/ui';
+import type { ModalSize, SearchPickerOption } from '../components/ui';
 import { MockShell } from './MockShell';
 
 const CARD_CLASS = 'rounded-card border border-border-subtle bg-surface shadow-card';
@@ -235,7 +236,19 @@ function LoadingDemo() {
   );
 }
 
+const PICKER_OPTIONS: readonly SearchPickerOption[] = [
+  { value: '1', label: 'gUsuario', detail: 'Global · App (OnStart)' },
+  { value: '2', label: 'locFiltroInicio', detail: 'Context · Inicio · write only' },
+  {
+    value: '3',
+    label: 'locSinOrigen',
+    detail: 'Context · set its origin screen first',
+    disabled: true,
+  },
+];
+
 function FormControlsDemo() {
+  const [picked, setPicked] = useState('');
   const focusRef = useRef<HTMLSelectElement>(null);
   const [scope, setScope] = useState<'GLOBAL' | 'CONTEXT'>('GLOBAL');
   const [checked, setChecked] = useState(true);
@@ -265,6 +278,40 @@ function FormControlsDemo() {
             <Select {...control} disabled>
               <option>Text</option>
             </Select>
+          )}
+        </FormField>
+        <FormField label="Search picker">
+          {(control) => (
+            <SearchPicker
+              {...control}
+              mono
+              placeholder="Add a variable…"
+              options={PICKER_OPTIONS}
+              value={picked}
+              onChange={setPicked}
+            />
+          )}
+        </FormField>
+        <FormField label="Search picker (error)" error="Variable is required.">
+          {(control) => (
+            <SearchPicker
+              {...control}
+              mono
+              options={PICKER_OPTIONS}
+              value=""
+              onChange={setPicked}
+            />
+          )}
+        </FormField>
+        <FormField label="Search picker (disabled)">
+          {(control) => (
+            <SearchPicker
+              {...control}
+              disabled
+              options={PICKER_OPTIONS}
+              value="1"
+              onChange={setPicked}
+            />
           )}
         </FormField>
         <FormField label="Textarea (error)" error="Description is too long.">

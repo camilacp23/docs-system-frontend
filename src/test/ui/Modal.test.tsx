@@ -206,4 +206,31 @@ describe('Modal', () => {
     await userEvent.keyboard('{Escape}');
     expect(document.body.style.overflow).toBe('');
   });
+
+  it('names the dialog by its title and describes it by the line under the title', () => {
+    render(
+      <Modal
+        open
+        onClose={() => undefined}
+        title="Return Detalle"
+        description="The author can edit again."
+      >
+        Body
+      </Modal>,
+    );
+
+    const dialog = screen.getByRole('dialog', { name: 'Return Detalle' });
+    expect(dialog).toHaveAccessibleDescription('The author can edit again.');
+    expect(screen.getByText('The author can edit again.')).toBeVisible();
+  });
+
+  it('has no description when none is given', () => {
+    render(
+      <Modal open onClose={() => undefined} title="Delete">
+        Body
+      </Modal>,
+    );
+
+    expect(screen.getByRole('dialog')).not.toHaveAttribute('aria-describedby');
+  });
 });

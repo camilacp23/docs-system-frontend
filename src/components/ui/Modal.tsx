@@ -1,6 +1,6 @@
 // Modal: dialog over a dimmed overlay (S-43b, S-17).
 // Props: open, onClose, placement ('center' of the window, default | 'top-right' for confirmations that must not
-// hide the page), title, icon (decorative icon in a colored circle before the title; tone 'danger' tints it
+// hide the page), title, description (one line under the title, as in S-37b; it describes the dialog for assistive technology), icon (decorative icon in a colored circle before the title; tone 'danger' tints it
 // red for destructive confirmations), size ('sm' 400 px | 'md' | 'lg' | 'xl' 960 px, default 'sm'), footer (usually Buttons,
 // right-aligned), dismissible (default true: Esc, click on the overlay and the close button call onClose;
 // false for blocking dialogs such as "Your session ended"), initialFocusRef (element to focus on open; defaults
@@ -20,6 +20,7 @@ export interface ModalProps {
   onClose: () => void;
   placement?: 'center' | 'top-right';
   title: ReactNode;
+  description?: ReactNode;
   icon?: ReactNode;
   tone?: 'default' | 'danger';
   size?: ModalSize;
@@ -44,6 +45,7 @@ export function Modal({
   onClose,
   placement = 'center',
   title,
+  description,
   icon,
   tone = 'default',
   size = 'sm',
@@ -53,6 +55,7 @@ export function Modal({
   children,
 }: ModalProps) {
   const titleId = useId();
+  const descriptionId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   const dismissibleRef = useRef(dismissible);
@@ -143,6 +146,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
         className={cx(
           'w-full overflow-hidden rounded-modal bg-surface shadow-modal outline-none',
@@ -165,9 +169,16 @@ export function Modal({
                 {icon}
               </span>
             )}
-            <h2 id={titleId} className="text-section font-semibold text-ink-900">
-              {title}
-            </h2>
+            <div className="min-w-0">
+              <h2 id={titleId} className="text-section font-semibold text-ink-900">
+                {title}
+              </h2>
+              {description && (
+                <p id={descriptionId} className="text-small text-ink-500">
+                  {description}
+                </p>
+              )}
+            </div>
           </div>
           {dismissible && (
             <button

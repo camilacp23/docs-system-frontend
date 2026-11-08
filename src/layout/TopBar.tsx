@@ -1,7 +1,8 @@
-// TopBar: the 68 px bar of the shell (S-31): the clickable breadcrumb (Breadcrumb.tsx) on the left and the
-// user block (initials, name, role) on the right, which opens a menu with "Sign out".
-// Props: user (the signed-in user). The quick search, Jira status pill and help button of the frame arrive with
-// the modules they depend on.
+// TopBar: the 68 px bar of the shell (S-31): the clickable breadcrumb (Breadcrumb.tsx) on the left and on the right
+// the Jira status pill (JiraStatusPill, the last known availability) and the user block (initials, name, role), which
+// opens a menu with "Sign out".
+// Props: user (the signed-in user). The quick search and the help button of the frame arrive with the modules they
+// depend on.
 // Sign out clears the session even if the server cannot be reached; in that case a warning toast says so.
 import { useEffect, useId, useRef } from 'react';
 
@@ -13,6 +14,7 @@ import { useSession } from '../session/useSession';
 import { usePopover } from '../hooks/usePopover';
 
 import { Breadcrumb } from './Breadcrumb';
+import { JiraStatusPill } from './JiraStatusPill';
 
 export const SIGN_OUT_FAILED_TEXT =
   "You're signed out on this device, but the server couldn't be reached to end the session.";
@@ -80,7 +82,10 @@ export function TopBar({ user }: { user: components['schemas']['User'] }) {
   return (
     <header className="col-start-2 flex items-center justify-between gap-4 border-b border-border-subtle bg-topbar px-7 backdrop-blur-xs">
       <Breadcrumb />
-      <UserMenu user={user} />
+      <div className="flex items-center gap-2.5">
+        <JiraStatusPill />
+        <UserMenu user={user} />
+      </div>
     </header>
   );
 }
