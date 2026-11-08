@@ -4,13 +4,16 @@
 //   pendingSubtasks, page, pageSize; App (OnStart) is always first; an unknown applicationId is 404, D-70),
 //   GET /screens/{id} (with a weak ETag that moves when a write changes something), POST /screens,
 //   PUT /screens/{id} (fakeScreenUpdate: the rules of the real server in its order), DELETE /screens/{id},
-//   PUT /screens/{id}/status and POST /screens/{id}/review (fakeScreenStatus). Everything else (variables, collections, applications) goes to the collections fake.
+//   PUT /screens/{id}/status and POST /screens/{id}/review (fakeScreenStatus), GET /screens/{id}/jira-tickets and
+//   POST /screens/{id}/jira-ticket (fakeScreenJira; Jira is the state `jira`). Everything else (variables, collections, applications) goes to the collections fake.
 //   Writes check in the order of the real server (contract 0.3.5):
 //     POST    400 (name, Miro link) -> 404 (application) -> 422 APPLICATION_ARCHIVED -> 409 DUPLICATE_NAME
 //     PUT     400 -> 404 -> 422 APPLICATION_ARCHIVED -> 412 -> 422 rules -> 409 DUPLICATE_NAME (see fakeScreenUpdate)
 //     DELETE  404 -> 422 APPLICATION_ARCHIVED -> 422 APP_CONTEXT_PROTECTED -> 422 SCREEN_IN_REVIEW (D-82)
 //     status  400 -> 404 -> 422 APPLICATION_ARCHIVED -> 412 -> 422 INVALID_TRANSITION -> 422 TEMPLATE_INCOMPLETE (D-88)
 //     review  400 -> 404 -> 422 APPLICATION_ARCHIVED -> 422 NOT_IN_REVIEW -> 422 COMMENT_REQUIRED (D-88)
+//     jira    400 -> 404 -> 422 APPLICATION_ARCHIVED -> 422 STORY_NOT_IN_SCREEN -> 502 JIRA_UNAVAILABLE -> creation ->
+//             502 JIRA_PARTIAL_FAILURE (D-92, D-94); the screen's `pendingSubtasks` follows the Subtasks not done
 //   POST starts the screen as UNDOCUMENTED, or DRAFT when a template field has content (D-81). DELETE leaves the
 //   variables created in the screen without an origin.
 import { vi } from 'vitest';
@@ -38,6 +41,15 @@ import {
   checkStatusBody,
   type ScreenStatusEnv,
 } from './fakeScreenStatus';
+import {
+  checkJiraCreateBody,
+  createJiraTickets,
+  listJiraTree,
+  makeFakeJira,
+  pendingSubtasksOf,
+  type FakeJira,
+  type JiraEnv,
+} from './fakeScreenJira';
 import type { RecordedApiCall } from './fakeVariablesApi';
 import type { makeApplicationsClient } from './renderApp';
 
@@ -80,6 +92,8 @@ export function makeScreenDetail(
 export interface ScreensApiInit extends CollectionsApiInit {
   /** The screens the API serves (summary and detail). */
   screenDetails?: Screen[];
+  /** The state of Jira and of the local tickets (defaults: available, no tickets). */
+  jira?: Partial<FakeJira>;
 }
 
 const SORT_KEYS = ['name', 'documentationStatus', 'updatedAt', 'pendingSubtasks'] as const;
@@ -130,6 +144,7 @@ export function makeScreensApi(
     nextId: 2000,
     nextNestedId: 5000,
   };
+  const jira = makeFakeJira(init.jira);
   const calls: RecordedApiCall[] = [];
   const failures = new Map<string, ApiError[]>();
   const holds: Array<{ predicate: (call: RecordedApiCall) => boolean; gate: Promise<void> }> = [];
@@ -215,7 +230,14 @@ export function makeScreensApi(
     Object.values(template).some((text) => typeof text === 'string' && text.trim() !== '');
 
   async function handle(method: string, path: string, options: RecordedApiCall['options'] = {}) {
-    const own = ['/screens', '/screens/{id}', '/screens/{id}/status', '/screens/{id}/review'];
+    const own = [
+      '/screens',
+      '/screens/{id}',
+      '/screens/{id}/status',
+      '/screens/{id}/review',
+      '/screens/{id}/jira-tickets',
+      '/screens/{id}/jira-ticket',
+    ];
     if (!own.includes(path)) {
       const fallback = collectionsApi.client as unknown as Record<
         string,
@@ -336,6 +358,33 @@ export function makeScreensApi(
       state.versions.set(screen.id, (state.versions.get(screen.id) ?? 1) + 1);
       return response({ data: screen }, etagOf(screen.id));
     }
+    if (path === '/screens/{id}/jira-tickets' || path === '/screens/{id}/jira-ticket') {
+      const isCreate = method === 'POST';
+      // 400 (the body) -> 404 (the screen) -> the rules of the operation, in their order.
+      const parsed = isCreate ? checkJiraCreateBody(options.body) : null;
+      const current = find(options.path?.id);
+      const application = checkApplication(current.applicationId);
+      const env: JiraEnv = {
+        application: { name: application.name, archived: application.archived },
+        now: () => new Date().toISOString(),
+      };
+      const syncPending = () => {
+        state.screens = state.screens.map((s) =>
+          s.id === current.id ? { ...s, pendingSubtasks: pendingSubtasksOf(jira, s.id) } : s,
+        );
+      };
+      if (!isCreate) {
+        const tree = listJiraTree(jira, env, current.id, query.refresh === true);
+        syncPending();
+        return response({ data: tree });
+      }
+      try {
+        const created = createJiraTickets(jira, env, current, parsed as NonNullable<typeof parsed>);
+        return response({ data: created }, null, 201);
+      } finally {
+        syncPending();
+      }
+    }
     throw new Error(`fakeScreensApi: unhandled ${method} ${path}`);
   }
 
@@ -357,5 +406,5 @@ export function makeScreensApi(
   const callsTo = (operation: string) =>
     calls.filter((call) => `${call.method} ${call.path}` === operation);
 
-  return { state, client, calls, callsTo, failNext, hold, etagOf, collectionsApi };
+  return { state, jira, client, calls, callsTo, failNext, hold, etagOf, collectionsApi };
 }
