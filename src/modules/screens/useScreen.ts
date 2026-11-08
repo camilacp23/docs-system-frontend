@@ -4,7 +4,9 @@
 // ETag it holds and a 304 reaches the page as the copy it already has. If a 304 ever arrives raw (the call
 // carried its own If-None-Match), the copy of this hook for the same screen is kept instead of failing; a 304
 // with no copy to keep is an unexpected answer. A reload (Try again) goes through the same path.
-import { useRef } from 'react';
+// apply(screen, etag) takes the screen a write answered (status, review) as the current copy, with its new ETag,
+// and keeps it as the copy a later 304 falls back to.
+import { useCallback, useRef } from 'react';
 
 import { ApiError } from '../../api/ApiError';
 import { useApi } from '../../api/useApi';
@@ -15,7 +17,7 @@ import type { Screen } from './screenTypes';
 export function useScreen(id: number | null): ApiResource<Screen> {
   const client = useApi();
   const last = useRef<{ id: number; body: Screen; etag: string | null } | null>(null);
-  return useApiResource<Screen>(
+  const resource = useApiResource<Screen>(
     `screen:${id}`,
     async (signal) => {
       const result = await client.get('/screens/{id}', { path: { id: id ?? 0 }, signal });
@@ -30,4 +32,13 @@ export function useScreen(id: number | null): ApiResource<Screen> {
     },
     id !== null,
   );
+  const { apply: applyResource } = resource;
+  const apply = useCallback(
+    (body: Screen, etag: string | null) => {
+      last.current = { id: body.id, body, etag };
+      applyResource(body, etag);
+    },
+    [applyResource],
+  );
+  return { ...resource, apply };
 }

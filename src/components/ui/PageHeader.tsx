@@ -1,12 +1,14 @@
 // PageHeader: the top of a page: an icon tile, the page title (h1), a one-line description and the page actions.
 // Props: title, icon, description, meta (row under the description: tags, timestamps), actions (buttons on the
 // right), className. It sets the first level of the visual hierarchy: icon + 20 px title > description > meta.
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 
 import { cx } from './cx';
 
 export interface PageHeaderProps {
   title: ReactNode;
+  /** Makes the title focusable by code, to move the focus there after an action that removes the pressed button. */
+  titleRef?: Ref<HTMLHeadingElement>;
   icon?: ReactNode;
   description?: ReactNode;
   meta?: ReactNode;
@@ -16,6 +18,7 @@ export interface PageHeaderProps {
 
 export function PageHeader({
   title,
+  titleRef,
   icon,
   description,
   meta,
@@ -34,7 +37,13 @@ export function PageHeader({
           </span>
         )}
         <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="truncate text-title font-bold text-ink-900">{title}</h1>
+          <h1
+            ref={titleRef}
+            tabIndex={titleRef ? -1 : undefined}
+            className="truncate text-title font-bold text-ink-900 focus:outline-none"
+          >
+            {title}
+          </h1>
           {description && <div className="text-body text-ink-500">{description}</div>}
           {meta && <div className="mt-0.5 flex flex-wrap items-center gap-2">{meta}</div>}
         </div>
