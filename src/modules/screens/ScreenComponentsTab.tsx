@@ -15,12 +15,8 @@ const LINK_CLASS =
   'rounded-chip font-mono text-label font-semibold text-identifier hover:underline';
 
 type Component = Screen['components'][number];
-/** The read shape of a use: the contract types it as the write item plus the read item, so both are named. */
-type Use = NonNullable<Component['uses']>[number];
-
 function Uses({ component }: { component: Component }) {
-  // The contract types `uses` as an intersection of two arrays, which TypeScript cannot iterate as one.
-  const uses = (component.uses ?? []) as unknown as readonly Use[];
+  const { uses } = component;
   if (uses.length === 0) return null;
   return (
     <ul aria-label={`Uses of ${component.name}`} className="flex flex-col gap-1">

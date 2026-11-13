@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Technical Documentation System API
-  version: 0.3.5
+  version: 0.3.7
   summary: REST API contracts — SDD Interface Viewpoint (Bitácora 3, Activities 5 and 6)
   description: |
     Contracts of the eleven modules (41 operations of SRS Table 25), the
@@ -18,6 +18,10 @@ info:
       last read; a mismatch returns 412.
     - Every GET returns an `ETag`. Send it back in `If-None-Match`: when nothing
       changed the answer is 304 with no body.
+    - Screens are the exception to the format of the `ETag`: the one of a screen
+      also carries its two counters, `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"`,
+      and `If-Match` of a screen compares only the `updatedAt` part (see
+      `GET /screens/{id}`).
     - Every response, success or error, carries the `X-Request-Id` header. A
       value sent by the client is kept when it has 8 to 64 characters among
       letters, digits, `.`, `_` and `-`; otherwise the server generates one.
@@ -122,6 +126,39 @@ info:
     `JiraHierarchyLevel` documents its correspondence with the level of Jira
     (1, 0 and -1). No operation was added or removed (50).
 
+    Changes in 0.3.6 (ETag of a screen): the `ETag` of a screen, in `GET`, `POST`
+    and `PUT /screens/{id}`, `PUT /screens/{id}/status` and
+    `POST /screens/{id}/review`, is now
+    `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"`, because both counters
+    change without touching `updatedAt` (Jira tickets, comments), so
+    `If-None-Match` compares all of it. `If-Match` of `PUT /screens/{id}` and
+    `PUT /screens/{id}/status` compares only the `updatedAt` part, accepts the
+    former `W/"<updatedAt ms>"` format and answers 412 for any other format; the
+    412 still carries the full ETag in `details.currentETag`. The other resources
+    keep `W/"<updatedAt ms>"`. No operation was added or removed (50).
+
+    Changes in 0.3.7 (dependency map, search, dashboard and audit): the read
+    schema of a screen describes its components and their uses as the API
+    returns them (`Component`, `ComponentUse`, with `target`; the write schemas
+    are unchanged). The four operations of Modules 5 to 8 are described before
+    they are built. Graph and neighborhood: the filters `types` and
+    `environment`, the 404 for an application or an element that does not
+    exist, a deterministic order of nodes and edges, the neighborhood as the
+    subgraph between the nodes reached (the source of the "Used by screens"
+    card of a collection), and nodes and edges as variants chosen by `type` and
+    `kind` that declare only their own fields. Search: how the text is trimmed
+    and compared (case and accents are ignored), the searched fields, the
+    filters and how each one applies, the order, `matchedIn` and `snippet`
+    (null without a text), results as variants chosen by `type`, and the 404.
+    Dashboard: the figures (the App (OnStart) screen counts), `jira` always
+    from the local copy with `lastSyncedAt`, `recentActivity` as a summary
+    without values for Administrators and Developers and absent for Readers,
+    and the 404. Audit: `entityId` needs `entityType`, the date format and
+    inclusive limits, the order, the 403 `OWN_ACTIONS` of a Developer, the camelCase
+    keys of the stored values, and an example. The new error examples cover the
+    search, the audit dates and the 403. No operation was added or removed (50);
+    no `x-roles` or `x-rule` changed.
+
     Error catalog (`code` -> HTTP status: `message`):
 
     | Code | HTTP | Message |
@@ -133,6 +170,7 @@ info:
     | INVALID_SIGNATURE | 401 | Invalid webhook signature. (Jira only) |
     | FORBIDDEN | 403 | Your role doesn't allow this action. (`details`: requiredRoles) |
     | FORBIDDEN (origin) | 403 | This request's origin isn't allowed. (`details`: reason = ORIGIN; refresh and logout only) |
+    | FORBIDDEN (own actions) | 403 | Your role doesn't allow this action. (`details`: reason = OWN_ACTIONS; `GET /audit-log` asked by a Developer for another user) |
     | NOT_FOUND | 404 | This <element> doesn't exist. It may have been deleted. |
     | DUPLICATE_NAME | 409 | A <type> named <name> already exists in <application>. (`details`: field, type, name, application, container) |
     | EMAIL_TAKEN | 409 | A user with this email already exists. |
@@ -1221,7 +1259,13 @@ paths:
       x-capability: 'Create and edit screens (template)'
       x-roles: [ADMINISTRATOR, DEVELOPER, READER]
       summary: Get a screen with its template, components and links
-      description: 'Roles: all.'
+      description: |
+        Roles: all. The `ETag` is `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"`:
+        the counters change without touching `updatedAt` (Jira tickets created,
+        refreshed or updated by the webhook, comments), so `If-None-Match` compares
+        all of it and answers 304 only when neither the screen nor either counter
+        changed. The same `ETag` is sent by the answers of `POST /screens`,
+        `PUT /screens/{id}`, `PUT /screens/{id}/status` and `POST /screens/{id}/review`.
       parameters:
         - $ref: '#/components/parameters/IfNoneMatch'
       responses:
@@ -1265,9 +1309,13 @@ paths:
         or deleted here, even when they are missing from the body. `usedIn = origin` in
         the body is a 400.
         `If-Match` is always checked when sent, also when the body changes nothing.
+        Only its `updatedAt` part is compared, inside the transaction: a change of
+        `pendingSubtasks` or `commentCount` between the read and the save is not a 412.
+        The former format `W/"<updatedAt ms>"` is accepted; a value in any other format
+        is a 412, whose `details.currentETag` is the full `ETag`.
         An update that changes nothing writes nothing: it answers 200 with the same
-        `ETag`, `updatedAt` and status. A change in any nested array also moves the
-        `ETag` of the screen.
+        `updatedAt` and status, and with the same `ETag` unless a counter changed. A
+        change in any nested array also moves the `ETag` of the screen.
         Resulting status: editing an APPROVED screen in any way (a column or a nested
         item) returns it to IN_PROGRESS; an UNDOCUMENTED screen in which a template
         field goes from no content to content (not null and not empty after trimming
@@ -1367,7 +1415,9 @@ paths:
         not empty after trimming spaces).
         The errors are checked in this order: 400, 404, 422 APPLICATION_ARCHIVED,
         412, 422 INVALID_TRANSITION, 422 TEMPLATE_INCOMPLETE. `If-Match` is optional;
-        when sent it is compared with the screen locked inside the transaction.
+        when sent, its `updatedAt` part is compared with the screen locked inside the
+        transaction (same rule as `PUT /screens/{id}`: a change of the counters is not
+        a 412, and the former `W/"<updatedAt ms>"` format is accepted).
         Asking for the status the screen already has is a 422 INVALID_TRANSITION
         (`details { from, to }`, with `to` equal to `from`). TEMPLATE_INCOMPLETE applies
         only to IN_PROGRESS -> IN_REVIEW and lists in `details.fields` the template
@@ -1727,29 +1777,86 @@ paths:
         Roles: all. Built by joining the associative entities, the origin column,
         `component.screen_id`, and `dependency` (SDD Section 10). A graph is one
         resource, so it is not paginated; department scale is hundreds of nodes
-        (NFR-11). Optional filters reduce it.
+        (NFR-11). Optional filters reduce it. An `applicationId` that does not exist
+        (or is outside the `integer` range) is a 404.
+
+        Filters. `types` keeps only the nodes of those types (omitted = all four).
+        `environment` applies to `VARIABLE` and `COLLECTION` only (the ones present in
+        that environment); `SCREEN` and `COMPONENT` are never filtered by it, as in the
+        search. An edge whose end was left out is removed, so every edge points to two
+        nodes of the response.
+
+        Nodes and edges are variants (`GraphNode`, `GraphEdge`): each one declares only
+        its own fields, and a field that does not apply is absent, never null.
+
+        Order. The response is deterministic, because its `ETag` is a hash of the body.
+        Nodes: by type (`SCREEN`, `VARIABLE`, `COLLECTION`, `COMPONENT`) and then by `id`
+        ascending. Edges: by `kind` in the order `CONTAINS`, `CREATES`, `ACCESSES`,
+        `FEEDS`, `USES`, `DERIVES_FROM`, `NAVIGATES_TO` (SDD Table 63), then by the
+        number in the edge `id` and, if equal, by its prefix.
+
+        Navigation (FR-16). The Miro diagram of a screen is `miroLink` of its node. A
+        component belongs to the screen in `screenId`, which is present even when the
+        screen node was filtered out. The reserved App (OnStart) screen has
+        `isAppContext` true.
       parameters:
         - $ref: '#/components/parameters/ApplicationId'
         - name: types
           in: query
-          description: Node types to include (comma-separated)
+          description: |
+            Node types to include (comma-separated, for example `SCREEN,VARIABLE`).
+            Omitted = all types. Edges are kept only when both ends are kept.
           style: form
           explode: false
           schema: { type: array, items: { $ref: '#/components/schemas/ElementType' } }
-        - $ref: '#/components/parameters/EnvironmentFilter'
+        - name: environment
+          in: query
+          description: |
+            Keeps the variables and collections present in this environment. Screens and
+            components are not filtered by it.
+          schema: { $ref: '#/components/schemas/Environment' }
         - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
-          description: Nodes and edges
+          description: Nodes and edges, in the order described above
           headers:
             ETag: { $ref: '#/components/headers/ETag' }
             X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GraphEnvelope' }
+              examples:
+                application:
+                  summary: Two screens, two variables, two collections and a component, with every kind of edge
+                  value:
+                    data:
+                      nodes:
+                        - { key: 'screen:12', id: 12, type: SCREEN, name: scrHome, documentationStatus: APPROVED, isAppContext: false, miroLink: 'https://miro.com/app/board/x/' }
+                        - { key: 'screen:13', id: 13, type: SCREEN, name: scrDetail, documentationStatus: DRAFT, isAppContext: false, miroLink: null }
+                        - { key: 'variable:7', id: 7, type: VARIABLE, name: locFilter, scope: CONTEXT, untraced: false }
+                        - { key: 'variable:9', id: 9, type: VARIABLE, name: gUser, scope: GLOBAL, untraced: true }
+                        - { key: 'collection:21', id: 21, type: COLLECTION, name: colClients }
+                        - { key: 'collection:22', id: 22, type: COLLECTION, name: colActive }
+                        - { key: 'component:31', id: 31, type: COMPONENT, name: btnSave, screenId: 12 }
+                      edges:
+                        - { id: 'ct:31', source: 'screen:12', target: 'component:31', kind: CONTAINS }
+                        - { id: 'cr:7', source: 'screen:12', target: 'variable:7', kind: CREATES }
+                        - { id: 'sc:5', source: 'screen:12', target: 'collection:21', kind: ACCESSES, accessMode: READ, usedIn: OnVisible }
+                        - { id: 'vc:3', source: 'collection:21', target: 'variable:9', kind: FEEDS, usedIn: OnVisible, assignmentFunction: SET, tableFunction: CountRows }
+                        - { id: 'd:40', source: 'component:31', target: 'variable:7', kind: USES }
+                        - { id: 'd:41', source: 'collection:22', target: 'collection:21', kind: DERIVES_FROM }
+                        - { id: 'd:42', source: 'screen:12', target: 'screen:13', kind: NAVIGATES_TO }
+                only_variables_in_dev:
+                  summary: types=VARIABLE&environment=DEV, the only edges left are those between the variables kept
+                  value:
+                    data:
+                      nodes:
+                        - { key: 'variable:7', id: 7, type: VARIABLE, name: locFilter, scope: CONTEXT, untraced: false }
+                      edges: []
         '304': { $ref: '#/components/responses/NotModified' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /dependencies/{type}/{id}:
     get:
       tags: [Dependencies]
@@ -1757,26 +1864,63 @@ paths:
       x-capability: 'View dependency map'
       x-roles: [ADMINISTRATOR, DEVELOPER, READER]
       summary: Neighborhood of one element (FR-15, FR-16)
-      description: 'Roles: all. Same shape as the graph, centered on one node.'
+      description: |
+        Roles: all. Same shape, variants and order as the graph (see `getDependencyGraph`),
+        centered on one node. It takes no `applicationId`: the application is the one of the
+        element, which is also the only application in the response. An element that does
+        not exist, or whose id is outside the `integer` range, is a 404. It accepts no
+        `types` or `environment` filter.
+
+        The response has the node `<type>:<id>` (for example `collection:21` for
+        `/dependencies/collections/21`) and the nodes reachable from it in at most `depth`
+        steps, following the edges in both directions. It has every edge of the application
+        between those nodes (not only the ones walked), so an edge between two neighbors is
+        included. A node or an edge appears once, also when the data has cycles (a collection
+        may derive from itself through others).
+
+        Source of the "Used by screens" card of a collection (S-15a, S-17). With `depth` 1
+        on a collection, the screens that use it are the `SCREEN` nodes joined to it by an
+        `ACCESSES` edge, and each edge gives the `accessMode` and `usedIn` of one link. A
+        screen may have several edges (one per `usedIn`), so the client groups them by
+        screen. The number of screens is the number of distinct sources.
       parameters:
         - name: type
           in: path
           required: true
+          description: Plural of the node type (`screens` is `SCREEN`, `variables` is `VARIABLE`, and so on).
           schema: { type: string, enum: [screens, variables, collections, components] }
         - $ref: '#/components/parameters/Id'
         - name: depth
           in: query
+          description: Steps from the element, 1 to 3. A value outside that range is a 400.
           schema: { type: integer, minimum: 1, maximum: 3, default: 1 }
         - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
-          description: Nodes and edges around the element
+          description: Nodes and edges around the element, in the order of the graph
           headers:
             ETag: { $ref: '#/components/headers/ETag' }
             X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GraphEnvelope' }
+              examples:
+                collection_depth_1:
+                  summary: /dependencies/collections/21?depth=1, the screens that use the collection and what it feeds or derives
+                  value:
+                    data:
+                      nodes:
+                        - { key: 'screen:1', id: 1, type: SCREEN, name: App (OnStart), documentationStatus: APPROVED, isAppContext: true, miroLink: null }
+                        - { key: 'screen:12', id: 12, type: SCREEN, name: scrHome, documentationStatus: APPROVED, isAppContext: false, miroLink: 'https://miro.com/app/board/x/' }
+                        - { key: 'variable:9', id: 9, type: VARIABLE, name: gUser, scope: GLOBAL, untraced: true }
+                        - { key: 'collection:21', id: 21, type: COLLECTION, name: colClients }
+                        - { key: 'collection:22', id: 22, type: COLLECTION, name: colActive }
+                      edges:
+                        - { id: 'sc:4', source: 'screen:1', target: 'collection:21', kind: ACCESSES, accessMode: READ_WRITE, usedIn: OnStart }
+                        - { id: 'sc:5', source: 'screen:12', target: 'collection:21', kind: ACCESSES, accessMode: READ, usedIn: OnVisible }
+                        - { id: 'sc:6', source: 'screen:12', target: 'collection:21', kind: ACCESSES, accessMode: READ_WRITE, usedIn: btnSave.OnSelect }
+                        - { id: 'vc:3', source: 'collection:21', target: 'variable:9', kind: FEEDS, usedIn: OnVisible, assignmentFunction: SET, tableFunction: CountRows }
+                        - { id: 'd:41', source: 'collection:22', target: 'collection:21', kind: DERIVES_FROM }
         '304': { $ref: '#/components/responses/NotModified' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
@@ -1793,30 +1937,67 @@ paths:
       description: |
         Roles: all. The `query` and `filters` of SRS Table 25 are expressed as
         `q` plus one parameter per filter, consistent with the other listings.
-        `q` is optional (CP-03): a request may use filters only, but a request
-        without `q` and without any filter (`types`, `environment`,
-        `documentationStatus`, `scope`) returns 400 VALIDATION_ERROR (service rule).
-        Filters that apply only to some element types do not exclude the others:
-        `environment` applies to variables and collections, `documentationStatus`
-        to screens, and `scope` to variables.
+        `applicationId` is required, and one that does not exist (or is outside the
+        `integer` range) is a 404.
+
+        Text. `q` is optional (CP-03). It is trimmed before it is measured and must have
+        2 to 100 characters: one that is shorter once trimmed (for example only spaces) is a
+        400 with rule `minLength` on `q`. The search ignores case and accents: á, é, í, ó,
+        ú and ü match the vowel without the accent, in lower and upper case; ñ is not n.
+        `%` and `_` are ordinary characters.
+
+        Filters. `types`, `environment`, `documentationStatus` and `scope` are the filters. A
+        request with none of them and without `q` is a 400 with
+        `details.fields [{ field: q, rule: required }]`, and any one of them is enough, even
+        one that applies to none of the types selected. `types` is applied first. Then each
+        filter restricts only the types it applies to and leaves the others unfiltered:
+        `environment` applies to variables and collections, `documentationStatus` to
+        screens, and `scope` to variables.
+
+        What is searched. Screens: the name and the seven fields of the template. Variables:
+        the name and the description. Collections: the name, the description, the creation
+        condition and the names of its fields. Components: the name, the description, the
+        `onSelect` formula and the control `type`. A text also matches the `usedIn` of the
+        links of a variable or a collection, and the result is that variable or collection.
+
+        Results. There is one result per element, never one per link. `matchedIn` says where
+        the text was found; if it is found in several places, the first of this list wins:
+        `name`, `description`, `template`, `creationCondition`, `fieldName`, `onSelect`,
+        `type`, `usedIn`. Without `q` there is no text to find: `matchedIn` and `snippet`
+        are null. The `snippet` is plain text of up to 300 characters around the first
+        match, with an ellipsis where it was cut, and it is null when the match is the
+        name; for `usedIn` it is that `usedIn` (the one of the link with the lowest id).
+
+        Order. Exact name matches first (same case and accent rules), then by name
+        ascending, then by type (`SCREEN`, `VARIABLE`, `COLLECTION`, `COMPONENT`) and `id`.
+
+        Navigation (FR-18). `type` and `id` identify the element. A component also carries
+        its `screen`, and a variable the screen where it was created (null when it has none).
+        The variants (`SearchResult`) declare only their own fields.
       parameters:
         - $ref: '#/components/parameters/ApplicationId'
         - name: q
           in: query
           required: false
-          description: Text to search (2 to 100 characters). Optional when at least one filter is sent.
+          description: Text to search (2 to 100 characters once trimmed). Optional when at least one filter is sent.
           schema: { type: string, minLength: 2, maxLength: 100 }
         - name: types
           in: query
+          description: Element types to search (comma-separated). Omitted = all four.
           style: form
           explode: false
           schema: { type: array, items: { $ref: '#/components/schemas/ElementType' } }
-        - $ref: '#/components/parameters/EnvironmentFilter'
+        - name: environment
+          in: query
+          description: Variables and collections present in this environment. Screens and components are not filtered by it.
+          schema: { $ref: '#/components/schemas/Environment' }
         - name: documentationStatus
           in: query
+          description: Screens with this status. Variables, collections and components are not filtered by it.
           schema: { $ref: '#/components/schemas/DocumentationStatus' }
         - name: scope
           in: query
+          description: Variables with this scope. Screens, collections and components are not filtered by it.
           schema: { $ref: '#/components/schemas/VariableScope' }
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
@@ -1836,9 +2017,29 @@ paths:
                     required: [data]
                     properties:
                       data: { type: array, items: { $ref: '#/components/schemas/SearchResult' } }
+              examples:
+                text:
+                  summary: q=filter, one result per element
+                  value:
+                    data:
+                      - { type: COMPONENT, id: 31, name: btnSave, screen: { id: 12, name: scrHome }, matchedIn: onSelect, snippet: '…Filter(colClients, Active = true)…' }
+                      - { type: VARIABLE, id: 7, name: locFilter, screen: { id: 12, name: scrHome }, matchedIn: name, snippet: null, environments: [DEV, PROD] }
+                      - { type: SCREEN, id: 12, name: scrHome, matchedIn: template, snippet: 'Lists the requests and applies the filter chosen by the user.', documentationStatus: DRAFT }
+                    page: 1
+                    pageSize: 20
+                    total: 3
+                filters_only:
+                  summary: types=VARIABLE&environment=DEV, no text, so nothing is matched
+                  value:
+                    data:
+                      - { type: VARIABLE, id: 9, name: gUser, screen: null, matchedIn: null, snippet: null, environments: [DEV] }
+                    page: 1
+                    pageSize: 20
+                    total: 1
         '304': { $ref: '#/components/responses/NotModified' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   # ----------------------------------------------------------- Dashboard
   /dashboard/indicators:
@@ -1850,8 +2051,33 @@ paths:
       x-rule: READER_OVERVIEW
       summary: Documentation indicators (FR-19)
       description: |
-        Roles: all. Readers get the overview (aggregates only): `recentActivity`
-        is omitted for them, as SRS Table 26 grants Readers no audit access.
+        Roles: all. An `applicationId` that does not exist (or is outside the `integer`
+        range) is a 404. An archived application has indicators like any other.
+
+        Documentation. The App (OnStart) screen counts in every figure of `documentation`.
+        `byStatus` always has the five statuses, also the ones that are 0, and adds up to
+        `totalScreens`. `approvedPercent` is `APPROVED` over `totalScreens`, as a number with
+        one decimal (rounded half up).
+
+        Variables and collections. `variables.untraced` counts the variables without an
+        origin screen. `collections.undocumented` counts the collections linked to no screen.
+
+        Jira. The figures of Jira always come from the local copy of the tickets, and this
+        operation never calls Jira (NFR-14). `jira.pendingSubtasks` is the number of Subtasks
+        of the application whose status category is not DONE. The Subtasks of each screen are
+        in `GET /screens` (`pendingSubtasks` of every screen, sortable with
+        `sort=-pendingSubtasks`). `jira.jiraAvailable` is true when the Jira client is
+        configured and its circuit breaker is not open; it does not ask Jira.
+        `jira.lastSyncedAt` is the latest time any ticket of the application was synchronized,
+        or null when there are none; the interface shows it as the age of the saved copy
+        when Jira is not available.
+
+        Recent activity. Administrators and Developers receive `recentActivity`: the 10 most
+        recent audit records of the application, newest first, of the whole team (not only the
+        caller's). Each one is a summary without the values (`oldValue`, `newValue`) or the
+        database role, because a Developer can only query their own actions in `GET /audit-log`.
+        Readers get the overview (SRS Table 26, `READER_OVERVIEW`): for them the
+        `recentActivity` key is absent (never null).
       parameters:
         - $ref: '#/components/parameters/ApplicationId'
         - $ref: '#/components/parameters/IfNoneMatch'
@@ -1864,9 +2090,37 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/IndicatorsEnvelope' }
+              examples:
+                administrator_or_developer:
+                  summary: With recent activity
+                  value:
+                    data:
+                      documentation:
+                        totalScreens: 12
+                        byStatus: { UNDOCUMENTED: 3, DRAFT: 2, IN_PROGRESS: 2, IN_REVIEW: 1, APPROVED: 4 }
+                        approvedPercent: 33.3
+                      variables: { total: 40, untraced: 5 }
+                      collections: { total: 9, undocumented: 2 }
+                      jira: { pendingSubtasks: 6, jiraAvailable: true, lastSyncedAt: '2026-11-08T15:04:05.123Z' }
+                      recentActivity:
+                        - { actor: { id: 3, name: Ada Admin }, action: EVENT, eventName: DOCUMENTATION_APPROVED, entityType: screen, entityId: '12', entityLabel: scrHome, createdAt: '2026-11-08T15:10:00.000Z' }
+                        - { actor: { id: 5, name: Dani Dev }, action: UPDATE, eventName: null, entityType: screen, entityId: '13', entityLabel: scrDetail, createdAt: '2026-11-08T14:52:31.482Z' }
+                        - { actor: null, action: CREATE, eventName: null, entityType: variable, entityId: '41', entityLabel: gToken, createdAt: '2026-11-08T14:30:12.004Z' }
+                reader:
+                  summary: Reader overview, Jira not available (no recentActivity key)
+                  value:
+                    data:
+                      documentation:
+                        totalScreens: 12
+                        byStatus: { UNDOCUMENTED: 3, DRAFT: 2, IN_PROGRESS: 2, IN_REVIEW: 1, APPROVED: 4 }
+                        approvedPercent: 33.3
+                      variables: { total: 40, untraced: 5 }
+                      collections: { total: 9, undocumented: 2 }
+                      jira: { pendingSubtasks: 6, jiraAvailable: false, lastSyncedAt: '2026-11-08T09:41:00.000Z' }
         '304': { $ref: '#/components/responses/NotModified' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   # --------------------------------------------------------------- Audit
   /audit-log:
@@ -1878,18 +2132,39 @@ paths:
       x-rule: DEVELOPER_OWN_ACTIONS
       summary: Query the audit history (FR-21)
       description: |
-        Roles: Administrator (all records); Developer (own actions only: the
-        server forces `actorUserId` to the caller, and asking for another user
-        returns 403). Readers have no access. Newest first.
+        Roles: Administrator (all records); Developer (own actions only). Readers have no
+        access (403 from `x-roles`). Newest first: `createdAt` descending and then `id`
+        descending, so the page is stable.
+
+        Developer (`DEVELOPER_OWN_ACTIONS`). Without `actorUserId` the server uses the caller.
+        Their own id is valid. Any other user is a 403 `FORBIDDEN` with the message of the
+        role and `details.reason = "OWN_ACTIONS"`. A malformed request is a 400 before it can
+        be a 403.
+
+        Filters. `applicationId` is a filter, not a parent: one that does not exist gives an
+        empty page, not a 404 (the records outlive what they describe, NFR-20).
+        `entityId` needs `entityType` (identifiers repeat between tables): without it the
+        answer is a 400 with rule `required` on `entityType`. `from` and `to` are ISO 8601
+        `date-time` values with a zone (`2026-11-01T00:00:00.000Z`); a date without a time is a
+        400 with rule `format`. Both limits are inclusive and are compared with `createdAt`;
+        `from` after `to` is a 400 with rule `range` on `to`.
+
+        Keys. The database stores column names, and this operation serves them in camelCase
+        (SDD Section 7.1): only the first-level keys of `oldValue` and `newValue` and the
+        items of `changedFields` are translated (`documentation_status` is
+        `documentationStatus`, `password_hash` is `passwordHash`, whose value is never
+        stored). The values are not touched, including the content of JSON columns such as
+        `report.parameters`. `entityType` keeps the name of the table.
       parameters:
         - name: applicationId
           in: query
           schema: { type: integer, minimum: 1 }
         - name: entityType
           in: query
-          schema: { type: string, enum: [app_user, application, screen, variable, collection, collection_field, component, element_environment, screen_variable, screen_collection, variable_collection, dependency, jira_ticket, comment, report] }
+          schema: { $ref: '#/components/schemas/AuditEntityType' }
         - name: entityId
           in: query
+          description: Identifier of the element, as text (it can be composite, such as `12:DEV`). Requires `entityType`.
           schema: { type: string, maxLength: 50 }
         - name: actorUserId
           in: query
@@ -1899,16 +2174,18 @@ paths:
           schema: { type: string, enum: [CREATE, UPDATE, DELETE, EVENT] }
         - name: from
           in: query
+          description: Records at or after this instant (inclusive).
           schema: { type: string, format: date-time }
         - name: to
           in: query
+          description: Records at or before this instant (inclusive).
           schema: { type: string, format: date-time }
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
         - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
-          description: Page of audit records
+          description: Page of audit records, newest first
           headers:
             ETag: { $ref: '#/components/headers/ETag' }
             X-Request-Id: { $ref: '#/components/headers/XRequestId' }
@@ -1921,6 +2198,18 @@ paths:
                     required: [data]
                     properties:
                       data: { type: array, items: { $ref: '#/components/schemas/AuditEntry' } }
+              examples:
+                records:
+                  summary: An event, an update with camelCase keys, a creation and a deletion
+                  value:
+                    data:
+                      - { id: '9021', action: EVENT, eventName: DOCUMENTATION_RETURNED, entityType: screen, entityId: '12', entityLabel: scrHome, applicationId: 2, actor: { id: 3, name: Ada Admin }, dbRole: docs_app, changedFields: [], oldValue: null, newValue: { from: IN_REVIEW, to: IN_PROGRESS, commentId: 77 }, createdAt: '2026-11-08T15:10:00.000Z' }
+                      - { id: '9020', action: UPDATE, eventName: null, entityType: screen, entityId: '13', entityLabel: scrDetail, applicationId: 2, actor: { id: 5, name: Dani Dev }, dbRole: docs_app, changedFields: [documentationStatus, knownIssues], oldValue: { documentationStatus: DRAFT, knownIssues: null }, newValue: { documentationStatus: IN_PROGRESS, knownIssues: 'Slow on the first load.' }, createdAt: '2026-11-08T14:52:31.482Z' }
+                      - { id: '9019', action: CREATE, eventName: null, entityType: variable, entityId: '41', entityLabel: gToken, applicationId: 2, actor: null, dbRole: docs_owner, changedFields: [], oldValue: null, newValue: { id: 41, name: gToken, scope: GLOBAL }, createdAt: '2026-11-08T14:30:12.004Z' }
+                      - { id: '9018', action: DELETE, eventName: null, entityType: screen_variable, entityId: '88', entityLabel: OnVisible, applicationId: 2, actor: { id: 5, name: Dani Dev }, dbRole: docs_app, changedFields: [], oldValue: { id: 88, screenId: 13, variableId: 41, usedIn: OnVisible }, newValue: null, createdAt: '2026-11-08T14:12:09.771Z' }
+                    page: 1
+                    pageSize: 20
+                    total: 4
         '304': { $ref: '#/components/responses/NotModified' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
@@ -2276,7 +2565,10 @@ components:
       name: If-Match
       in: header
       required: false
-      description: ETag from the last GET; if the resource changed since, the update is rejected with 412.
+      description: |
+        ETag from the last GET; if the resource changed since, the update is rejected with 412.
+        For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
+        the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
       schema: { type: string, example: 'W/"1727548800123"' }
     IfNoneMatch:
       name: If-None-Match
@@ -2290,7 +2582,10 @@ components:
       description: URL of the created resource
       schema: { type: string, example: /api/v1/variables/42 }
     ETag:
-      description: Weak validator. A single resource with `updatedAt` sends one derived from it; listings and other responses send a weak hash of the body.
+      description: |
+        Weak validator. A single resource with `updatedAt` sends one derived from it (`W/"<updatedAt ms>"`);
+        a screen also appends its `pendingSubtasks` and `commentCount` (`W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"`);
+        listings and other responses send a weak hash of the body.
       schema: { type: string, example: 'W/"1727548800123"' }
     XRequestId:
       description: Identifier of the request, also written in the server log. Quote it when reporting a problem.
@@ -2315,6 +2610,46 @@ components:
                 details:
                   fields:
                     - { field: environments, rule: minItems, message: must NOT have fewer than 1 items }
+            SEARCH_WITHOUT_TEXT_OR_FILTER:
+              summary: GET /search with neither q nor any filter (types, environment, documentationStatus, scope)
+              value:
+                code: VALIDATION_ERROR
+                message: Check the highlighted fields.
+                details:
+                  fields:
+                    - { field: q, rule: required, message: This value is required. }
+            SEARCH_TEXT_TOO_SHORT:
+              summary: GET /search, q of fewer than 2 characters once trimmed
+              value:
+                code: VALIDATION_ERROR
+                message: Check the highlighted fields.
+                details:
+                  fields:
+                    - { field: q, rule: minLength, message: must NOT have fewer than 2 characters }
+            AUDIT_ENTITY_ID_WITHOUT_TYPE:
+              summary: GET /audit-log with entityId and no entityType
+              value:
+                code: VALIDATION_ERROR
+                message: Check the highlighted fields.
+                details:
+                  fields:
+                    - { field: entityType, rule: required, message: This value is required. }
+            AUDIT_DATE_WITHOUT_TIME:
+              summary: GET /audit-log, from or to without a time
+              value:
+                code: VALIDATION_ERROR
+                message: Check the highlighted fields.
+                details:
+                  fields:
+                    - { field: from, rule: format, message: must match format "date-time" }
+            AUDIT_FROM_AFTER_TO:
+              summary: GET /audit-log, from later than to
+              value:
+                code: VALIDATION_ERROR
+                message: Check the highlighted fields.
+                details:
+                  fields:
+                    - { field: to, rule: range, message: "'to' must not be earlier than 'from'." }
             SCREEN_REPEATED_COMPONENT_NAME:
               summary: A repeated value in a screen payload is reported at the position of the repetition (the first one is not)
               value:
@@ -2447,7 +2782,13 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
-          example: { code: FORBIDDEN, message: "Your role doesn't allow this action.", details: { requiredRoles: [ADMINISTRATOR] } }
+          examples:
+            role:
+              summary: The role does not allow the operation
+              value: { code: FORBIDDEN, message: "Your role doesn't allow this action.", details: { requiredRoles: [ADMINISTRATOR] } }
+            own_actions:
+              summary: GET /audit-log, a Developer asks for the actions of another user (DEVELOPER_OWN_ACTIONS)
+              value: { code: FORBIDDEN, message: "Your role doesn't allow this action.", details: { reason: OWN_ACTIONS } }
     NotFound:
       description: |
         The resource does not exist. It may be the one in the path, the application of a listing
@@ -2470,6 +2811,12 @@ components:
             nested_screen_reference:
               summary: A variable, collection or screen the body points at that does not exist
               value: { code: NOT_FOUND, message: "This screen doesn't exist. It may have been deleted.", details: { element: screen, id: 912, field: 'navigations[0].targetScreenId' } }
+            application:
+              summary: GET /dependencies/graph, /search or /dashboard/indicators with an applicationId that does not exist
+              value: { code: NOT_FOUND, message: "This application doesn't exist. It may have been deleted.", details: { element: application, id: 912 } }
+            neighborhood_node:
+              summary: GET /dependencies/{type}/{id} with an element that does not exist (also an id outside the integer range)
+              value: { code: NOT_FOUND, message: "This collection doesn't exist. It may have been deleted.", details: { element: collection, id: 912 } }
     Conflict:
       description: |
         Uniqueness conflict (duplicate name or e-mail). For `DUPLICATE_NAME`, `details.application`
@@ -3079,6 +3426,31 @@ components:
         id: { type: integer, minimum: 1 }
         targetScreenId: { type: integer, minimum: 1 }
         description: { type: [string, 'null'], maxLength: 2000 }
+    ComponentUse:
+      type: object
+      description: |
+        A use of a variable or a collection by a component, as a screen returns it. A write
+        sends `targetId` instead of `target` (see `ComponentUseWrite`).
+      required: [id, targetType, target, description]
+      properties:
+        id: { type: integer }
+        targetType: { type: string, enum: [VARIABLE, COLLECTION] }
+        target: { $ref: '#/components/schemas/Ref' }
+        description: { type: [string, 'null'] }
+    Component:
+      type: object
+      description: |
+        A component of a screen, as a screen returns it. `uses` is always present (empty when
+        the component uses nothing) and is ordered by the name of the target and then by `id`.
+        A write sends `ComponentWrite`.
+      required: [id, name, type, onSelect, description, uses]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        type: { type: string, description: 'Power Apps control type, free text (Button, Gallery, Text input...)' }
+        onSelect: { type: [string, 'null'] }
+        description: { type: [string, 'null'] }
+        uses: { type: array, items: { $ref: '#/components/schemas/ComponentUse' } }
     ScreenWrite:
       type: object
       description: |
@@ -3136,24 +3508,7 @@ components:
           properties:
             miroLink: { type: [string, 'null'] }
             template: { $ref: '#/components/schemas/ScreenTemplate' }
-            components:
-              type: array
-              items:
-                allOf:
-                  - $ref: '#/components/schemas/ComponentWrite'
-                  - type: object
-                    required: [id]
-                    properties:
-                      uses:
-                        type: array
-                        items:
-                          type: object
-                          required: [id, targetType, target]
-                          properties:
-                            id: { type: integer }
-                            targetType: { type: string, enum: [VARIABLE, COLLECTION] }
-                            target: { $ref: '#/components/schemas/Ref' }
-                            description: { type: [string, 'null'] }
+            components: { type: array, items: { $ref: '#/components/schemas/Component' } }
             variableLinks:
               type: array
               items:
@@ -3343,35 +3698,126 @@ components:
             comment: { type: string, minLength: 1, maxLength: 4000, description: Required when returning }
 
     # -------------------------------------------------------------- graph
-    GraphNode:
+    ScreenNode:
       type: object
-      required: [key, id, type, name]
+      description: A screen. `miroLink` is the diagram of FR-16; `isAppContext` marks the reserved App (OnStart) screen.
+      required: [key, id, type, name, documentationStatus, isAppContext, miroLink]
+      additionalProperties: false
       properties:
-        key: { type: string, description: 'Stable node key, e.g. screen:12', example: 'screen:12' }
+        key: { type: string, description: 'Stable node key, `<type in lowercase>:<id>`', example: 'screen:12' }
         id: { type: integer }
-        type: { $ref: '#/components/schemas/ElementType' }
+        type: { const: SCREEN }
         name: { type: string }
-        screenId: { type: [integer, 'null'], description: Owning screen for components }
         documentationStatus: { $ref: '#/components/schemas/DocumentationStatus' }
         isAppContext: { type: boolean }
-        scope: { $ref: '#/components/schemas/VariableScope' }
-        untraced: { type: boolean, description: Variable without origin screen }
-        miroLink: { type: [string, 'null'], description: Screens only (FR-16) }
-    GraphEdge:
+        miroLink: { type: [string, 'null'] }
+    VariableNode:
       type: object
-      required: [id, source, target, kind]
+      description: A variable. `untraced` is true when it has no origin screen (FR-19); the interface draws it with a dashed border.
+      required: [key, id, type, name, scope, untraced]
+      additionalProperties: false
       properties:
-        id: { type: string, example: 'sv:45' }
-        source: { type: string, description: Node key }
-        target: { type: string, description: Node key }
-        kind:
-          type: string
-          enum: [CONTAINS, CREATES, ACCESSES, FEEDS, USES, DERIVES_FROM, NAVIGATES_TO]
-          description: 'CONTAINS screen->component; CREATES origin screen->variable; ACCESSES screen->variable/collection; FEEDS collection->variable; USES component->variable/collection; DERIVES_FROM collection->collection; NAVIGATES_TO screen->screen'
+        key: { type: string, example: 'variable:7' }
+        id: { type: integer }
+        type: { const: VARIABLE }
+        name: { type: string }
+        scope: { $ref: '#/components/schemas/VariableScope' }
+        untraced: { type: boolean }
+    CollectionNode:
+      type: object
+      description: A collection.
+      required: [key, id, type, name]
+      additionalProperties: false
+      properties:
+        key: { type: string, example: 'collection:21' }
+        id: { type: integer }
+        type: { const: COLLECTION }
+        name: { type: string }
+    ComponentNode:
+      type: object
+      description: A component. `screenId` is the screen that contains it, also when that screen node is not in the response.
+      required: [key, id, type, name, screenId]
+      additionalProperties: false
+      properties:
+        key: { type: string, example: 'component:31' }
+        id: { type: integer }
+        type: { const: COMPONENT }
+        name: { type: string }
+        screenId: { type: integer }
+    GraphNode:
+      description: |
+        A node of the graph; the variant is given by `type`, and each variant declares only
+        its own fields.
+      oneOf:
+        - $ref: '#/components/schemas/ScreenNode'
+        - $ref: '#/components/schemas/VariableNode'
+        - $ref: '#/components/schemas/CollectionNode'
+        - $ref: '#/components/schemas/ComponentNode'
+      discriminator:
+        propertyName: type
+        mapping:
+          SCREEN: '#/components/schemas/ScreenNode'
+          VARIABLE: '#/components/schemas/VariableNode'
+          COLLECTION: '#/components/schemas/CollectionNode'
+          COMPONENT: '#/components/schemas/ComponentNode'
+    AccessEdge:
+      type: object
+      description: A screen reads or writes a variable or a collection. One edge per link, so a screen can have several to the same element. The origin links are not here, because `CREATES` represents them.
+      required: [id, source, target, kind, accessMode, usedIn]
+      additionalProperties: false
+      properties:
+        id: { type: string, description: 'Prefix `sv` (variable link) or `sc` (collection link) and the id of the row', example: 'sc:5' }
+        source: { type: string, description: Node key of the screen }
+        target: { type: string, description: Node key of the variable or collection }
+        kind: { const: ACCESSES }
         accessMode: { $ref: '#/components/schemas/AccessMode' }
+        usedIn: { type: string }
+    FeedEdge:
+      type: object
+      description: A collection feeds a variable (a variable assignment, FR-09).
+      required: [id, source, target, kind, usedIn, assignmentFunction, tableFunction]
+      additionalProperties: false
+      properties:
+        id: { type: string, description: 'Prefix `vc` and the id of the assignment', example: 'vc:3' }
+        source: { type: string, description: Node key of the collection }
+        target: { type: string, description: Node key of the variable }
+        kind: { const: FEEDS }
         usedIn: { type: string }
         assignmentFunction: { $ref: '#/components/schemas/AssignmentFunction' }
         tableFunction: { type: [string, 'null'] }
+    StructureEdge:
+      type: object
+      description: |
+        An edge with no data of its own. `CONTAINS` screen to component (prefix `ct`),
+        `CREATES` origin screen to variable (`cr`), `USES` component to variable or
+        collection, `DERIVES_FROM` collection to the collection it is built from, and
+        `NAVIGATES_TO` screen to screen (these three with prefix `d`).
+      required: [id, source, target, kind]
+      additionalProperties: false
+      properties:
+        id: { type: string, example: 'd:40' }
+        source: { type: string, description: Node key }
+        target: { type: string, description: Node key }
+        kind: { type: string, enum: [CONTAINS, CREATES, USES, DERIVES_FROM, NAVIGATES_TO] }
+    GraphEdge:
+      description: |
+        An edge of the graph; the variant is given by `kind`, and each variant declares only
+        its own fields (`accessMode` and `usedIn` on `ACCESSES`; `usedIn`,
+        `assignmentFunction` and `tableFunction` on `FEEDS`).
+      oneOf:
+        - $ref: '#/components/schemas/AccessEdge'
+        - $ref: '#/components/schemas/FeedEdge'
+        - $ref: '#/components/schemas/StructureEdge'
+      discriminator:
+        propertyName: kind
+        mapping:
+          ACCESSES: '#/components/schemas/AccessEdge'
+          FEEDS: '#/components/schemas/FeedEdge'
+          CONTAINS: '#/components/schemas/StructureEdge'
+          CREATES: '#/components/schemas/StructureEdge'
+          USES: '#/components/schemas/StructureEdge'
+          DERIVES_FROM: '#/components/schemas/StructureEdge'
+          NAVIGATES_TO: '#/components/schemas/StructureEdge'
     GraphEnvelope:
       type: object
       required: [data]
@@ -3384,18 +3830,68 @@ components:
             edges: { type: array, items: { $ref: '#/components/schemas/GraphEdge' } }
 
     # ------------------------------------------------- search / dashboard
-    SearchResult:
+    ScreenSearchResult:
       type: object
-      required: [type, id, name, matchedIn]
+      required: [type, id, name, matchedIn, snippet, documentationStatus]
+      additionalProperties: false
       properties:
-        type: { $ref: '#/components/schemas/ElementType' }
+        type: { const: SCREEN }
         id: { type: integer }
         name: { type: string }
-        screen: { oneOf: [{ $ref: '#/components/schemas/Ref' }, { type: 'null' }], description: Owning screen (components) or origin screen (variables) }
-        matchedIn: { type: string, enum: [name, description, template, usedIn], description: Where the text was found }
+        matchedIn: { type: [string, 'null'], enum: [name, template, null], description: Where the text was found; null without `q` }
         snippet: { type: [string, 'null'], maxLength: 300 }
         documentationStatus: { $ref: '#/components/schemas/DocumentationStatus' }
+    VariableSearchResult:
+      type: object
+      required: [type, id, name, matchedIn, snippet, screen, environments]
+      additionalProperties: false
+      properties:
+        type: { const: VARIABLE }
+        id: { type: integer }
+        name: { type: string }
+        matchedIn: { type: [string, 'null'], enum: [name, description, usedIn, null], description: Where the text was found; null without `q` }
+        snippet: { type: [string, 'null'], maxLength: 300 }
+        screen: { oneOf: [{ $ref: '#/components/schemas/Ref' }, { type: 'null' }], description: Screen where the variable was created; null when it has none }
         environments: { type: array, items: { $ref: '#/components/schemas/Environment' } }
+    CollectionSearchResult:
+      type: object
+      required: [type, id, name, matchedIn, snippet, environments]
+      additionalProperties: false
+      properties:
+        type: { const: COLLECTION }
+        id: { type: integer }
+        name: { type: string }
+        matchedIn: { type: [string, 'null'], enum: [name, description, creationCondition, fieldName, usedIn, null], description: Where the text was found; null without `q` }
+        snippet: { type: [string, 'null'], maxLength: 300 }
+        environments: { type: array, items: { $ref: '#/components/schemas/Environment' } }
+    ComponentSearchResult:
+      type: object
+      required: [type, id, name, matchedIn, snippet, screen]
+      additionalProperties: false
+      properties:
+        type: { const: COMPONENT }
+        id: { type: integer }
+        name: { type: string }
+        matchedIn: { type: [string, 'null'], enum: [name, description, onSelect, type, null], description: Where the text was found; null without `q` }
+        snippet: { type: [string, 'null'], maxLength: 300 }
+        screen: { $ref: '#/components/schemas/Ref', description: Screen that contains the component, to open it }
+    SearchResult:
+      description: |
+        One element found; the variant is given by `type`. `matchedIn` and `snippet` are null
+        when the search has no text. The element is opened with `type` and `id`; a component
+        is opened in its `screen`.
+      oneOf:
+        - $ref: '#/components/schemas/ScreenSearchResult'
+        - $ref: '#/components/schemas/VariableSearchResult'
+        - $ref: '#/components/schemas/CollectionSearchResult'
+        - $ref: '#/components/schemas/ComponentSearchResult'
+      discriminator:
+        propertyName: type
+        mapping:
+          SCREEN: '#/components/schemas/ScreenSearchResult'
+          VARIABLE: '#/components/schemas/VariableSearchResult'
+          COLLECTION: '#/components/schemas/CollectionSearchResult'
+          COMPONENT: '#/components/schemas/ComponentSearchResult'
     IndicatorsEnvelope:
       type: object
       required: [data]
@@ -3406,11 +3902,13 @@ components:
           properties:
             documentation:
               type: object
+              description: Every figure includes the App (OnStart) screen.
               required: [totalScreens, byStatus, approvedPercent]
               properties:
                 totalScreens: { type: integer }
                 byStatus:
                   type: object
+                  description: The five statuses, also the ones that are 0; they add up to `totalScreens`.
                   required: [UNDOCUMENTED, DRAFT, IN_PROGRESS, IN_REVIEW, APPROVED]
                   properties:
                     UNDOCUMENTED: { type: integer }
@@ -3418,7 +3916,7 @@ components:
                     IN_PROGRESS: { type: integer }
                     IN_REVIEW: { type: integer }
                     APPROVED: { type: integer }
-                approvedPercent: { type: number, minimum: 0, maximum: 100, description: Includes the App (OnStart) screen }
+                approvedPercent: { type: number, minimum: 0, maximum: 100, description: 'APPROVED over `totalScreens`, with one decimal (rounded half up)' }
             variables:
               type: object
               required: [total, untraced]
@@ -3433,17 +3931,36 @@ components:
                 undocumented: { type: integer, description: Not linked to any screen }
             jira:
               type: object
-              required: [pendingSubtasks, jiraAvailable]
+              description: Always from the local copy of the tickets; Jira is never called (NFR-14).
+              required: [pendingSubtasks, jiraAvailable, lastSyncedAt]
               properties:
-                pendingSubtasks: { type: integer }
-                jiraAvailable: { type: boolean }
+                pendingSubtasks: { type: integer, description: Subtasks of the application whose status category is not DONE }
+                jiraAvailable: { type: boolean, description: The Jira client is configured and its circuit breaker is not open }
+                lastSyncedAt: { type: [string, 'null'], format: date-time, description: Latest synchronization of any ticket of the application; null when there are none }
             recentActivity:
               type: array
-              description: Last 10 audit records; omitted for Readers
+              description: The 10 most recent audit records of the application, newest first, of the whole team. Absent (never null) for Readers.
               maxItems: 10
-              items: { $ref: '#/components/schemas/AuditEntry' }
+              items: { $ref: '#/components/schemas/ActivitySummary' }
 
     # -------------------------------------------------------------- audit
+    AuditEntityType:
+      type: string
+      description: Name of the audited table.
+      enum: [app_user, application, screen, variable, collection, collection_field, component, element_environment, screen_variable, screen_collection, variable_collection, dependency, jira_ticket, comment, report]
+    ActivitySummary:
+      type: object
+      description: An audit record without its values or its database role, for the recent activity of the dashboard.
+      required: [actor, action, eventName, entityType, entityId, entityLabel, createdAt]
+      additionalProperties: false
+      properties:
+        actor: { oneOf: [{ $ref: '#/components/schemas/Ref' }, { type: 'null' }], description: null = write outside the API }
+        action: { type: string, enum: [CREATE, UPDATE, DELETE, EVENT] }
+        eventName: { type: [string, 'null'] }
+        entityType: { $ref: '#/components/schemas/AuditEntityType' }
+        entityId: { type: string }
+        entityLabel: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
     AuditEntry:
       type: object
       required: [id, action, entityType, entityId, actor, changedFields, createdAt]
@@ -3456,21 +3973,34 @@ components:
             Name of a business event (`action` = EVENT). The review of a screen records
             `DOCUMENTATION_APPROVED` or `DOCUMENTATION_RETURNED`, with `entityType` =
             `screen` and the id of the screen in `entityId`; `newValue` carries its payload.
-        entityType: { type: string }
-        entityId: { type: string }
-        entityLabel: { type: [string, 'null'] }
+        entityType: { $ref: '#/components/schemas/AuditEntityType' }
+        entityId: { type: string, description: 'Identifier as text; composite for some tables (`12:DEV`)' }
+        entityLabel:
+          type: [string, 'null']
+          description: |
+            Label recorded with the row (SDD Table 39): the name, or `used_in` for a screen or
+            variable link and an assignment, the relation type for a dependency, the Jira key for
+            a ticket, the text for a comment. Up to 300 characters.
         applicationId: { type: [integer, 'null'] }
         actor: { oneOf: [{ $ref: '#/components/schemas/Ref' }, { type: 'null' }], description: null = write outside the API }
-        dbRole: { type: string, description: Administrator only }
-        changedFields: { type: array, items: { type: string } }
-        oldValue: { type: [object, 'null'] }
+        dbRole: { type: string, description: Database role that wrote the row. Administrator only; absent for anyone else. }
+        changedFields:
+          type: array
+          description: Names of the columns that changed in an UPDATE, in camelCase; empty otherwise.
+          items: { type: string }
+        oldValue:
+          type: [object, 'null']
+          description: |
+            Image of the row before an UPDATE or a DELETE (null for CREATE and EVENT). First-level
+            keys in camelCase; values as stored. A redacted column (`passwordHash`) has no key.
         newValue:
           type: [object, 'null']
           description: |
-            For an EVENT, the payload of the event. `DOCUMENTATION_APPROVED` and
-            `DOCUMENTATION_RETURNED` use `{ from, to, commentId }`: the status before and
-            after the decision and the id of the review comment, which is null when an
-            APPROVE created no comment.
+            Image of the row after a CREATE or an UPDATE (null for DELETE), with first-level keys
+            in camelCase and values as stored. For an EVENT, the payload of the event.
+            `DOCUMENTATION_APPROVED` and `DOCUMENTATION_RETURNED` use `{ from, to, commentId }`: the
+            status before and after the decision and the id of the review comment, which is null
+            when an APPROVE created no comment.
         createdAt: { type: string, format: date-time }
 
     # ------------------------------------------------------------ reports
