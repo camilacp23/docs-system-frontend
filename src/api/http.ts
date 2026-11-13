@@ -4,9 +4,11 @@
 // placeholders), pathParams, query, body, token (sent as Bearer), headers, signal.
 // GET requests use `cache: 'no-cache'`: the browser always revalidates with the server (If-None-Match from its own
 // cache; a 304 reaches JavaScript as a 200 with the cached body) and never serves a copy older than the last PUT.
+// Query parameters go through encodeQuery (RFC 3986, lists as comma-separated values).
 // Writes carry no cache option. A raw 304 (only when a caller sets If-None-Match itself) is never an error: the
 // result has notModified = true and a null body.
 import { ApiError, type ErrorDetails } from './ApiError';
+import { encodeQuery } from './encodeQuery';
 
 export const API_BASE = '/api/v1';
 
@@ -43,12 +45,7 @@ function buildUrl(
     if (value === undefined) throw new Error(`Missing path parameter "${name}" for ${path}`);
     return encodeURIComponent(String(value));
   });
-  const search = new URLSearchParams();
-  for (const [key, value] of Object.entries(query ?? {})) {
-    if (value === undefined || value === null) continue;
-    search.set(key, typeof value === 'string' ? value : JSON.stringify(value));
-  }
-  const qs = search.toString();
+  const qs = encodeQuery(query);
   return `${API_BASE}${resolved}${qs ? `?${qs}` : ''}`;
 }
 
