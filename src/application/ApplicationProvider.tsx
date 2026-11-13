@@ -1,6 +1,8 @@
 // ApplicationProvider: loads GET /applications (every page) once the session is authenticated and keeps the
 // selected application. Only the id is stored (localStorage), and only when the user selects one.
-// Without a valid stored id it picks the first ACTIVE application, or the first one if all are archived.
+// Without a valid stored id it picks the first ACTIVE application, or the first one if all are archived, and sticks
+// to that pick (in memory only, never stored) while the session lasts: if the application on screen is archived later,
+// it stays selected and the read-only strip appears (S-09b) instead of the shell jumping to another application.
 // reload() blanks the list while it reads again; refresh() keeps the current one until the new one arrives.
 // Props: children; client (optional, tests only; defaults to the app API client).
 import type { ReactNode } from 'react';
@@ -53,13 +55,23 @@ export function ApplicationProvider({ children, client = api }: ApplicationProvi
   const [result, setResult] = useState<LoadResult | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
   const [selectedId, setSelectedId] = useState<number | null>(() => readSelectedApplicationId());
+  /** The application picked by default for a user, kept so it does not change when its status does. */
+  const [defaultPick, setDefaultPick] = useState<{ userId: number; id: number | null } | null>(
+    null,
+  );
 
   useEffect(() => {
     if (userId === null) return;
     let cancelled = false;
     fetchAllApplications(client).then(
       (applications) => {
-        if (!cancelled) setResult({ userId, applications, error: null });
+        if (cancelled) return;
+        setResult({ userId, applications, error: null });
+        setDefaultPick((previous) =>
+          previous?.userId === userId
+            ? previous
+            : { userId, id: pickDefault(applications)?.id ?? null },
+        );
       },
       (thrown: unknown) => {
         if (cancelled) return;
@@ -95,8 +107,10 @@ export function ApplicationProvider({ children, client = api }: ApplicationProvi
     const status: ApplicationValue['status'] =
       viewUserId === null ? 'idle' : own === null ? 'loading' : own.error ? 'error' : 'ready';
     const applications = own?.applications ?? [];
+    const pickedId = defaultPick?.userId === viewUserId ? defaultPick.id : null;
     const current =
       applications.find((a) => a.id === selectedId) ??
+      applications.find((a) => a.id === pickedId) ??
       (status === 'ready' ? pickDefault(applications) : null);
     return {
       status,
@@ -108,7 +122,7 @@ export function ApplicationProvider({ children, client = api }: ApplicationProvi
       reload,
       refresh,
     };
-  }, [result, viewUserId, selectedId, selectApplication, reload, refresh]);
+  }, [result, viewUserId, selectedId, defaultPick, selectApplication, reload, refresh]);
 
   return <ApplicationContext value={value}>{children}</ApplicationContext>;
 }

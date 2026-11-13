@@ -7,12 +7,17 @@
 // Registering and editing happen in a modal (ApplicationFormModal); the name of a row opens the edit form. After a
 // write the list is read again and the applications of the shell are refreshed in place (selector, application card,
 // archived strip), without reloading the page. The register modal is part of the URL (?new=1).
+// The row menu has Edit and Archive (with a confirmation, S-09) or Unarchive (an archived application; no
+// confirmation, as the Unarchive button of the archived strip has none). Both replace the whole representation: the
+// application is read again and every field goes back with If-Match (useApplicationStatusChange). Archiving the
+// application selected in the sidebar makes the archived strip appear on every other page at once.
 // Loading shows a skeleton only after 300 ms (Table 58); an empty list offers "Clear filters" when filters are set;
 // a failure shows the server error state with a retry.
-import { LayoutGrid, Pencil, Plus, X } from 'lucide-react';
+import { Archive, ArchiveRestore, LayoutGrid, Pencil, Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import { useSearchParams } from 'react-router';
 
+import { getThrownMessage } from '../../api/messages';
 import { useApi } from '../../api/useApi';
 import { useApiResource } from '../../api/useApiResource';
 import { useApplication } from '../../application/useApplication';
@@ -26,14 +31,17 @@ import {
   Pagination,
   SLOW_LOADING_MESSAGE,
   useDelayedLoading,
+  useToast,
 } from '../../components/ui';
 import { useOfflineBlock } from '../../hooks/useOfflineBlock';
 
 import { ApplicationFilters } from './ApplicationFilters';
 import { ApplicationFormModal } from './ApplicationFormModal';
 import { ApplicationTable } from './ApplicationTable';
+import { ArchiveApplicationModal } from './ArchiveApplicationModal';
 import type { Application } from './applicationLabels';
 import { useApplicationListParams } from './useApplicationListParams';
+import { useApplicationStatusChange } from './useApplicationStatusChange';
 
 const ACTION_ICON = { size: 16, strokeWidth: ICON_STROKE_WIDTH } as const;
 
@@ -47,6 +55,9 @@ export function ApplicationsListPage() {
   const client = useApi();
   const { applications, status: shellStatus, refresh } = useApplication();
   const { blocked, reason } = useOfflineBlock();
+  const toast = useToast();
+  const changeStatus = useApplicationStatusChange();
+  const [archiving, setArchiving] = useState<Application | null>(null);
   const [search, setSearch] = useSearchParams();
   const registering = search.get('new') === '1';
   const setRegistering = (open: boolean) => {
@@ -84,6 +95,20 @@ export function ApplicationsListPage() {
   const saved = () => {
     list.reload();
     refresh();
+  };
+
+  const unarchive = async (target: Application) => {
+    try {
+      const updated = await changeStatus(target.id, 'ACTIVE');
+      toast.show({ message: `${updated.name} unarchived.` });
+    } catch (thrown) {
+      toast.show({
+        tone: 'warning',
+        message: getThrownMessage(thrown, { element: 'application' }),
+      });
+    }
+    // Whatever happened, show what the server holds now (a 412 means someone else changed it).
+    saved();
   };
 
   return (
@@ -176,6 +201,28 @@ export function ApplicationsListPage() {
                         setEditing(row);
                       },
                     },
+                    row.status === 'ACTIVE'
+                      ? {
+                          key: 'status',
+                          label: 'Archive',
+                          icon: <Archive {...ACTION_ICON} />,
+                          danger: true,
+                          disabled: blocked,
+                          reason: reason ?? undefined,
+                          onSelect: () => {
+                            setArchiving(row);
+                          },
+                        }
+                      : {
+                          key: 'status',
+                          label: 'Unarchive',
+                          icon: <ArchiveRestore {...ACTION_ICON} />,
+                          disabled: blocked,
+                          reason: reason ?? undefined,
+                          onSelect: () => {
+                            void unarchive(row);
+                          },
+                        },
                   ]}
                 />
               )}
@@ -208,6 +255,15 @@ export function ApplicationsListPage() {
             setEditing(null);
           }}
           onSaved={saved}
+        />
+      )}
+      {archiving !== null && (
+        <ArchiveApplicationModal
+          application={archiving}
+          onClose={() => {
+            setArchiving(null);
+          }}
+          onDone={saved}
         />
       )}
       {registering && (

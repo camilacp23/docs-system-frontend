@@ -216,6 +216,52 @@ describe('ApplicationProvider', () => {
     observer.disconnect();
   });
 
+  it('keeps the application picked by default when it is archived later, instead of jumping to another', async () => {
+    const reply = (data: Application[]) => ({
+      body: { data, page: 1, pageSize: 100, total: data.length },
+      status: 200,
+      etag: null,
+      location: null,
+    });
+    const get = vi
+      .fn()
+      .mockResolvedValueOnce(reply([app(1), app(2)]))
+      .mockResolvedValueOnce(reply([app(1, 'ARCHIVED'), app(2)]));
+    await renderSignedIn({ get } as unknown as ApiClient);
+    await waitFor(() => expect(screen.getByTestId('current')).toHaveTextContent('1'));
+    expect(screen.getByTestId('archived')).toHaveTextContent('false');
+
+    act(() => {
+      screen.getByText('refresh').click();
+    });
+
+    await waitFor(() => expect(screen.getByTestId('archived')).toHaveTextContent('true'));
+    expect(screen.getByTestId('current')).toHaveTextContent('1');
+    // Nothing was stored: only a choice of the user is.
+    expect(localStorage.getItem(SELECTED_APPLICATION_KEY)).toBeNull();
+  });
+
+  it('falls back to the first active application when the one picked by default disappears', async () => {
+    const reply = (data: Application[]) => ({
+      body: { data, page: 1, pageSize: 100, total: data.length },
+      status: 200,
+      etag: null,
+      location: null,
+    });
+    const get = vi
+      .fn()
+      .mockResolvedValueOnce(reply([app(1), app(2)]))
+      .mockResolvedValueOnce(reply([app(2)]));
+    await renderSignedIn({ get } as unknown as ApiClient);
+    await waitFor(() => expect(screen.getByTestId('current')).toHaveTextContent('1'));
+
+    act(() => {
+      screen.getByText('refresh').click();
+    });
+
+    await waitFor(() => expect(screen.getByTestId('current')).toHaveTextContent('2'));
+  });
+
   it('drops the data when the session ends', async () => {
     const { client } = clientFor([[app(1)]]);
     const manager = await renderSignedIn(client);
