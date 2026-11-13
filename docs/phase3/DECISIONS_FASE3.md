@@ -122,6 +122,8 @@ Abiertos en el contrato (no se describieron en 0.3.3 porque el código aún no l
 
 ### Pendiente para la próxima versión del contrato (detectado en F-09)
 
+**Resuelto en 0.3.7 (F-13).** El esquema de lectura de una pantalla describe `components[].uses` como `ComponentUse` (con `target`, sin `targetId`). Se quitaron los casts de `ScreenComponentsTab`, `screenEditForm` y `ScreenEditPage`, y el `targetId` de relleno de los datos de prueba. El texto de abajo se conserva como registro.
+
 - **`Screen.components[].uses` (y por tanto `GET /screens/{id}`).** El contrato declara el elemento de `uses` con `allOf` de `ComponentWrite` y del elemento de lectura, así que exige a la vez `targetId` (del esquema de escritura `ComponentUseWrite`) y `target` (objeto `Ref`). El API solo devuelve `{ id, targetType, target, description }`; no devuelve `targetId` (`repository.ts` del backend selecciona `target`). El tipo generado exige entonces un campo que el API nunca envía. En el frontend, `ScreenComponentsTab` lee solo `target` y convierte el tipo con un cast comentado (`as unknown as readonly Use[]`), y los datos de prueba incluyen `targetId` solo para satisfacer el tipo. Corrección propuesta para el contrato: declarar el elemento de lectura de `uses` por separado (sin `allOf` con `ComponentWrite`), o devolver también `targetId`; al cambiarlo, quitar el cast. Anotado también como pendiente en la descripción del PR de esta rama. No se modificó el backend ni el contrato.
 
 ### Pendiente detectado en F-12 (ETag del detalle de una pantalla)
