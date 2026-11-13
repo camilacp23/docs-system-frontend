@@ -2,6 +2,8 @@
 // transition of /status with its result (the status, the new ETag used by the next call, the notice and the focus), the
 // refusals of the API (412, INVALID_TRANSITION, APPLICATION_ARCHIVED, a screen that no longer exists) and the disabled
 // cases (archived application, no connection).
+// Every action runs through setupSettledUser (inside act), so what it caused is rendered when the call returns: the
+// checks do not depend on when React decides to render under load.
 import { act, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -10,7 +12,7 @@ import type { Role } from '../../app/router/routes';
 import type { Screen } from '../../modules/screens/screenTypes';
 import { makeApplication } from '../helpers/renderApp';
 import { renderScreens, sampleScreens } from '../helpers/renderScreens';
-import { setupUser } from '../helpers/setupUser';
+import { setupSettledUser, settle, type User } from '../helpers/setupUser';
 
 type Status = Screen['documentationStatus'];
 
@@ -49,6 +51,7 @@ async function open(
         : s,
     ),
   });
+  await settle();
   await screen.findByRole('heading', { name: 'Detalle', level: 1 });
   return view;
 }
@@ -58,7 +61,7 @@ const serverStatus = (view: Awaited<ReturnType<typeof open>>) =>
 
 const button = (name: string) => screen.queryByRole('button', { name });
 
-async function menuItems(user: ReturnType<typeof setupUser>): Promise<string[]> {
+async function menuItems(user: User): Promise<string[]> {
   const trigger = screen.queryByRole('button', { name: 'More actions' });
   if (trigger === null) return [];
   await user.click(trigger);
@@ -134,7 +137,7 @@ describe('workflow actions by status and role', () => {
 
   for (const { status, role, buttons, menu } of CASES) {
     it(`${status} as ${role}`, async () => {
-      const user = setupUser();
+      const user = setupSettledUser();
       await open(status, role);
 
       const visible = WORKFLOW_BUTTONS.filter((name) => button(name) !== null);
@@ -172,7 +175,7 @@ describe('workflow actions by status and role', () => {
 
 describe('transitions of /status', () => {
   it('Start draft: UNDOCUMENTED -> DRAFT, with the notice and the focus on the title', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const view = await open('UNDOCUMENTED');
 
     await user.click(screen.getByRole('button', { name: 'Start draft' }));
@@ -186,7 +189,7 @@ describe('transitions of /status', () => {
   });
 
   it('Mark in progress: DRAFT -> IN_PROGRESS', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const view = await open('DRAFT');
 
     await user.click(screen.getByRole('button', { name: 'Mark in progress' }));
@@ -197,7 +200,7 @@ describe('transitions of /status', () => {
   });
 
   it('Back to undocumented: DRAFT -> UNDOCUMENTED, from the menu', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const view = await open('DRAFT');
 
     await user.click(screen.getByRole('button', { name: 'More actions' }));
@@ -209,7 +212,7 @@ describe('transitions of /status', () => {
   });
 
   it('Back to draft: IN_PROGRESS -> DRAFT, from the menu', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const view = await open('IN_PROGRESS');
 
     await user.click(screen.getByRole('button', { name: 'More actions' }));
@@ -220,7 +223,7 @@ describe('transitions of /status', () => {
   });
 
   it('Submit for review: IN_PROGRESS -> IN_REVIEW, and Edit is disabled with its reason (P-01)', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const view = await open('IN_PROGRESS');
 
     await user.click(screen.getByRole('button', { name: 'Submit for review' }));
@@ -233,7 +236,7 @@ describe('transitions of /status', () => {
   });
 
   it('Withdraw from review: IN_REVIEW -> IN_PROGRESS, as the Developer (button)', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const view = await open('IN_REVIEW', 'DEVELOPER');
 
     await user.click(screen.getByRole('button', { name: 'Withdraw from review' }));
@@ -244,7 +247,7 @@ describe('transitions of /status', () => {
   });
 
   it('Withdraw from review: as the Administrator (menu)', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const view = await open('IN_REVIEW', 'ADMINISTRATOR');
 
     await user.click(screen.getByRole('button', { name: 'More actions' }));
@@ -255,7 +258,7 @@ describe('transitions of /status', () => {
   });
 
   it('Reopen: APPROVED -> IN_PROGRESS', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const view = await open('APPROVED');
 
     await user.click(screen.getByRole('button', { name: 'More actions' }));
@@ -269,7 +272,7 @@ describe('transitions of /status', () => {
   });
 
   it('sends If-Match with the ETag of the detail and uses the new one for the next change', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const view = await open('UNDOCUMENTED');
     const first = view.api.etagOf(12);
 
@@ -288,7 +291,7 @@ describe('transitions of /status', () => {
   });
 
   it('shows the new status in the list when the user goes back (D-72)', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const view = await open('DRAFT');
     await user.click(screen.getByRole('button', { name: 'Mark in progress' }));
     await screen.findByText('Detalle is now In progress.');
@@ -303,7 +306,7 @@ describe('transitions of /status', () => {
   });
 
   it('disables every action while one is in flight, and sends it once', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const view = await open('DRAFT');
     const hold = view.api.hold((call) => call.path === '/screens/{id}/status');
 
@@ -324,7 +327,7 @@ describe('transitions of /status', () => {
 
 describe('errors of /status', () => {
   it('412: shows S-44 with the catalog text and Reload loads the other version', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const view = await open('DRAFT');
     // Someone else saved the screen: its ETag moved and it is now In progress.
     view.api.state.versions.set(12, 7);
@@ -349,7 +352,7 @@ describe('errors of /status', () => {
   });
 
   it('INVALID_TRANSITION: shows its text and reads the screen again', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const view = await open('DRAFT');
     // The status changed on the server with no change of ETag the page knows about.
     view.api.state.screens = view.api.state.screens.map((s) =>
@@ -370,7 +373,7 @@ describe('errors of /status', () => {
   });
 
   it('APPLICATION_ARCHIVED: shows its text when the application was archived meanwhile', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const view = await open('DRAFT');
     view.apps.state.applications = view.apps.state.applications.map((a) => ({
       ...a,
@@ -388,7 +391,7 @@ describe('errors of /status', () => {
   });
 
   it('shows "This screen doesn\'t exist" when it was deleted by someone else', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const view = await open('DRAFT');
     view.api.state.screens = view.api.state.screens.filter((s) => s.id !== 12);
 
@@ -398,7 +401,7 @@ describe('errors of /status', () => {
   });
 
   it('shows the catalog text of any other refusal and lets the user dismiss it', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const view = await open('DRAFT');
     view.api.failNext('PUT /screens/{id}/status', new ApiError({ status: 403, code: 'FORBIDDEN' }));
 
@@ -411,7 +414,7 @@ describe('errors of /status', () => {
   });
 
   it('clears the message when the next change starts', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const view = await open('DRAFT');
     view.api.failNext(
       'PUT /screens/{id}/status',
@@ -429,7 +432,7 @@ describe('errors of /status', () => {
 
 describe('disabled cases', () => {
   it('disables the actions, with the reason, when the application is archived', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     await open('IN_PROGRESS', 'DEVELOPER', { archived: true });
 
     const submit = screen.getByRole('button', { name: 'Submit for review' });
