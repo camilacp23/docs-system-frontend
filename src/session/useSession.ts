@@ -1,14 +1,15 @@
 // useSession: current session snapshot plus the actions.
-// Returns SessionSnapshot & { login(email, password), logout(), retryBootstrap() }.
+// Returns SessionSnapshot & { login(email, password), logout(notice?), replaceUser(user), retryBootstrap() }.
 import { useContext, useMemo, useSyncExternalStore } from 'react';
 
 import { SessionContext } from './SessionContext';
-import type { SessionSnapshot } from './SessionManager';
+import type { EndNotice, SessionSnapshot } from './SessionManager';
 import type { components } from '../api/schema';
 
 export interface SessionValue extends SessionSnapshot {
   login: (email: string, password: string) => Promise<components['schemas']['User']>;
-  logout: () => Promise<void>;
+  logout: (notice?: EndNotice) => Promise<void>;
+  replaceUser: (user: components['schemas']['User']) => void;
   retryBootstrap: () => Promise<void>;
 }
 
@@ -20,7 +21,10 @@ export function useSession(): SessionValue {
     () => ({
       ...snapshot,
       login: (email, password) => manager.login(email, password),
-      logout: () => manager.logout(),
+      logout: (notice) => manager.logout(notice ?? null),
+      replaceUser: (user) => {
+        manager.replaceUser(user);
+      },
       retryBootstrap: () => manager.retryBootstrap(),
     }),
     [manager, snapshot],

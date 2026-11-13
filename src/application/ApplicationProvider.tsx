@@ -1,6 +1,7 @@
 // ApplicationProvider: loads GET /applications (every page) once the session is authenticated and keeps the
 // selected application. Only the id is stored (localStorage), and only when the user selects one.
 // Without a valid stored id it picks the first ACTIVE application, or the first one if all are archived.
+// reload() blanks the list while it reads again; refresh() keeps the current one until the new one arrives.
 // Props: children; client (optional, tests only; defaults to the app API client).
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -78,6 +79,12 @@ export function ApplicationProvider({ children, client = api }: ApplicationProvi
     setReloadTick((tick) => tick + 1);
   }, []);
 
+  // Reads the list again but keeps showing the one already loaded until the new one arrives, so the selector, the
+  // application card and the archived strip change in place instead of flashing a loading state.
+  const refresh = useCallback(() => {
+    setReloadTick((tick) => tick + 1);
+  }, []);
+
   const selectApplication = useCallback((id: number) => {
     setSelectedId(id);
     writeSelectedApplicationId(id);
@@ -99,8 +106,9 @@ export function ApplicationProvider({ children, client = api }: ApplicationProvi
       currentApplicationId: current?.id ?? null,
       selectApplication,
       reload,
+      refresh,
     };
-  }, [result, viewUserId, selectedId, selectApplication, reload]);
+  }, [result, viewUserId, selectedId, selectApplication, reload, refresh]);
 
   return <ApplicationContext value={value}>{children}</ApplicationContext>;
 }

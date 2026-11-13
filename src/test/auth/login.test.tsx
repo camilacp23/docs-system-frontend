@@ -28,6 +28,31 @@ function fill(email: string, password: string) {
   fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: password } });
 }
 
+describe('notice after the user changed their own role or password', () => {
+  it.each([
+    ['ROLE_CHANGED', 'Your role changed. Sign in again to continue.'],
+    ['PASSWORD_CHANGED', 'Your password changed. Sign in again to continue.'],
+  ] as const)('%s tells why the session ended', async (notice, text) => {
+    const { manager } = await renderApp({ path: '/dashboard' });
+    await screen.findByRole('heading', { name: 'Dashboard' });
+    await act(async () => {
+      await manager.logout(notice);
+    });
+    await screen.findByRole('heading', { name: 'Sign in' });
+    expect(screen.getByText(text)).toBeInTheDocument();
+  });
+
+  it('a plain sign-out shows no notice', async () => {
+    const { manager } = await renderApp({ path: '/dashboard' });
+    await screen.findByRole('heading', { name: 'Dashboard' });
+    await act(async () => {
+      await manager.logout();
+    });
+    await screen.findByRole('heading', { name: 'Sign in' });
+    expect(screen.queryByText(/Sign in again to continue./)).not.toBeInTheDocument();
+  });
+});
+
 describe('login page', () => {
   it('renders the sign-in card with the exact copy', async () => {
     await openLogin();

@@ -53,6 +53,7 @@ function Probe() {
       <span data-testid="count">{value.applications.length}</span>
       <button onClick={() => value.selectApplication(2)}>select 2</button>
       <button onClick={() => value.reload()}>reload</button>
+      <button onClick={() => value.refresh()}>refresh</button>
     </div>
   );
 }
@@ -165,6 +166,54 @@ describe('ApplicationProvider', () => {
       screen.getByText('reload').click();
     });
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('ready'));
+  });
+
+  it('refresh reads again without ever showing a loading state, and the new list replaces the old', async () => {
+    let release: () => void = () => undefined;
+    const first = { data: [app(1)], page: 1, pageSize: 100, total: 1 };
+    const second = {
+      data: [app(1, 'ARCHIVED'), app(2, 'ARCHIVED')],
+      page: 1,
+      pageSize: 100,
+      total: 2,
+    };
+    const reply = (body: unknown) => ({ body, status: 200, etag: null, location: null });
+    const get = vi
+      .fn()
+      .mockResolvedValueOnce(reply(first))
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = () => {
+              resolve(reply(second));
+            };
+          }),
+      );
+    await renderSignedIn({ get } as unknown as ApiClient);
+    await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('1'));
+    const statuses: string[] = [];
+    const observer = new MutationObserver(() => {
+      statuses.push(screen.getByTestId('status').textContent ?? '');
+    });
+    observer.observe(screen.getByTestId('status'), {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+
+    act(() => {
+      screen.getByText('refresh').click();
+    });
+    expect(screen.getByTestId('status')).toHaveTextContent('ready');
+    expect(screen.getByTestId('count')).toHaveTextContent('1');
+    await act(async () => {
+      release();
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(screen.getByTestId('count')).toHaveTextContent('2'));
+    expect(screen.getByTestId('archived')).toHaveTextContent('true');
+    expect(statuses).not.toContain('loading');
+    observer.disconnect();
   });
 
   it('drops the data when the session ends', async () => {

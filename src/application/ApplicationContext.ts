@@ -15,7 +15,10 @@ export interface ApplicationValue {
   /** Id to send as `applicationId` in element listings and creations. */
   currentApplicationId: number | null;
   selectApplication: (id: number) => void;
+  /** Reads the list again, showing nothing until it arrives (after an error, for example). */
   reload: () => void;
+  /** Reads the list again keeping the current one on screen: after creating, editing or archiving an application. */
+  refresh: () => void;
 }
 
 export const ApplicationContext = createContext<ApplicationValue | null>(null);
