@@ -8,7 +8,6 @@ import type { Role } from '../../app/router/routes';
 
 import { makeApplicationsApi } from './fakeApplicationsApi';
 import { makeApplication, renderApp, type makeApplicationsClient } from './renderApp';
-import { settle } from './setupUser';
 
 export function sampleApplications(): Application[] {
   return [
@@ -54,7 +53,5 @@ export async function renderApplications(options: RenderApplicationsOptions = {}
     path: options.path ?? '/admin/applications',
     applicationsApi: api as unknown as ReturnType<typeof makeApplicationsClient>,
   });
-  // Let React render what the first reads brought, so the tests do not depend on when it decides to.
-  await settle();
   return { ...view, api };
 }

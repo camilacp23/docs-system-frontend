@@ -2,13 +2,13 @@
 // filters / sort / page reflected in the URL (q, status, mine, sort, page, pageSize), loading, empty and error
 // states, the reset on changing application, the Reader view and the archived application.
 import { screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';
 import { makeScreenDetail } from '../helpers/fakeScreensApi';
 import { makeApplication } from '../helpers/renderApp';
 import { renderScreens } from '../helpers/renderScreens';
+import { setupUser } from '../helpers/setupUser';
 
 const ROW_NAMES = (table: HTMLElement) =>
   within(table)
@@ -72,7 +72,7 @@ describe('screen list', () => {
   });
 
   it('keeps App (OnStart) first whatever the order', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await renderScreens();
     const grid = await table();
 
@@ -132,7 +132,7 @@ describe('screen list', () => {
   });
 
   it('says so, with a retry, when the counts cannot be read', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     let failing = true;
     await renderScreens({
       prepare: (fake) => {
@@ -155,7 +155,7 @@ describe('screen list', () => {
   });
 
   it('filters by name with a wait after typing, through the URL and the request', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router, api } = await renderScreens();
     const grid = await table();
 
@@ -176,7 +176,7 @@ describe('screen list', () => {
   });
 
   it('filters by status', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router, api } = await renderScreens();
     const grid = await table();
 
@@ -192,7 +192,7 @@ describe('screen list', () => {
   });
 
   it('filters the screens authored by me with the id of the signed-in user', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router, api } = await renderScreens({
       screens: [
         makeScreenDetail(10, 'App (OnStart)', {
@@ -223,7 +223,7 @@ describe('screen list', () => {
   });
 
   it('reads the state from the URL and orders by the contract whitelist', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router, api } = await renderScreens({
       path: '/screens?status=DRAFT&sort=bogus&pageSize=7',
     });
@@ -252,7 +252,7 @@ describe('screen list', () => {
   });
 
   it('sorts by status and by update time', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await renderScreens();
     const grid = await table();
 
@@ -276,7 +276,7 @@ describe('screen list', () => {
   });
 
   it('pages with 20, 50 or 100 rows and goes back to page 1 when the size changes', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const many = [
       makeScreenDetail(10, 'App (OnStart)', { isAppContext: true }),
       ...Array.from({ length: 44 }, (_, index) =>
@@ -299,7 +299,7 @@ describe('screen list', () => {
   });
 
   it('shows "No results" with Clear filters when the filters match nothing', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await renderScreens({ path: '/screens?q=zzz' });
 
     expect(await screen.findByText('No results')).toBeInTheDocument();
@@ -324,7 +324,7 @@ describe('screen list', () => {
   });
 
   it('shows the server error state with a retry', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await renderScreens({
       prepare: (fake) => {
         // Only the read of the list fails once (the counts and the application card read /screens too).
@@ -348,7 +348,7 @@ describe('screen list', () => {
   });
 
   it('starts over when the application changes', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await renderScreens({
       path: '/screens?q=det&status=IN_REVIEW',
       applications: [makeApplication(1, { name: 'SAR' }), makeApplication(2, { name: 'Other' })],

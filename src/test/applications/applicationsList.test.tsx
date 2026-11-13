@@ -7,7 +7,7 @@ import { ApiError } from '../../api/ApiError';
 import { makeApplication } from '../helpers/renderApp';
 import { renderApplications, sampleApplications } from '../helpers/renderApplications';
 import { controlSearchTimers, endSearchPause } from '../helpers/searchPause';
-import { setupSettledUser } from '../helpers/setupUser';
+import { setupUser } from '../helpers/setupUser';
 
 const NAMES = (table: HTMLElement) =>
   within(table)
@@ -68,7 +68,7 @@ describe('application list', () => {
   });
 
   it('filters by status through the URL and the request', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const { router, api } = await renderApplications();
     const grid = await table();
 
@@ -93,7 +93,7 @@ describe('application list', () => {
 
   it('searches by name once the pause after the typing ends', async () => {
     controlSearchTimers();
-    const user = setupSettledUser();
+    const user = setupUser();
     const { router, api } = await renderApplications();
     const grid = await table();
     const before = api.callsTo('GET /applications').length;
@@ -111,7 +111,7 @@ describe('application list', () => {
     const many = Array.from({ length: 25 }, (_, index) =>
       makeApplication(100 + index, { name: `Zeta ${String(index).padStart(2, '0')}` }),
     );
-    const user = setupSettledUser();
+    const user = setupUser();
     const { router } = await renderApplications({
       applications: [...sampleApplications(), ...many],
     });
@@ -137,7 +137,7 @@ describe('application list', () => {
 
   it('shows "No results" with "Clear filters" when nothing matches', async () => {
     controlSearchTimers();
-    const user = setupSettledUser();
+    const user = setupUser();
     const { router } = await renderApplications();
     await table();
 
@@ -152,7 +152,7 @@ describe('application list', () => {
   });
 
   it('invites the administrator to register the first application when there is none', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     await renderApplications({ applications: [] });
 
     expect(await screen.findByText('No applications yet')).toBeInTheDocument();
@@ -166,7 +166,7 @@ describe('application list', () => {
   });
 
   it('shows the server error state with a retry when the list cannot be read', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     await renderApplications({
       prepare: (api) => {
         // The shell reads the applications first; the page reads its own list second.
@@ -180,7 +180,7 @@ describe('application list', () => {
   });
 
   it('the name of a row opens the edit form', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     await renderApplications();
     await table();
 

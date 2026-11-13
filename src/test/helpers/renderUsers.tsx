@@ -8,7 +8,6 @@ import type { Role } from '../../app/router/routes';
 
 import { RESERVED_USER_ID, SELF_ID, makeUser, makeUsersApi } from './fakeUsersApi';
 import { renderApp } from './renderApp';
-import { settle } from './setupUser';
 
 export function sampleUsers() {
   return [
@@ -77,7 +76,5 @@ export async function renderUsers(options: RenderUsersOptions = {}) {
     },
   });
   if (api === undefined) throw new Error('buildClient was not called');
-  // Let React render what the first reads brought, so the tests do not depend on when it decides to.
-  await settle();
   return { ...view, api };
 }

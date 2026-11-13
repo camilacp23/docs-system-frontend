@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { ApiError } from '../../api/ApiError';
 import { SELF_ID } from '../helpers/fakeUsersApi';
 import { renderUsers } from '../helpers/renderUsers';
-import { setupSettledUser, type User } from '../helpers/setupUser';
+import { setupUser, type User } from '../helpers/setupUser';
 
 async function openEdit(user: User, rowName: string) {
   const row = (await screen.findByRole('rowheader', { name: new RegExp(`^${rowName}`) })).closest(
@@ -31,7 +31,7 @@ async function replace(user: User, field: HTMLElement, text: string) {
 
 describe('Edit user modal', () => {
   it('reads the user, shows the form with the frame texts and focuses the name', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const { api } = await renderUsers();
     const dialog = await openEdit(user, 'Sample Developer A');
 
@@ -52,7 +52,7 @@ describe('Edit user modal', () => {
   });
 
   it('saves with If-Match and without a password when none was typed', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const { api } = await renderUsers();
     const dialog = await openEdit(user, 'Sample Developer A');
     await replace(user, dialog.getByLabelText(/^Full name/), 'Developer Alpha');
@@ -75,7 +75,7 @@ describe('Edit user modal', () => {
   });
 
   it('sends the new password only when one was typed, and the server revokes that user', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const { api } = await renderUsers();
     const dialog = await openEdit(user, 'Sample Developer A');
     await user.click(dialog.getByLabelText('New password'));
@@ -93,7 +93,7 @@ describe('Edit user modal', () => {
   });
 
   it('checks the form before sending and marks the first invalid field', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const { api } = await renderUsers();
     const dialog = await openEdit(user, 'Sample Developer A');
     await replace(user, dialog.getByLabelText(/^Full name/), '   ');
@@ -109,7 +109,7 @@ describe('Edit user modal', () => {
   });
 
   it('EMAIL_TAKEN goes under the email and keeps the rest', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const { api } = await renderUsers();
     const dialog = await openEdit(user, 'Sample Developer A');
     await replace(user, dialog.getByLabelText(/^Email/), 'reader@example.com');
@@ -125,7 +125,7 @@ describe('Edit user modal', () => {
   });
 
   it('VALIDATION_ERROR from the server marks the field it names with the catalog text', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const { api } = await renderUsers();
     const dialog = await openEdit(user, 'Sample Developer A');
     api.failNext(
@@ -144,7 +144,7 @@ describe('Edit user modal', () => {
   });
 
   it('RESERVED_ACCOUNT and other refusals go in the banner of the form', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const { api } = await renderUsers();
     const dialog = await openEdit(user, 'Sample Developer A');
     api.failNext('PUT /users/{id}', new ApiError({ status: 422, code: 'RESERVED_ACCOUNT' }));
@@ -159,7 +159,7 @@ describe('Edit user modal', () => {
 
   describe('412 (S-44)', () => {
     async function conflict() {
-      const user = setupSettledUser();
+      const user = setupUser();
       const view = await renderUsers();
       const dialog = await openEdit(user, 'Sample Developer A');
       await replace(user, dialog.getByLabelText(/^Full name/), 'My version');
@@ -219,7 +219,7 @@ describe('Edit user modal', () => {
   });
 
   it('shows the catalog text with a retry when the user cannot be read', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const { api } = await renderUsers();
     await screen.findByRole('rowheader', { name: 'Sample Admin' });
     api.failNext('GET /users/{id}', new ApiError({ status: 404, code: 'NOT_FOUND' }));
@@ -238,7 +238,7 @@ describe('Edit user modal', () => {
   });
 
   it('closes with Escape and returns the focus to the row menu button', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     await renderUsers();
     await openEdit(user, 'Sample Reader');
     await user.keyboard('{Escape}');
@@ -248,7 +248,7 @@ describe('Edit user modal', () => {
 
   describe('the administrator editing themselves', () => {
     it('says that a new password signs them out', async () => {
-      const user = setupSettledUser();
+      const user = setupUser();
       await renderUsers();
       const dialog = await openEdit(user, 'Ana Mora');
       expect(
@@ -257,7 +257,7 @@ describe('Edit user modal', () => {
     });
 
     it('a new name updates the top bar and the list, and the session goes on', async () => {
-      const user = setupSettledUser();
+      const user = setupUser();
       const { manager, api } = await renderUsers();
       const dialog = await openEdit(user, 'Ana Mora');
       await replace(user, dialog.getByLabelText(/^Full name/), 'Ana Mora Ruiz');
@@ -273,7 +273,7 @@ describe('Edit user modal', () => {
     });
 
     it('a new password ends the session at once and the sign-in page says why', async () => {
-      const user = setupSettledUser();
+      const user = setupUser();
       const { manager, api, router } = await renderUsers();
       const dialog = await openEdit(user, 'Ana Mora');
       await user.click(dialog.getByLabelText('New password'));

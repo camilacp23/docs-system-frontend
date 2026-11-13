@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../api/ApiError';
 import { SELF_ID } from '../helpers/fakeUsersApi';
 import { renderUsers, sampleUsers } from '../helpers/renderUsers';
-import { setupSettledUser, type User } from '../helpers/setupUser';
+import { setupUser, type User } from '../helpers/setupUser';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -29,7 +29,7 @@ async function openDeactivate(user: User, rowName: string) {
 
 describe('Deactivate user', () => {
   it('asks first, with the text of the frame, and Cancel changes nothing', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const { api } = await renderUsers();
     const dialog = await openDeactivate(user, 'Sample Developer A');
 
@@ -45,7 +45,7 @@ describe('Deactivate user', () => {
   });
 
   it('closes with Escape and returns the focus to the row menu button', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     await renderUsers();
     await openDeactivate(user, 'Sample Developer A');
     await user.keyboard('{Escape}');
@@ -54,7 +54,7 @@ describe('Deactivate user', () => {
   });
 
   it('deactivates, says so, revokes the sessions and the row leaves the active list', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const { api } = await renderUsers();
     const dialog = await openDeactivate(user, 'Sample Developer A');
 
@@ -72,7 +72,7 @@ describe('Deactivate user', () => {
   });
 
   it('LAST_ACTIVE_ADMIN: the banner says why and only "Close" is left (S-06b)', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const users = sampleUsers().map((u) =>
       u.id === SELF_ID ? { ...u, role: 'DEVELOPER' as const } : u,
     );
@@ -96,7 +96,7 @@ describe('Deactivate user', () => {
   });
 
   it('CANNOT_DEACTIVATE_SELF from the API is shown the same way', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     // The API believes the signed-in user is user 3: it refuses to deactivate them.
     await renderUsers({
       prepare: (api) => {
@@ -112,7 +112,7 @@ describe('Deactivate user', () => {
   });
 
   it('a failure that is not a refusal keeps the button so it can be tried again', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const { api } = await renderUsers();
     const dialog = await openDeactivate(user, 'Sample Developer A');
     api.failNext('DELETE /users/{id}', new ApiError({ status: 0, code: 'NETWORK_ERROR' }));
@@ -130,7 +130,7 @@ describe('Deactivate user', () => {
 
   describe('the administrator themselves', () => {
     it('cannot be deactivated: the item is disabled with the reason and does nothing', async () => {
-      const user = setupSettledUser();
+      const user = setupUser();
       const { api } = await renderUsers();
       await openMenu(user, 'Ana Mora');
 
@@ -143,7 +143,7 @@ describe('Deactivate user', () => {
     });
 
     it('can still change their own name and role from the menu', async () => {
-      const user = setupSettledUser();
+      const user = setupUser();
       await renderUsers();
       await openMenu(user, 'Ana Mora');
       expect(await screen.findByRole('menuitem', { name: 'Edit' })).not.toHaveAttribute(
@@ -165,7 +165,7 @@ describe('Reactivate user', () => {
   }
 
   it('reads the user and sends every field back with If-Match, with no confirmation', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const { api } = await renderUsers();
 
     await reactivateFormer(user);
@@ -186,7 +186,7 @@ describe('Reactivate user', () => {
   });
 
   it('shows the catalog text in a warning toast when it fails and reads the list again', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const { api } = await renderUsers();
     api.failNext('PUT /users/{id}', new ApiError({ status: 412, code: 'PRECONDITION_FAILED' }));
     const before = api.callsTo('GET /users').length;
@@ -204,7 +204,7 @@ describe('Reactivate user', () => {
   });
 
   it('an active user shows Deactivate and an inactive one shows Reactivate, never both', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     await renderUsers();
     await openMenu(user, 'Sample Reader');
     expect(await screen.findByRole('menuitem', { name: 'Deactivate' })).toBeInTheDocument();
@@ -214,7 +214,7 @@ describe('Reactivate user', () => {
 
 describe('writes while offline', () => {
   it('disables every item of the row menu with the reason', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     await renderUsers();
     await openMenu(user, 'Sample Developer A');
     await user.keyboard('{Escape}');

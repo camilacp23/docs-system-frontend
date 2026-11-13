@@ -1,13 +1,13 @@
 // Collection detail (S-15a-c): the overview, the fields and the variable assignments tabs (the tab is in the URL),
 // the links, loading and errors, not found, the application of the collection (D-78) and the buttons by role.
 import { screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';
 import { makeCollection, makeField } from '../helpers/fakeCollectionsApi';
 import { makeApplication } from '../helpers/renderApp';
 import { renderCollections, type RenderCollectionsOptions } from '../helpers/renderCollections';
+import { setupUser } from '../helpers/setupUser';
 
 const open = (extra: Partial<RenderCollectionsOptions> = {}) =>
   renderCollections({ path: '/collections/11', ...extra });
@@ -87,7 +87,7 @@ describe('collection detail: tabs in the URL', () => {
   });
 
   it('switches tab through the URL and keeps the other parameters', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await open();
     await ready();
 
@@ -112,7 +112,7 @@ describe('collection detail: tabs in the URL', () => {
   });
 
   it('opens on the tab of the URL, and the back button returns to the previous tab', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await open({ path: '/collections/11?tab=assignments' });
     await ready();
 
@@ -142,7 +142,7 @@ describe('collection detail: tabs in the URL', () => {
   });
 
   it('moves between tabs with the arrow keys', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await open();
     await ready();
 
@@ -195,7 +195,7 @@ describe('collection detail: fields tab', () => {
   });
 
   it('pages the fields with the page and its size in the URL', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const many = makeCollection(31, 'colGrande', {
       fields: Array.from({ length: 45 }, (_, index) =>
         makeField(100 + index, `campo${String(index).padStart(2, '0')}`, index),
@@ -225,7 +225,7 @@ describe('collection detail: fields tab', () => {
   });
 
   it('shows the failure of the fields alone, with a retry, and keeps the rest of the page', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await open({
       path: '/collections/11?tab=fields',
       prepare: (api) => {
@@ -295,7 +295,7 @@ describe('collection detail: assignments tab', () => {
   });
 
   it('leads from a variable to its collection (the link of the variable detail)', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await open({ path: '/collections/11?tab=assignments' });
     const table = await screen.findByRole('table', { name: 'Variable assignments' });
 
@@ -309,7 +309,7 @@ describe('collection detail: assignments tab', () => {
 
 describe('collection detail: states and roles', () => {
   it('shows "This collection doesn\'t exist" for an unknown id', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await open({ path: '/collections/999' });
 
     expect(await screen.findByText("This collection doesn't exist")).toBeInTheDocument();
@@ -327,7 +327,7 @@ describe('collection detail: states and roles', () => {
   });
 
   it('shows the server error state with a retry', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await open({
       prepare: (api) => {
         api.failNext(
@@ -351,7 +351,7 @@ describe('collection detail: states and roles', () => {
   });
 
   it('offers Edit to the Developer, leading to the edit page', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await open();
     await ready();
 
@@ -398,7 +398,7 @@ describe('collection detail: states and roles', () => {
   });
 
   it('goes back to the list when the application is switched from the shell', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await open({
       applications: [makeApplication(1, { name: 'SAR' }), makeApplication(2, { name: 'Billing' })],
     });
@@ -413,7 +413,7 @@ describe('collection detail: states and roles', () => {
   });
 
   it('deletes from the detail with the impact and goes back to the list', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router, api } = await open();
     await ready();
 

@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { ApiError } from '../../api/ApiError';
 import { SELF_ID, makeUser } from '../helpers/fakeUsersApi';
 import { renderUsers, sampleUsers } from '../helpers/renderUsers';
-import { setupSettledUser, type User } from '../helpers/setupUser';
+import { setupUser, type User } from '../helpers/setupUser';
 
 async function openRole(user: User, rowName: string) {
   const row = (await screen.findByRole('rowheader', { name: new RegExp(`^${rowName}`) })).closest(
@@ -20,7 +20,7 @@ async function openRole(user: User, rowName: string) {
 
 describe('Change role modal', () => {
   it('shows the three roles with the current one chosen and the line of the frame', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     await renderUsers();
     const dialog = await openRole(user, 'Sample Developer A');
 
@@ -37,7 +37,7 @@ describe('Change role modal', () => {
   });
 
   it('changes the role, says so and shows it in the list', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const { api } = await renderUsers();
     const dialog = await openRole(user, 'Sample Developer A');
 
@@ -64,7 +64,7 @@ describe('Change role modal', () => {
   });
 
   it('LAST_ACTIVE_ADMIN is shown in the banner and the modal stays open', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     // The only active administrator is Sample Admin; the signed-in user is listed as a developer.
     const users = sampleUsers().map((u) =>
       u.id === SELF_ID ? { ...u, role: 'DEVELOPER' as const } : u,
@@ -87,7 +87,7 @@ describe('Change role modal', () => {
     ['RESERVED_ACCOUNT', 422, "This is a system account and can't be changed."],
     ['NOT_FOUND', 404, "This user doesn't exist. It may have been deleted."],
   ])('%s is shown in the banner', async (code, status, text) => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const { api } = await renderUsers();
     const dialog = await openRole(user, 'Sample Developer A');
     api.failNext('PUT /users/{id}/role', new ApiError({ status, code }));
@@ -99,7 +99,7 @@ describe('Change role modal', () => {
   });
 
   it('works from the keyboard: the row menu, the arrows, Enter, and Escape returns the focus', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     await renderUsers();
     const trigger = await screen.findByRole('button', { name: 'Actions for Sample Reader' });
 
@@ -120,7 +120,7 @@ describe('Change role modal', () => {
 
   describe('the administrator changing their own role', () => {
     it('warns before confirming instead of the line of the frame', async () => {
-      const user = setupSettledUser();
+      const user = setupUser();
       await renderUsers();
       const dialog = await openRole(user, 'Ana Mora');
 
@@ -133,7 +133,7 @@ describe('Change role modal', () => {
     });
 
     it('signs out at once after the 200 and the sign-in page says why', async () => {
-      const user = setupSettledUser();
+      const user = setupUser();
       const { api, manager, router } = await renderUsers();
       const dialog = await openRole(user, 'Ana Mora');
 
@@ -154,7 +154,7 @@ describe('Change role modal', () => {
     });
 
     it('keeps the session when the API refuses (the only active administrator)', async () => {
-      const user = setupSettledUser();
+      const user = setupUser();
       const users = [
         makeUser(SELF_ID, 'Ana Mora', { role: 'ADMINISTRATOR' }),
         makeUser(5, 'Sample Reader', { role: 'READER' }),

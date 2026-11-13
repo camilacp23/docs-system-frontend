@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import type { Screen } from '../../modules/screens/screenTypes';
 import { renderScreens, sampleScreens } from '../helpers/renderScreens';
 import { replaceText } from '../helpers/screenEditHelpers';
-import { setupSettledUser, settle } from '../helpers/setupUser';
+import { setupUser } from '../helpers/setupUser';
 
 const BANNER =
   'Complete all seven template fields to submit for review. Missing: Known issues, Risks.';
@@ -21,14 +21,12 @@ function detalle(status: Screen['documentationStatus'] = 'IN_PROGRESS') {
 
 async function openDetail() {
   const view = await renderScreens({ path: '/screens/12', screens: detalle() });
-  await settle();
   await screen.findByRole('heading', { name: 'Detalle', level: 1 });
   return view;
 }
 
 async function openEditAt(search: string, status: Screen['documentationStatus'] = 'IN_PROGRESS') {
   const view = await renderScreens({ path: `/screens/12/edit${search}`, screens: detalle(status) });
-  await settle();
   await screen.findByRole('heading', { name: /^Edit /, level: 1 });
   return view;
 }
@@ -37,7 +35,7 @@ const field = (name: string) => screen.getByRole('textbox', { name });
 
 describe('send to review with an incomplete template', () => {
   it('opens the edit page on the template with the signal in the URL, and nothing else', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const view = await openDetail();
 
     await user.click(screen.getByRole('button', { name: 'Submit for review' }));
@@ -107,7 +105,7 @@ describe('send to review with an incomplete template', () => {
   });
 
   it('takes the marks off a field as it is filled, and the banner when none is left', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     await openEditAt('?tab=template&submit=1');
     await screen.findByText(BANNER);
 
@@ -129,7 +127,7 @@ describe('send to review with an incomplete template', () => {
   });
 
   it('saves and goes back to the detail, where the user sends it again', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const view = await openEditAt('?tab=template&submit=1');
     await screen.findByText(BANNER);
     await replaceText(user, field('Known issues'), 'Double save under load.');
@@ -154,7 +152,7 @@ describe('send to review with an incomplete template', () => {
   });
 
   it('lets the user save with fields still missing, and sends nothing to review', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const view = await openEditAt('?tab=template&submit=1');
     await replaceText(user, field('Known issues'), 'Double save under load.');
 
@@ -165,7 +163,7 @@ describe('send to review with an incomplete template', () => {
   });
 
   it('shows the S-44 banner of the edit page if someone else saved meanwhile', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const view = await openEditAt('?tab=template&submit=1');
     await screen.findByText(BANNER);
     view.api.state.versions.set(12, 9);
@@ -179,7 +177,7 @@ describe('send to review with an incomplete template', () => {
   });
 
   it('keeps working when the tab is changed: the URL keeps the signal', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const view = await openEditAt('?tab=template&submit=1');
     await screen.findByText(BANNER);
 
@@ -207,7 +205,7 @@ describe('send to review with an incomplete template', () => {
   });
 
   it('puts the banner among the alerts of the page and not in the detail', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     await openDetail();
 
     await user.click(screen.getByRole('button', { name: 'Submit for review' }));

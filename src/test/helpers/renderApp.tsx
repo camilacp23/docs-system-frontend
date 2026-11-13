@@ -2,7 +2,7 @@
 // fake backend, the real ApplicationProvider over a fake API client and the ToastProvider.
 // Options: role (of the signed-in user), path (initial URL), signedIn (false: no session cookie), applications
 // (what GET /applications returns), applicationsApi (replaces the applications fake), buildClient (replaces the API client of the pages, e.g. makeVariablesApi), now (system time, when the test uses fake timers), sessionExpiresIn.
-// Returns { router, manager, backend, apps, client }; `apps` records the calls of the application API and `client`
+// Ends with settle() (unless `settled: false`): the page is rendered when it returns. Returns { router, manager, backend, apps, client }; `apps` records the calls of the application API and `client`
 // is the client the pages use (the applications fake unless buildClient is given).
 import { render } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -20,6 +20,7 @@ import { SessionManager } from '../../session/SessionManager';
 import { SessionProvider } from '../../session/SessionProvider';
 
 import { FakeBackend, FakeLocks, TEST_USER } from './fakeBackend';
+import { settle } from './setupUser';
 
 export const PASSWORD = 'right-password';
 
@@ -82,6 +83,8 @@ export interface RenderAppOptions {
   buildClient?: (apps: ReturnType<typeof makeApplicationsClient>) => ApiClient;
   sessionExpiresIn?: number;
   name?: string;
+  /** false: return before React renders what the first reads brought, to look at a state that is still in flight. */
+  settled?: boolean;
 }
 
 export async function renderApp(options: RenderAppOptions = {}) {
@@ -109,5 +112,8 @@ export async function renderApp(options: RenderAppOptions = {}) {
       </ApplicationProvider>
     </SessionProvider>,
   );
+  // Everything the first reads brought is rendered before the test looks at the page: what it checks does not depend
+  // on when React decides to render (see setupUser.ts).
+  if (options.settled !== false) await settle();
   return { router, manager, backend, apps, client: pageClient, ...view };
 }

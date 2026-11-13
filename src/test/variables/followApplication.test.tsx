@@ -3,7 +3,6 @@
 // shell sends the page back to its list. The cases move between detail pages INSIDE the app (the page component is
 // reused, only the :id changes): a decision remembered from the previous element must not be applied to the next one.
 import { configure, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { makeCollection } from '../helpers/fakeCollectionsApi';
@@ -11,6 +10,7 @@ import { makeVariable } from '../helpers/fakeVariablesApi';
 import { makeApplication } from '../helpers/renderApp';
 import { renderCollections } from '../helpers/renderCollections';
 import { renderVariables, sampleVariables } from '../helpers/renderVariables';
+import { setupUser } from '../helpers/setupUser';
 
 const APPLICATIONS = [makeApplication(1, { name: 'SAR' }), makeApplication(2, { name: 'Billing' })];
 const billingVariable = makeVariable(7, 'gFactura', { applicationId: 2 });
@@ -76,7 +76,7 @@ describe('D-78 on the variable pages, through the routes', () => {
   });
 
   it('goes back to the list only when the user switches application from the shell', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await render('/variables/7');
     await screen.findByText('Switched to Billing.');
     await screen.findByRole('heading', { name: 'gFactura', level: 1 });
@@ -92,7 +92,7 @@ describe('D-78 on the variable pages, through the routes', () => {
   });
 
   it('goes back to the list when the user switches from the shell after an in-app switch', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await render('/variables/1');
     await screen.findByRole('heading', { name: 'gUsuario', level: 1 });
     await router.navigate('/variables/7');
@@ -151,7 +151,7 @@ describe('D-78 on the collection pages, through the routes', () => {
   });
 
   it('goes back to the list only when the user switches application from the shell', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await render('/collections/40');
     await screen.findByText('Switched to Billing.');
     await screen.findByRole('heading', { name: 'colFacturas', level: 1 });

@@ -2,12 +2,12 @@
 // application, keeps the page and says "Switched to <application>."; only a switch made by the user from the shell
 // sends the page back to the list.
 import { screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import { makeScreenDetail } from '../helpers/fakeScreensApi';
 import { makeApplication } from '../helpers/renderApp';
 import { renderScreens, sampleScreens } from '../helpers/renderScreens';
+import { setupUser } from '../helpers/setupUser';
 
 const APPLICATIONS = [makeApplication(1, { name: 'SAR' }), makeApplication(2, { name: 'Billing' })];
 const billingScreen = makeScreenDetail(70, 'Facturas', { applicationId: 2 });
@@ -50,7 +50,7 @@ describe('D-78 on the screen detail, through the routes', () => {
   });
 
   it('goes back to the list only when the user switches application from the shell', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await render('/screens/70');
     await screen.findByText('Switched to Billing.');
     await screen.findByRole('heading', { name: 'Facturas', level: 1 });
@@ -66,7 +66,7 @@ describe('D-78 on the screen detail, through the routes', () => {
   });
 
   it('goes back to the list when the user switches from the shell on a screen of the selected application', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await render('/screens/12');
     await screen.findByRole('heading', { name: 'Detalle', level: 1 });
 

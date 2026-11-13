@@ -2,7 +2,6 @@
 // kept and the origin rows left out, new and removed rows, swapping the names of two components, the client checks and
 // the tab that holds an error, the status after saving (D-81, D-71) and App (OnStart) with its name locked (D-87).
 import { screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import { makeVariable } from '../helpers/fakeVariablesApi';
@@ -323,7 +322,7 @@ describe('screen edit: keyboard', () => {
     async (tabName, add, first) => {
       // The default pause of user-event (not setupUser) is what lets the effects of the render flush between the
       // focus and the key, which is the case this test guards; without it the race does not always happen.
-      const user = userEvent.setup();
+      const user = setupUser();
       await openEdit({ tab: tabName });
 
       screen.getByRole('button', { name: add }).focus();

@@ -8,7 +8,7 @@ import { ApiError } from '../../api/ApiError';
 import { makeUser } from '../helpers/fakeUsersApi';
 import { renderUsers, sampleUsers } from '../helpers/renderUsers';
 import { controlSearchTimers, endSearchPause } from '../helpers/searchPause';
-import { setupSettledUser } from '../helpers/setupUser';
+import { setupUser } from '../helpers/setupUser';
 
 const NAMES = (table: HTMLElement) =>
   within(table)
@@ -62,7 +62,7 @@ describe('user list', () => {
   it('never shows the reserved account, and the client does not filter it', async () => {
     const { api } = await renderUsers();
     const grid = await table();
-    const user = setupSettledUser();
+    const user = setupUser();
 
     await user.selectOptions(screen.getByRole('combobox', { name: 'Status' }), 'ALL');
     await waitFor(() => {
@@ -74,7 +74,7 @@ describe('user list', () => {
   });
 
   it('filters by status through the URL and the request', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const { router, api } = await renderUsers();
     const grid = await table();
 
@@ -102,7 +102,7 @@ describe('user list', () => {
   });
 
   it('filters by role', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const { router } = await renderUsers();
     const grid = await table();
 
@@ -116,7 +116,7 @@ describe('user list', () => {
 
   it('searches by name or email once the pause after the typing ends', async () => {
     controlSearchTimers();
-    const user = setupSettledUser();
+    const user = setupUser();
     const { router, api } = await renderUsers();
     const grid = await table();
     const before = api.callsTo('GET /users').length;
@@ -132,7 +132,7 @@ describe('user list', () => {
 
   it('sends the characters of the search as typed (the encoding is the HTTP layer job)', async () => {
     controlSearchTimers();
-    const user = setupSettledUser();
+    const user = setupUser();
     const { api } = await renderUsers();
     await table();
 
@@ -144,7 +144,7 @@ describe('user list', () => {
   });
 
   it('sorts by the clickable columns and goes back to the first page', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const { router, api } = await renderUsers();
     const grid = await table();
 
@@ -176,7 +176,7 @@ describe('user list', () => {
     const many = Array.from({ length: 45 }, (_, index) =>
       makeUser(100 + index, `User ${String(index).padStart(2, '0')}`),
     );
-    const user = setupSettledUser();
+    const user = setupUser();
     const { router, api } = await renderUsers({ users: [...sampleUsers(), ...many] });
     const grid = await table();
     await waitFor(() => {
@@ -207,7 +207,7 @@ describe('user list', () => {
 
   it('shows "No results" with "Clear filters" and goes back to the defaults', async () => {
     controlSearchTimers();
-    const user = setupSettledUser();
+    const user = setupUser();
     const { router } = await renderUsers();
     await table();
 
@@ -222,7 +222,7 @@ describe('user list', () => {
   });
 
   it('shows the server error state with a retry when the list cannot be read', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     await renderUsers({
       prepare: (api) => {
         api.failNext('GET /users', new ApiError({ status: 500, code: 'INTERNAL_ERROR' }));

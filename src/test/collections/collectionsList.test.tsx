@@ -2,13 +2,13 @@
 // undocumented), the undocumented filter and its toggle, loading, empty and error states, the reset on changing
 // application, the Reader view and the archived application.
 import { act, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';
 import { makeApplication } from '../helpers/renderApp';
 import { makeCollection } from '../helpers/fakeCollectionsApi';
 import { renderCollections } from '../helpers/renderCollections';
+import { setupUser } from '../helpers/setupUser';
 
 const ROW_NAMES = (table: HTMLElement) =>
   within(table)
@@ -95,7 +95,7 @@ describe('collection list', () => {
   });
 
   it('says so, with a retry, when the counts cannot be read', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     let failing = true;
     await renderCollections({
       prepare: (fake) => {
@@ -130,7 +130,7 @@ describe('collection list', () => {
   });
 
   it('filters by name with a wait after typing, through the URL and the request', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router, api } = await renderCollections();
     const grid = await table();
 
@@ -151,7 +151,7 @@ describe('collection list', () => {
   });
 
   it('filters by environment', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await renderCollections();
     const grid = await table();
 
@@ -164,7 +164,7 @@ describe('collection list', () => {
   });
 
   it('filters the undocumented collections with the button or the count, and toggles them back', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router, api } = await renderCollections();
     const grid = await table();
 
@@ -192,7 +192,7 @@ describe('collection list', () => {
   });
 
   it('reads the filters from the URL, orders by the contract whitelist and sends nothing else', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router, api } = await renderCollections({
       path: '/collections?environment=DEV&sort=bogus&pageSize=7',
     });
@@ -219,7 +219,7 @@ describe('collection list', () => {
   });
 
   it('pages with 20, 50 or 100 rows and goes back to page 1 when the size changes', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const many = Array.from({ length: 45 }, (_, index) =>
       makeCollection(100 + index, `col${String(index).padStart(2, '0')}`),
     );
@@ -240,7 +240,7 @@ describe('collection list', () => {
   });
 
   it('shows "No results" with Clear filters when the filters match nothing', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await renderCollections({ path: '/collections?q=zzz' });
 
     expect(await screen.findByText('No results')).toBeInTheDocument();
@@ -263,7 +263,7 @@ describe('collection list', () => {
   });
 
   it('shows the server error state with a retry', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await renderCollections({
       prepare: (api) => {
         api.failNext('GET /collections', new ApiError({ status: 500, code: 'INTERNAL_ERROR' }));
@@ -277,7 +277,7 @@ describe('collection list', () => {
   });
 
   it('starts over when the application changes', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await renderCollections({
       path: '/collections?q=Cli&environment=PROD&page=1',
       applications: [makeApplication(1, { name: 'SAR' }), makeApplication(2, { name: 'Other' })],
@@ -311,7 +311,7 @@ describe('collection list', () => {
   });
 
   it('disables creating, editing and deleting with the reason when the application is archived', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await renderCollections({
       applications: [makeApplication(1, { name: 'SAR', status: 'ARCHIVED' })],
     });
@@ -330,7 +330,7 @@ describe('collection list', () => {
   });
 
   it('opens a collection from its row menu', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await renderCollections();
     await table();
 

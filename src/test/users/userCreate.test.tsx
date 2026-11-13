@@ -13,7 +13,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';
 import { renderUsers } from '../helpers/renderUsers';
-import { setupSettledUser, type User } from '../helpers/setupUser';
+import { setupUser, type User } from '../helpers/setupUser';
 
 const GOOD_PASSWORD = 'Clave-2026-xyz';
 
@@ -45,7 +45,7 @@ afterEach(() => {
 
 describe('New user modal', () => {
   it('opens over the list with the name focused and Cancel returns the focus to the button', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const { router } = await renderUsers();
     const dialog = await openModal(user);
 
@@ -69,7 +69,7 @@ describe('New user modal', () => {
   });
 
   it('closes with Escape and with the close button', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     await renderUsers();
     await openModal(user);
     await user.keyboard('{Escape}');
@@ -81,7 +81,7 @@ describe('New user modal', () => {
   });
 
   it('keeps the focus inside the modal with Tab and Shift+Tab', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     await renderUsers();
     await openModal(user);
     const dialog = screen.getByRole('dialog');
@@ -93,7 +93,7 @@ describe('New user modal', () => {
   });
 
   it('checks the policy as the password is typed and checks the form on submit without calling the API', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const { api } = await renderUsers();
     const dialog = await openModal(user);
     const policy = dialog.getByRole('list', { name: 'Password policy' });
@@ -121,7 +121,7 @@ describe('New user modal', () => {
   });
 
   it('generates a password that meets the policy and shows it as typed', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     await renderUsers();
     const dialog = await openModal(user);
 
@@ -138,7 +138,7 @@ describe('New user modal', () => {
   });
 
   it('creates the user with the complete body, says so, closes and shows the new row', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const { api, router } = await renderUsers();
     const dialog = await openModal(user);
     await fillAll(user, dialog, { name: '  Marta Rios ', email: 'Marta.Rios@dept.local' });
@@ -160,7 +160,7 @@ describe('New user modal', () => {
   });
 
   it('never keeps the temporary password: not in the URL, not in storage, not after reopening', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const { router } = await renderUsers();
     const dialog = await openModal(user);
     await user.click(dialog.getByRole('button', { name: 'Generate' }));
@@ -178,7 +178,7 @@ describe('New user modal', () => {
   });
 
   it('EMAIL_TAKEN goes under the email and keeps what was typed', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     const { api } = await renderUsers();
     const dialog = await openModal(user);
     await fillAll(user, dialog, { email: 'dev.a@example.com' });
@@ -195,7 +195,7 @@ describe('New user modal', () => {
   });
 
   it('VALIDATION_ERROR from the server marks each field it names, with the catalog text by rule', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     await renderUsers({
       prepare: (api) => {
         api.failNext(
@@ -232,7 +232,7 @@ describe('New user modal', () => {
     ],
     ['INTERNAL_ERROR', 500, 'Something went wrong on our side. Try again in a moment.'],
   ])('%s is shown in the banner of the form', async (code, status, text) => {
-    const user = setupSettledUser();
+    const user = setupUser();
     await renderUsers({
       prepare: (api) => {
         api.failNext('POST /users', new ApiError({ status, code }));
@@ -248,7 +248,7 @@ describe('New user modal', () => {
   });
 
   it('a network failure is shown with the offline text and the modal stays open', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     await renderUsers({
       prepare: (api) => {
         api.failNext('POST /users', new ApiError({ status: 0, code: 'NETWORK_ERROR' }));
@@ -267,7 +267,7 @@ describe('New user modal', () => {
   });
 
   it('disables creating, with the reason, while the browser is offline', async () => {
-    const user = setupSettledUser();
+    const user = setupUser();
     await renderUsers();
     const dialog = await openModal(user);
 

@@ -2,20 +2,19 @@
 // arrays that the form does not ask for), the success message, server errors on their exact field or row, archived
 // application and offline.
 import { act, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';
 import { makeApplication } from '../helpers/renderApp';
 import { renderCollections } from '../helpers/renderCollections';
-import { setupUser } from '../helpers/setupUser';
+import { setupUser, type User } from '../helpers/setupUser';
 
 /** The page once the selected application is known (the list is rebuilt when it becomes known). */
 async function appReady() {
   await screen.findAllByText(/collections? ·|Read-only: the application is archived/);
 }
 
-async function openModal(user: ReturnType<typeof userEvent.setup>) {
+async function openModal(user: User) {
   await appReady();
   await screen.findByRole('link', { name: 'colActivos' });
   await user.click(screen.getByRole('button', { name: 'New collection' }));
@@ -24,7 +23,7 @@ async function openModal(user: ReturnType<typeof userEvent.setup>) {
 }
 
 /** Puts a text in a field in one step: how fast it is typed does not matter in these tests. */
-async function fill(user: ReturnType<typeof userEvent.setup>, field: HTMLElement, text: string) {
+async function fill(user: User, field: HTMLElement, text: string) {
   await user.click(field);
   await user.paste(text);
 }
@@ -35,7 +34,7 @@ afterEach(() => {
 
 describe('New collection modal', () => {
   it('opens over the list with the name focused and closes with Cancel returning the focus', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await renderCollections();
     await screen.findByRole('link', { name: 'colActivos' });
     const opener = await screen.findByRole('button', { name: 'New collection' });
@@ -97,7 +96,7 @@ describe('New collection modal', () => {
 
   // The only test of this form that types key by key (the others paste: how fast a text is typed is not their subject).
   it('follows the name key by key: the counter changes with each key and the format error is gone once it is typed right', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await renderCollections();
     const dialog = await openModal(user);
     const name = () => dialog.getByLabelText(/^Name\b(?! of)/);
@@ -178,7 +177,7 @@ describe('New collection modal', () => {
   });
 
   it('puts DUPLICATE_NAME on the name', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await renderCollections();
     const dialog = await openModal(user);
 
@@ -193,7 +192,7 @@ describe('New collection modal', () => {
   });
 
   it('puts a repeated field name on its row', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await renderCollections();
     const dialog = await openModal(user);
 
@@ -220,7 +219,7 @@ describe('New collection modal', () => {
   });
 
   it('puts the catalog text of an error that points to no field in the form banner', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await renderCollections();
     const dialog = await openModal(user);
     api.failNext('POST /collections', new ApiError({ status: 422, code: 'APPLICATION_ARCHIVED' }));
@@ -249,7 +248,7 @@ describe('New collection modal', () => {
   });
 
   it('disables creating, with the reason, while the browser is offline', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await renderCollections();
     const dialog = await openModal(user);
 

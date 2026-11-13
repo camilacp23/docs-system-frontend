@@ -1,13 +1,13 @@
 // Variable list (S-10, S-10r): rows, counters, filters / sort / page reflected in the URL, loading, empty and error
 // states, the reset on changing application, and the Reader view.
 import { screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';
 import { makeApplication } from '../helpers/renderApp';
 import { makeVariable } from '../helpers/fakeVariablesApi';
 import { renderVariables, sampleVariables } from '../helpers/renderVariables';
+import { setupUser } from '../helpers/setupUser';
 
 const ROW_NAMES = (table: HTMLElement) =>
   within(table)
@@ -83,7 +83,7 @@ describe('variable list', () => {
   });
 
   it('does not reload the counters when a filter changes', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await renderVariables();
     await table();
     await waitFor(() => {
@@ -98,7 +98,7 @@ describe('variable list', () => {
   });
 
   it('filters by scope through the URL and the request', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router, api } = await renderVariables();
     const grid = await table();
 
@@ -123,7 +123,7 @@ describe('variable list', () => {
   });
 
   it('filters by data type, environment, origin screen (from GET /screens) and untraced', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router, api } = await renderVariables();
     const grid = await table();
     await waitFor(() => {
@@ -157,7 +157,7 @@ describe('variable list', () => {
   });
 
   it('the untraced counter is a filter that can be toggled', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await renderVariables();
     const grid = await table();
 
@@ -177,7 +177,7 @@ describe('variable list', () => {
   });
 
   it('waits for the user to stop typing before searching', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router, api } = await renderVariables();
     const grid = await table();
     await waitFor(() => {
@@ -199,7 +199,7 @@ describe('variable list', () => {
   });
 
   it('sorts by the whitelisted columns and toggles the direction', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router, api } = await renderVariables();
     const grid = await table();
     expect(within(grid).getByRole('columnheader', { name: /Name/ })).toHaveAttribute(
@@ -232,7 +232,7 @@ describe('variable list', () => {
   });
 
   it('pages through the results and changes the page size, going back to page 1', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const many = Array.from({ length: 45 }, (_, index) =>
       makeVariable(100 + index, `v${String(index).padStart(2, '0')}`),
     );
@@ -292,7 +292,7 @@ describe('variable list', () => {
       (call) => call.path === '/variables' && call.options.query?.scope === 'GLOBAL',
     );
 
-    await userEvent.setup().click(screen.getByRole('radio', { name: 'Global' }));
+    await setupUser().click(screen.getByRole('radio', { name: 'Global' }));
     expect(container.querySelectorAll('tr[aria-hidden="true"]')).toHaveLength(0);
 
     await waitFor(
@@ -310,7 +310,7 @@ describe('variable list', () => {
   });
 
   it('never lets a slow answer of a previous filter replace the current one', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await renderVariables();
     const grid = await table();
     await waitFor(() => {
@@ -339,7 +339,7 @@ describe('variable list', () => {
   });
 
   it('offers to clear the filters when they leave no results', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await renderVariables({ path: '/variables?dataType=GUID' });
 
     expect(await screen.findByRole('heading', { name: 'No results' })).toBeInTheDocument();
@@ -355,7 +355,7 @@ describe('variable list', () => {
   });
 
   it('shows the server error with a retry', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await renderVariables();
     await table();
     api.failNext(
@@ -372,7 +372,7 @@ describe('variable list', () => {
   });
 
   it('starts over when the application changes', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await renderVariables({
       path: '/variables?scope=GLOBAL&page=1&sort=-name',
       applications: [makeApplication(1, { name: 'SAR' }), makeApplication(2, { name: 'Billing' })],

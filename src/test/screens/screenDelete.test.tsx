@@ -2,7 +2,6 @@
 // reason (App (OnStart), in review, archived, offline), the API as the authority when the state changed, the
 // loading and failure of the impact, and where each page goes afterwards.
 import { act, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';
@@ -10,6 +9,7 @@ import { makeScreenDetail } from '../helpers/fakeScreensApi';
 import { makeVariable } from '../helpers/fakeVariablesApi';
 import { makeApplication } from '../helpers/renderApp';
 import { renderScreens, sampleScreens } from '../helpers/renderScreens';
+import { setupUser, type User } from '../helpers/setupUser';
 
 const APP_REASON = "The App (OnStart) screen can't be deleted.";
 const REVIEW_REASON =
@@ -71,7 +71,7 @@ async function listReady(options: Parameters<typeof renderScreens>[0] = {}) {
   return view;
 }
 
-async function openDeleteFromList(user: ReturnType<typeof userEvent.setup>, name: string) {
+async function openDeleteFromList(user: User, name: string) {
   await user.click(await screen.findByRole('button', { name: `Actions for ${name}` }));
   await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
   return within(await screen.findByRole('dialog'));
@@ -79,7 +79,7 @@ async function openDeleteFromList(user: ReturnType<typeof userEvent.setup>, name
 
 describe('delete screen: who gets it', () => {
   it('offers the row menu with View and Delete to the Developer and the Administrator', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     for (const role of ['DEVELOPER', 'ADMINISTRATOR'] as const) {
       const { unmount } = await listReady({ role });
       await user.click(await screen.findByRole('button', { name: 'Actions for Inicio' }));
@@ -100,7 +100,7 @@ describe('delete screen: who gets it', () => {
   });
 
   it('opens a screen from the View item', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await listReady();
 
     await user.click(await screen.findByRole('button', { name: 'Actions for Inicio' }));
@@ -114,7 +114,7 @@ describe('delete screen: who gets it', () => {
 
 describe('delete screen: the impact', () => {
   it('counts the components and links of the detail and the variables left without origin', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await listReady({
       screens: screensWithAjustes(),
       variables: [ORPHAN, ORPHAN_TWO],
@@ -141,7 +141,7 @@ describe('delete screen: the impact', () => {
   });
 
   it('counts the comments and the pending to-do records that the detail gives, and only those', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await listReady({
       screens: [
         ...sampleScreens(),
@@ -166,7 +166,7 @@ describe('delete screen: the impact', () => {
   });
 
   it('uses the singular for one comment and one pending to-do record, and leaves out zeros', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await listReady({
       screens: [
         ...sampleScreens(),
@@ -190,7 +190,7 @@ describe('delete screen: the impact', () => {
   });
 
   it('says "1 variable ... stays" and uses the singular', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await listReady({ screens: screensWithAjustes(), variables: [ORPHAN] });
 
     const dialog = await openDeleteFromList(user, 'Ajustes');
@@ -201,7 +201,7 @@ describe('delete screen: the impact', () => {
   });
 
   it('says there is nothing to delete with it when the screen has no components, links or variables', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await listReady();
 
     const dialog = await openDeleteFromList(user, 'Busqueda');
@@ -212,7 +212,7 @@ describe('delete screen: the impact', () => {
   });
 
   it('keeps Delete disabled while the impact loads and says it is checking', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     let release: () => void = () => undefined;
     await listReady({
       prepare: (api) => {
@@ -243,7 +243,7 @@ describe('delete screen: the impact', () => {
   });
 
   it('keeps Delete disabled, with a retry, when the screen cannot be read', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await listReady({
       prepare: (fake) => {
         fake.failNext('GET /screens/{id}', new ApiError({ status: 500, code: 'INTERNAL_ERROR' }));
@@ -263,7 +263,7 @@ describe('delete screen: the impact', () => {
   });
 
   it('keeps Delete disabled when the variables without origin cannot be counted', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     let failing = true;
     const { api } = await listReady({
       prepare: (fake) => {
@@ -291,7 +291,7 @@ describe('delete screen: the impact', () => {
   });
 
   it('closes with Cancel without deleting anything', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await listReady();
 
     const dialog = await openDeleteFromList(user, 'Busqueda');
@@ -305,7 +305,7 @@ describe('delete screen: the impact', () => {
 
 describe('delete screen: from the list', () => {
   it('deletes, says so, reads the list and the counts again and leaves the variables without origin', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await listReady({
       screens: screensWithAjustes(),
       variables: [ORPHAN],
@@ -330,7 +330,7 @@ describe('delete screen: from the list', () => {
   });
 
   it('goes back one page when the last row of a page is deleted', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const many = [
       makeScreenDetail(10, 'App (OnStart)', { isAppContext: true }),
       ...Array.from({ length: 20 }, (_, index) =>
@@ -351,7 +351,7 @@ describe('delete screen: from the list', () => {
 
 describe('delete screen: from the detail', () => {
   it('deletes and goes back to the list', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router, api } = await renderScreens({ path: '/screens/13' });
     await screen.findByRole('heading', { name: 'Busqueda', level: 1 });
 
@@ -372,7 +372,7 @@ describe('delete screen: from the detail', () => {
 
 describe('delete screen: disabled with the reason (Table 56)', () => {
   it('disables Delete for App (OnStart) in the menu and in the detail, with the catalog text', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await listReady();
     await user.click(await screen.findByRole('button', { name: 'Actions for App (OnStart)' }));
     const item = screen.getByRole('menuitem', { name: 'Delete' });
@@ -393,7 +393,7 @@ describe('delete screen: disabled with the reason (Table 56)', () => {
   });
 
   it('disables Delete for a screen in review, in the menu and in the detail', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await listReady();
     await user.click(await screen.findByRole('button', { name: 'Actions for Detalle' }));
     const item = screen.getByRole('menuitem', { name: 'Delete' });
@@ -413,7 +413,7 @@ describe('delete screen: disabled with the reason (Table 56)', () => {
   });
 
   it('disables Delete with the archived reason, before the reason of the screen', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await listReady({ applications: [makeApplication(1, { name: 'SAR', status: 'ARCHIVED' })] });
     await user.click(await screen.findByRole('button', { name: 'Actions for App (OnStart)' }));
 
@@ -440,7 +440,7 @@ describe('delete screen: disabled with the reason (Table 56)', () => {
   });
 
   it('disables Delete, with the reason, while the browser is offline', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await listReady();
 
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
@@ -456,7 +456,7 @@ describe('delete screen: disabled with the reason (Table 56)', () => {
   });
 
   it('disables Delete in the open confirmation when the connection is lost', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await listReady();
     const dialog = await openDeleteFromList(user, 'Busqueda');
     await dialog.findByText(/Busqueda has no components or links/);
@@ -475,7 +475,7 @@ describe('delete screen: disabled with the reason (Table 56)', () => {
 
 describe('delete screen: the API is the authority', () => {
   it('shows SCREEN_IN_REVIEW when the screen was sent to review after the list was read', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await listReady();
     const dialog = await openDeleteFromList(user, 'Busqueda');
     await dialog.findByText(/Busqueda has no components or links/);
@@ -492,7 +492,7 @@ describe('delete screen: the API is the authority', () => {
   });
 
   it('shows APP_CONTEXT_PROTECTED as the server says it', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await listReady({
       prepare: (api) => {
         api.failNext(
@@ -510,7 +510,7 @@ describe('delete screen: the API is the authority', () => {
   });
 
   it('shows APPLICATION_ARCHIVED when the application was archived meanwhile', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { apps } = await listReady();
     const dialog = await openDeleteFromList(user, 'Busqueda');
     await dialog.findByText(/Busqueda has no components or links/);
@@ -529,7 +529,7 @@ describe('delete screen: the API is the authority', () => {
   });
 
   it('shows "This screen doesn\'t exist" when it was deleted by someone else', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await listReady();
     const dialog = await openDeleteFromList(user, 'Busqueda');
     await dialog.findByText(/Busqueda has no components or links/);

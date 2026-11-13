@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { readDestination } from '../../app/router/destination';
 import { APP_ROUTES, type Role } from '../../app/router/routes';
 import { renderApp } from '../helpers/renderApp';
+import { settle } from '../helpers/setupUser';
 
 const NO_ACCESS = "You don't have access to this page";
 
@@ -76,14 +77,18 @@ describe('role guard', () => {
 
 describe('authentication guard', () => {
   it('does not redirect while the session is being recovered, then goes to /login remembering the page', async () => {
-    const { router } = await renderApp({ signedIn: false, path: '/screens/9?x=1' });
-    // The refresh is still in flight: the destination must not be lost.
-    expect(router.state.location.pathname).toBe('/screens/9');
-    await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/login');
+    // Not settled: the refresh is still in flight and the destination must not be lost.
+    const { router } = await renderApp({
+      signedIn: false,
+      path: '/screens/9?x=1',
+      settled: false,
     });
+    expect(router.state.location.pathname).toBe('/screens/9');
+    // Once the refresh has answered (nothing left to render) it goes to /login remembering the page.
+    await settle();
+    expect(router.state.location.pathname).toBe('/login');
     expect(router.state.location.state).toEqual({ from: '/screens/9?x=1' });
-    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
   });
 
   it('sends /login to the dashboard when there is a session', async () => {
