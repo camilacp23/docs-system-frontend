@@ -1,12 +1,13 @@
 // Application list (S-07): rows with platform, Jira project, status, App (OnStart) screen, creator and update time,
 // the counts, status / search / page reflected in the URL and the request, loading, empty and error states.
 import { screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';
 import { makeApplication } from '../helpers/renderApp';
 import { renderApplications, sampleApplications } from '../helpers/renderApplications';
-import { setupUser } from '../helpers/setupUser';
+import { controlSearchTimers, endSearchPause } from '../helpers/searchPause';
+import { setupSettledUser } from '../helpers/setupUser';
 
 const NAMES = (table: HTMLElement) =>
   within(table)
@@ -21,6 +22,12 @@ async function table() {
   });
   return grid;
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+const SEARCH_BOX = 'Search applications';
 
 describe('application list', () => {
   it('shows the applications ordered by name, with the columns of the frame', async () => {
@@ -61,7 +68,7 @@ describe('application list', () => {
   });
 
   it('filters by status through the URL and the request', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const { router, api } = await renderApplications();
     const grid = await table();
 
@@ -84,20 +91,19 @@ describe('application list', () => {
     });
   });
 
-  it('waits for the user to stop typing before searching by name', async () => {
-    const user = setupUser();
+  it('searches by name once the pause after the typing ends', async () => {
+    controlSearchTimers();
+    const user = setupSettledUser();
     const { router, api } = await renderApplications();
     const grid = await table();
     const before = api.callsTo('GET /applications').length;
 
-    await user.type(screen.getByRole('searchbox', { name: 'Search applications' }), 'application');
+    await user.click(screen.getByRole('searchbox', { name: SEARCH_BOX }));
+    await user.paste('application');
+    await endSearchPause();
 
-    await waitFor(() => {
-      expect(router.state.location.search).toBe('?q=application');
-    });
-    await waitFor(() => {
-      expect(NAMES(grid)).toEqual(['Application B', 'Application C']);
-    });
+    expect(router.state.location.search).toBe('?q=application');
+    expect(NAMES(grid)).toEqual(['Application B', 'Application C']);
     expect(api.callsTo('GET /applications').length).toBe(before + 1);
   });
 
@@ -105,7 +111,7 @@ describe('application list', () => {
     const many = Array.from({ length: 25 }, (_, index) =>
       makeApplication(100 + index, { name: `Zeta ${String(index).padStart(2, '0')}` }),
     );
-    const user = setupUser();
+    const user = setupSettledUser();
     const { router } = await renderApplications({
       applications: [...sampleApplications(), ...many],
     });
@@ -130,22 +136,23 @@ describe('application list', () => {
   });
 
   it('shows "No results" with "Clear filters" when nothing matches', async () => {
-    const user = setupUser();
+    controlSearchTimers();
+    const user = setupSettledUser();
     const { router } = await renderApplications();
     await table();
 
-    await user.type(screen.getByRole('searchbox', { name: 'Search applications' }), 'zzz');
+    await user.click(screen.getByRole('searchbox', { name: SEARCH_BOX }));
+    await user.paste('zzz');
+    await endSearchPause();
 
-    expect(await screen.findByText('No applications match these filters.')).toBeInTheDocument();
+    expect(screen.getByText('No applications match these filters.')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Clear filters' }));
-    await waitFor(() => {
-      expect(router.state.location.search).toBe('');
-    });
-    expect(await screen.findByRole('rowheader', { name: 'SAR' })).toBeInTheDocument();
+    expect(router.state.location.search).toBe('');
+    expect(screen.getByRole('rowheader', { name: 'SAR' })).toBeInTheDocument();
   });
 
   it('invites the administrator to register the first application when there is none', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     await renderApplications({ applications: [] });
 
     expect(await screen.findByText('No applications yet')).toBeInTheDocument();
@@ -159,7 +166,7 @@ describe('application list', () => {
   });
 
   it('shows the server error state with a retry when the list cannot be read', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     await renderApplications({
       prepare: (api) => {
         // The shell reads the applications first; the page reads its own list second.
@@ -173,7 +180,7 @@ describe('application list', () => {
   });
 
   it('the name of a row opens the edit form', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     await renderApplications();
     await table();
 

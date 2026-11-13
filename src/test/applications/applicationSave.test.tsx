@@ -14,9 +14,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';
 import { renderApplications } from '../helpers/renderApplications';
-import { setupUser } from '../helpers/setupUser';
+import { setupSettledUser, type User } from '../helpers/setupUser';
 
-type User = ReturnType<typeof setupUser>;
 type Scope = BoundFunctions<typeof queries>;
 
 afterEach(() => {
@@ -66,7 +65,7 @@ async function fillRegister(
 
 describe('Register application modal', () => {
   it('opens over the list with the name focused and the texts of the frame', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const { router } = await renderApplications();
     const dialog = await openRegister(user);
 
@@ -94,7 +93,7 @@ describe('Register application modal', () => {
   });
 
   it('checks the form before sending, with the text of the frame for the Jira key', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const { api } = await renderApplications();
     const dialog = await openRegister(user);
     await fill(user, dialog.getByLabelText('Jira project key'), 'app-d');
@@ -114,7 +113,7 @@ describe('Register application modal', () => {
   });
 
   it('registers with only the declared fields, null for what was left empty, and says so', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const { api, router } = await renderApplications();
     const dialog = await openRegister(user);
     await fillRegister(user, dialog, { name: '  Application D ' });
@@ -137,7 +136,7 @@ describe('Register application modal', () => {
   });
 
   it('registers with a Jira project key and a description', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const { api } = await renderApplications();
     const dialog = await openRegister(user);
     await fillRegister(user, dialog, { key: 'APPD', description: 'Tracks requests' });
@@ -158,7 +157,7 @@ describe('Register application modal', () => {
   });
 
   it('the new application appears in the selector of the sidebar without reloading the page', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const { api } = await renderApplications();
     const dialog = await openRegister(user);
     await fillRegister(user, dialog);
@@ -178,7 +177,7 @@ describe('Register application modal', () => {
   });
 
   it('DUPLICATE_NAME goes under the name with "Documentación técnica" as the scope', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const { api } = await renderApplications();
     const dialog = await openRegister(user);
     await fillRegister(user, dialog, { name: 'SAR' });
@@ -197,7 +196,7 @@ describe('Register application modal', () => {
   });
 
   it('VALIDATION_ERROR from the server marks each field it names, by rule', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const { api } = await renderApplications();
     const dialog = await openRegister(user);
     await fillRegister(user, dialog);
@@ -227,7 +226,7 @@ describe('Register application modal', () => {
   });
 
   it('shows any other refusal in the banner of the form', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const { api } = await renderApplications();
     const dialog = await openRegister(user);
     await fillRegister(user, dialog);
@@ -239,7 +238,7 @@ describe('Register application modal', () => {
   });
 
   it('disables registering, with the reason, while offline', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     await renderApplications();
     const dialog = await openRegister(user);
 
@@ -257,7 +256,7 @@ describe('Register application modal', () => {
 
 describe('Edit application modal', () => {
   it('reads the application and shows its values', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const { api } = await renderApplications();
     const dialog = await openEdit(user, 'Application B');
 
@@ -271,7 +270,7 @@ describe('Edit application modal', () => {
   });
 
   it('saves the whole representation with If-Match and no property the contract does not declare', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const { api } = await renderApplications();
     const dialog = await openEdit(user, 'Application B');
     await replace(user, dialog.getByLabelText(/^Name/), 'Application Beta');
@@ -295,7 +294,7 @@ describe('Edit application modal', () => {
   });
 
   it('keeps the status as it is: editing an archived application does not unarchive it', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const { api } = await renderApplications();
     const dialog = await openEdit(user, 'Application C');
     await replace(user, dialog.getByLabelText(/^Platform/), 'Power Platform');
@@ -310,7 +309,7 @@ describe('Edit application modal', () => {
   });
 
   it('clearing the key sends null, which is the default project', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const { api } = await renderApplications();
     const dialog = await openEdit(user, 'Application B');
     await user.clear(dialog.getByLabelText('Jira project key'));
@@ -330,7 +329,7 @@ describe('Edit application modal', () => {
   });
 
   it('DUPLICATE_NAME on a rename goes under the name', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     await renderApplications();
     const dialog = await openEdit(user, 'Application B');
     await replace(user, dialog.getByLabelText(/^Name/), 'SAR');
@@ -343,7 +342,7 @@ describe('Edit application modal', () => {
   });
 
   it('the selected application changes its name in the sidebar card without reloading the page', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     await renderApplications();
     const sidebar = within(screen.getByRole('complementary', { name: 'Sidebar' }));
     // The shell picks the first active application by name: Application B.
@@ -360,7 +359,7 @@ describe('Edit application modal', () => {
 
   describe('412 (S-44)', () => {
     async function conflict() {
-      const user = setupUser();
+      const user = setupSettledUser();
       const view = await renderApplications();
       const dialog = await openEdit(user, 'Application B');
       await replace(user, dialog.getByLabelText(/^Name/), 'My version');
@@ -417,7 +416,7 @@ describe('Edit application modal', () => {
   });
 
   it('shows the catalog text with a retry when the application cannot be read', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const { api } = await renderApplications();
     await screen.findByRole('rowheader', { name: 'SAR' });
     api.failNext('GET /applications/{id}', new ApiError({ status: 404, code: 'NOT_FOUND' }));
@@ -434,7 +433,7 @@ describe('Edit application modal', () => {
   });
 
   it('closes with Escape and returns the focus to the row menu button', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     await renderApplications();
     await openEdit(user, 'SAR');
     await user.keyboard('{Escape}');

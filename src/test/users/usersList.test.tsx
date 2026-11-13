@@ -2,12 +2,13 @@
 // sort / page reflected in the URL and the request, the reserved account that is never listed, loading, empty and
 // error states, "(you)" and the sidebar item.
 import { screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';
 import { makeUser } from '../helpers/fakeUsersApi';
 import { renderUsers, sampleUsers } from '../helpers/renderUsers';
-import { setupUser } from '../helpers/setupUser';
+import { controlSearchTimers, endSearchPause } from '../helpers/searchPause';
+import { setupSettledUser } from '../helpers/setupUser';
 
 const NAMES = (table: HTMLElement) =>
   within(table)
@@ -22,6 +23,12 @@ async function table() {
   });
   return grid;
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+const SEARCH_BOX = 'Search by name or email';
 
 describe('user list', () => {
   it('opens on the active users with name, email, role, status, last sign-in and creation date', async () => {
@@ -55,7 +62,7 @@ describe('user list', () => {
   it('never shows the reserved account, and the client does not filter it', async () => {
     const { api } = await renderUsers();
     const grid = await table();
-    const user = setupUser();
+    const user = setupSettledUser();
 
     await user.selectOptions(screen.getByRole('combobox', { name: 'Status' }), 'ALL');
     await waitFor(() => {
@@ -67,7 +74,7 @@ describe('user list', () => {
   });
 
   it('filters by status through the URL and the request', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const { router, api } = await renderUsers();
     const grid = await table();
 
@@ -95,7 +102,7 @@ describe('user list', () => {
   });
 
   it('filters by role', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const { router } = await renderUsers();
     const grid = await table();
 
@@ -107,40 +114,37 @@ describe('user list', () => {
     expect(router.state.location.search).toBe('?role=DEVELOPER');
   });
 
-  it('waits for the user to stop typing before searching by name or email', async () => {
-    const user = setupUser();
+  it('searches by name or email once the pause after the typing ends', async () => {
+    controlSearchTimers();
+    const user = setupSettledUser();
     const { router, api } = await renderUsers();
     const grid = await table();
     const before = api.callsTo('GET /users').length;
 
-    await user.type(screen.getByRole('searchbox', { name: 'Search by name or email' }), 'dev.');
+    await user.click(screen.getByRole('searchbox', { name: SEARCH_BOX }));
+    await user.paste('dev.');
+    await endSearchPause();
 
-    await waitFor(() => {
-      expect(router.state.location.search).toBe('?q=dev.');
-    });
-    await waitFor(() => {
-      expect(NAMES(grid)).toEqual(['Sample Developer A', 'Sample Developer B']);
-    });
+    expect(router.state.location.search).toBe('?q=dev.');
+    expect(NAMES(grid)).toEqual(['Sample Developer A', 'Sample Developer B']);
     expect(api.callsTo('GET /users').length).toBe(before + 1);
   });
 
   it('sends the characters of the search as typed (the encoding is the HTTP layer job)', async () => {
-    const user = setupUser();
+    controlSearchTimers();
+    const user = setupSettledUser();
     const { api } = await renderUsers();
     await table();
 
-    await user.type(
-      screen.getByRole('searchbox', { name: 'Search by name or email' }),
-      "o'brien (x)!",
-    );
+    await user.click(screen.getByRole('searchbox', { name: SEARCH_BOX }));
+    await user.paste("o'brien (x)!");
+    await endSearchPause();
 
-    await waitFor(() => {
-      expect(api.callsTo('GET /users').at(-1)?.options.query).toMatchObject({ q: "o'brien (x)!" });
-    });
+    expect(api.callsTo('GET /users').at(-1)?.options.query).toMatchObject({ q: "o'brien (x)!" });
   });
 
   it('sorts by the clickable columns and goes back to the first page', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const { router, api } = await renderUsers();
     const grid = await table();
 
@@ -172,7 +176,7 @@ describe('user list', () => {
     const many = Array.from({ length: 45 }, (_, index) =>
       makeUser(100 + index, `User ${String(index).padStart(2, '0')}`),
     );
-    const user = setupUser();
+    const user = setupSettledUser();
     const { router, api } = await renderUsers({ users: [...sampleUsers(), ...many] });
     const grid = await table();
     await waitFor(() => {
@@ -202,22 +206,23 @@ describe('user list', () => {
   });
 
   it('shows "No results" with "Clear filters" and goes back to the defaults', async () => {
-    const user = setupUser();
+    controlSearchTimers();
+    const user = setupSettledUser();
     const { router } = await renderUsers();
     await table();
 
-    await user.type(screen.getByRole('searchbox', { name: 'Search by name or email' }), 'zzz');
+    await user.click(screen.getByRole('searchbox', { name: SEARCH_BOX }));
+    await user.paste('zzz');
+    await endSearchPause();
 
-    expect(await screen.findByText('No users match these filters.')).toBeInTheDocument();
+    expect(screen.getByText('No users match these filters.')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Clear filters' }));
-    await waitFor(() => {
-      expect(router.state.location.search).toBe('');
-    });
-    expect(await screen.findByRole('rowheader', { name: 'Sample Admin' })).toBeInTheDocument();
+    expect(router.state.location.search).toBe('');
+    expect(screen.getByRole('rowheader', { name: 'Sample Admin' })).toBeInTheDocument();
   });
 
   it('shows the server error state with a retry when the list cannot be read', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     await renderUsers({
       prepare: (api) => {
         api.failNext('GET /users', new ApiError({ status: 500, code: 'INTERNAL_ERROR' }));

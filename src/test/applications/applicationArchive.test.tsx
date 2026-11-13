@@ -6,9 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';
 import { renderApplications } from '../helpers/renderApplications';
-import { setupUser } from '../helpers/setupUser';
-
-type User = ReturnType<typeof setupUser>;
+import { setupSettledUser, type User } from '../helpers/setupUser';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -39,7 +37,7 @@ async function selectInSidebar(user: User, name: string) {
 
 describe('Archive application', () => {
   it('asks first, with the text of the frame, and Cancel changes nothing', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const { api } = await renderApplications();
     const dialog = await openArchive(user, 'SAR');
 
@@ -55,7 +53,7 @@ describe('Archive application', () => {
   });
 
   it('closes with Escape and returns the focus to the row menu button', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     await renderApplications();
     await openArchive(user, 'SAR');
     await user.keyboard('{Escape}');
@@ -64,7 +62,7 @@ describe('Archive application', () => {
   });
 
   it('reads the application and sends EVERY field back with If-Match, changing only the status', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const { api } = await renderApplications();
     const dialog = await openArchive(user, 'SAR');
 
@@ -88,7 +86,7 @@ describe('Archive application', () => {
   });
 
   it('shows the application as archived in the list and in the counts', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     await renderApplications();
     const dialog = await openArchive(user, 'SAR');
 
@@ -108,7 +106,7 @@ describe('Archive application', () => {
   });
 
   it('archiving another application leaves the shell as it is', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     await renderApplications();
     // Application B is the selected one.
     expect(await sidebar().findByText('Application B')).toBeInTheDocument();
@@ -126,7 +124,7 @@ describe('Archive application', () => {
 
   describe('the selected application', () => {
     it('shows the read-only strip and the chip at once, without reloading the page', async () => {
-      const user = setupUser();
+      const user = setupSettledUser();
       const { api } = await renderApplications();
       expect(await sidebar().findByText('Application B')).toBeInTheDocument();
       expect(screen.queryByText(STRIP)).not.toBeInTheDocument();
@@ -143,7 +141,7 @@ describe('Archive application', () => {
     });
 
     it('the strip is there on the other pages too', async () => {
-      const user = setupUser();
+      const user = setupSettledUser();
       await renderApplications();
       expect(await sidebar().findByText('Application B')).toBeInTheDocument();
       const dialog = await openArchive(user, 'Application B');
@@ -162,7 +160,7 @@ describe('Archive application', () => {
     });
 
     it('Unarchive in the strip and in the row menu both lift it', async () => {
-      const user = setupUser();
+      const user = setupSettledUser();
       await renderApplications();
       expect(await sidebar().findByText('Application B')).toBeInTheDocument();
       const dialog = await openArchive(user, 'Application B');
@@ -181,7 +179,7 @@ describe('Archive application', () => {
   });
 
   it('shows the catalog text of a 412 in the modal and a new attempt reads the application again', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const { api } = await renderApplications();
     api.failNext(
       'PUT /applications/{id}',
@@ -203,7 +201,7 @@ describe('Archive application', () => {
   });
 
   it('shows NOT_FOUND in the modal when the application was removed meanwhile', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const { api } = await renderApplications();
     api.failNext('GET /applications/{id}', new ApiError({ status: 404, code: 'NOT_FOUND' }));
     const dialog = await openArchive(user, 'SAR');
@@ -217,7 +215,7 @@ describe('Archive application', () => {
   });
 
   it('disables archiving, with the reason, while offline', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     await renderApplications();
     const dialog = await openArchive(user, 'SAR');
 
@@ -233,7 +231,7 @@ describe('Archive application', () => {
   });
 
   it('disables every row action with the reason while offline', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     await renderApplications();
     await screen.findByRole('rowheader', { name: 'SAR' });
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
@@ -255,7 +253,7 @@ describe('Archive application', () => {
 
 describe('Unarchive application', () => {
   it('reads the application and sends EVERY field back with If-Match, with no confirmation', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const { api } = await renderApplications();
     await openMenu(user, 'Application C');
 
@@ -283,7 +281,7 @@ describe('Unarchive application', () => {
   });
 
   it('shows the catalog text in a warning toast when it fails and reads the list again', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     const { api } = await renderApplications();
     api.failNext(
       'PUT /applications/{id}',
@@ -305,7 +303,7 @@ describe('Unarchive application', () => {
   });
 
   it('the selected archived application leaves read-only mode on every page', async () => {
-    const user = setupUser();
+    const user = setupSettledUser();
     await renderApplications();
     await selectInSidebar(user, 'Application C');
     expect(await screen.findByText(STRIP)).toBeInTheDocument();
