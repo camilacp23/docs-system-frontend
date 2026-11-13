@@ -12,6 +12,7 @@ import { ModulePlaceholder } from '../../modules/ModulePlaceholder';
 import { CollectionEditPage } from '../../modules/collections/CollectionEditPage';
 import { CollectionDetailPage } from '../../modules/collections/CollectionDetailPage';
 import { CollectionsListPage } from '../../modules/collections/CollectionsListPage';
+import { UsersListPage } from '../../modules/users/UsersListPage';
 import { ScreenDetailPage } from '../../modules/screens/ScreenDetailPage';
 import { ScreenEditPage } from '../../modules/screens/ScreenEditPage';
 import { ScreensListPage } from '../../modules/screens/ScreensListPage';
@@ -35,6 +36,7 @@ const PAGES: Record<string, ReactNode> = {
   '/screens': <ScreensListPage />,
   '/screens/:id': <ScreenDetailPage />,
   '/screens/:id/edit': <ScreenEditPage />,
+  '/admin/users': <UsersListPage />,
 };
 
 const pageRoutes: RouteObject[] = APP_ROUTES.map((route) => ({

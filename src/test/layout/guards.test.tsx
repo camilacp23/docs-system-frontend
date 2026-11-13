@@ -25,7 +25,10 @@ const FORBIDDEN: Record<Role, string[]> = {
 
 /** Modules that already have their own pages: the placeholder text no longer applies to them. */
 const hasOwnPage = (path: string) =>
-  path.startsWith('/variables') || path.startsWith('/collections') || path.startsWith('/screens');
+  path.startsWith('/variables') ||
+  path.startsWith('/collections') ||
+  path.startsWith('/screens') ||
+  path === '/admin/users';
 
 const PROTECTED_PATHS = APP_ROUTES.map((route) => route.path.replace(':id', '5'));
 
