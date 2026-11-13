@@ -5,12 +5,20 @@
 // arrives from the API and is not filtered here. Loading shows a skeleton only after 300 ms (Table 58); an empty list
 // offers "Clear filters" when filters are set; a failure shows the server error state with a retry. The creation
 // modal is part of the URL (?new=1), so it can be linked and the back button closes it.
-import { Plus, UserPlus, Users, X } from 'lucide-react';
+// The row menu has Edit, Change role and Deactivate (Reactivate for an inactive user, with no confirmation, as
+// Unarchive has none: it reads the user and sends every field back with If-Match). Deactivating yourself is shown
+// disabled with the reason (the API answers 422 CANNOT_DEACTIVATE_SELF anyway). Every write is disabled with the
+// reason while offline.
+import { Lock, LockOpen, Pencil, Plus, UserPlus, Users, X } from 'lucide-react';
+import { useState } from 'react';
 import { useSearchParams } from 'react-router';
 
+import { isApiError } from '../../api/ApiError';
+import { getThrownMessage } from '../../api/messages';
 import { useApi } from '../../api/useApi';
 import { useApiResource } from '../../api/useApiResource';
 import {
+  ActionMenu,
   Button,
   EmptyState,
   ErrorState,
@@ -19,11 +27,15 @@ import {
   Pagination,
   SLOW_LOADING_MESSAGE,
   useDelayedLoading,
+  useToast,
 } from '../../components/ui';
 import { useOfflineBlock } from '../../hooks/useOfflineBlock';
 import { useCurrentUser } from '../../session/useCurrentUser';
 
+import { ChangeRoleModal } from './ChangeRoleModal';
 import { CreateUserModal } from './CreateUserModal';
+import { DeactivateUserModal } from './DeactivateUserModal';
+import { EditUserModal } from './EditUserModal';
 import type { User } from './userLabels';
 import { UserFilters } from './UserFilters';
 import { UserTable } from './UserTable';
@@ -41,10 +53,17 @@ function countText(total: number, status: StatusFilter): string {
   return `${total} ${noun}${total === 1 ? '' : 's'}`;
 }
 
+const ACTION_ICON = { size: 16, strokeWidth: ICON_STROKE_WIDTH } as const;
+const SELF_DEACTIVATE_REASON = "You can't deactivate your own account.";
+
 export function UsersListPage() {
   const client = useApi();
   const me = useCurrentUser();
+  const toast = useToast();
   const { blocked, reason } = useOfflineBlock();
+  const [editing, setEditing] = useState<User | null>(null);
+  const [changingRole, setChangingRole] = useState<User | null>(null);
+  const [deactivating, setDeactivating] = useState<User | null>(null);
   const [search, setSearch] = useSearchParams();
   const creating = search.get('new') === '1';
   const setCreating = (open: boolean) => {
@@ -74,6 +93,23 @@ export function UsersListPage() {
     },
   );
   const { showSkeleton, isSlow } = useDelayedLoading(list.loading);
+
+  const reactivate = async (target: User) => {
+    try {
+      const current = await client.get('/users/{id}', { path: { id: target.id } });
+      const { name, email } = current.body.data;
+      const { body } = await client.put('/users/{id}', {
+        path: { id: target.id },
+        ifMatch: current.etag ?? undefined,
+        body: { name, email, status: 'ACTIVE' },
+      });
+      toast.show({ message: `${body.data.name} reactivated.` });
+    } catch (thrown) {
+      toast.show({ tone: 'warning', message: getThrownMessage(thrown, { element: 'user' }) });
+      if (!isApiError(thrown)) return;
+    }
+    list.reload();
+  };
 
   const rows = list.data?.rows ?? [];
   const total = list.data?.total ?? 0;
@@ -139,6 +175,56 @@ export function UsersListPage() {
               loading={list.loading}
               showSkeleton={showSkeleton}
               currentUserId={me?.id ?? null}
+              renderActions={(row) => (
+                <ActionMenu
+                  label={`Actions for ${row.name}`}
+                  items={[
+                    {
+                      key: 'edit',
+                      label: 'Edit',
+                      icon: <Pencil {...ACTION_ICON} />,
+                      disabled: blocked,
+                      reason: reason ?? undefined,
+                      onSelect: () => {
+                        setEditing(row);
+                      },
+                    },
+                    {
+                      key: 'role',
+                      label: 'Change role',
+                      icon: <Users {...ACTION_ICON} />,
+                      disabled: blocked,
+                      reason: reason ?? undefined,
+                      onSelect: () => {
+                        setChangingRole(row);
+                      },
+                    },
+                    row.status === 'ACTIVE'
+                      ? {
+                          key: 'status',
+                          label: 'Deactivate',
+                          icon: <Lock {...ACTION_ICON} />,
+                          danger: true,
+                          disabled: blocked || row.id === me?.id,
+                          reason:
+                            row.id === me?.id ? SELF_DEACTIVATE_REASON : (reason ?? undefined),
+                          onSelect: () => {
+                            setDeactivating(row);
+                          },
+                        }
+                      : {
+                          key: 'status',
+                          label: 'Reactivate',
+                          icon: <LockOpen {...ACTION_ICON} />,
+                          disabled: blocked,
+                          reason: reason ?? undefined,
+                          onSelect: () => {
+                            void reactivate(row);
+                          },
+                        },
+                  ]}
+                />
+              )}
             />
             {isSlow && (
               <p className="px-4 py-3 text-small text-ink-500" role="status">
@@ -161,6 +247,33 @@ export function UsersListPage() {
         )}
       </section>
 
+      {editing !== null && (
+        <EditUserModal
+          userId={editing.id}
+          onClose={() => {
+            setEditing(null);
+          }}
+          onSaved={list.reload}
+        />
+      )}
+      {changingRole !== null && (
+        <ChangeRoleModal
+          user={changingRole}
+          onClose={() => {
+            setChangingRole(null);
+          }}
+          onChanged={list.reload}
+        />
+      )}
+      {deactivating !== null && (
+        <DeactivateUserModal
+          user={deactivating}
+          onClose={() => {
+            setDeactivating(null);
+          }}
+          onDone={list.reload}
+        />
+      )}
       {creating && (
         <CreateUserModal
           onClose={() => {
