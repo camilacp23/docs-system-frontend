@@ -28,7 +28,8 @@ const hasOwnPage = (path: string) =>
   path.startsWith('/variables') ||
   path.startsWith('/collections') ||
   path.startsWith('/screens') ||
-  path === '/admin/users';
+  path === '/admin/users' ||
+  path === '/admin/applications';
 
 const PROTECTED_PATHS = APP_ROUTES.map((route) => route.path.replace(':id', '5'));
 

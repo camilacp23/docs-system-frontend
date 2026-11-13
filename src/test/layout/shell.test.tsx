@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import pkg from '../../../package.json';
 import { ApiError } from '../../api/ApiError';
+import { NO_APPLICATIONS_TEXT } from '../../layout/AppShell';
 import { SIGN_OUT_FAILED_TEXT } from '../../layout/TopBar';
 import { makeApplication, renderApp } from '../helpers/renderApp';
 
@@ -208,7 +209,12 @@ describe('no application registered', () => {
 
   it('leaves /admin/applications reachable so the first one can be registered', async () => {
     await renderApp({ applications: [], path: '/admin/applications' });
-    expect(await screen.findByText('This module is not available yet.')).toBeInTheDocument();
+    // The page of the module itself (not the empty state of the shell) invites to register the first one.
+    expect(
+      await screen.findByText('Register the first application to start documenting it.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(NO_APPLICATIONS_TEXT)).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Applications' })).toBeInTheDocument();
   });
 });
 

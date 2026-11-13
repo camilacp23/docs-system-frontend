@@ -1,7 +1,7 @@
 // renderApp: renders the real route table (appRoutes) in a memory router with a real SessionManager over the
 // fake backend, the real ApplicationProvider over a fake API client and the ToastProvider.
 // Options: role (of the signed-in user), path (initial URL), signedIn (false: no session cookie), applications
-// (what GET /applications returns), buildClient (replaces the API client of the pages, e.g. makeVariablesApi), now (system time, when the test uses fake timers), sessionExpiresIn.
+// (what GET /applications returns), applicationsApi (replaces the applications fake), buildClient (replaces the API client of the pages, e.g. makeVariablesApi), now (system time, when the test uses fake timers), sessionExpiresIn.
 // Returns { router, manager, backend, apps, client }; `apps` records the calls of the application API and `client`
 // is the client the pages use (the applications fake unless buildClient is given).
 import { render } from '@testing-library/react';
@@ -76,6 +76,8 @@ export interface RenderAppOptions {
   path?: string;
   signedIn?: boolean;
   applications?: Application[];
+  /** Replaces the minimal applications fake (fakeApplicationsApi, for the tests of the applications themselves). */
+  applicationsApi?: ReturnType<typeof makeApplicationsClient>;
   /** Builds the client the pages use (ApiContext); the applications keep their own fake. */
   buildClient?: (apps: ReturnType<typeof makeApplicationsClient>) => ApiClient;
   sessionExpiresIn?: number;
@@ -90,9 +92,9 @@ export async function renderApp(options: RenderAppOptions = {}) {
   backend.install();
   const manager = new SessionManager({ lock: new FakeLocks(), createChannel: () => null });
   if (signedIn) await manager.login(TEST_USER.email, PASSWORD);
-  const apps = makeApplicationsClient(
-    options.applications ?? [makeApplication(1, { name: 'SAR' })],
-  );
+  const apps =
+    options.applicationsApi ??
+    makeApplicationsClient(options.applications ?? [makeApplication(1, { name: 'SAR' })]);
   const pageClient = options.buildClient?.(apps) ?? apps.client;
   const router = createMemoryRouter(appRoutes, { initialEntries: [path] });
 
