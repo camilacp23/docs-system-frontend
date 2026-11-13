@@ -249,4 +249,4 @@ Contrast computed per WCAG 2.x (text ≥ 4.5:1, components and focus ≥ 3:1).
 | Writes of the administration pages (F-13) | The pages of users and applications are disabled with the reason of S-46 while the browser is offline ("You're offline. Changes can't be saved until the connection is back."). They do not depend on the selected application: users belong to none, and `PUT /applications` is the one write the API accepts on an archived application, so the archived reason ("Read-only: the application is archived.") never applies to them | n/a |
 
 The Figma border of inputs and secondary buttons (`#d3d9e2`, 1.4:1 on white) does not meet WCAG 1.4.11 (3:1 for component
-boundaries); `--color-border-control` replaces it on those controls only. To confirm in design or in SDD v1.1.
+boundaries); `--color-border-control` replaces it on those controls only. To confirm in design or in SDD v1.4.

@@ -1,6 +1,6 @@
 # Decisiones de la Fase 3 (posteriores al SDD v1.0)
 
-Aprobadas por la autora el 18 de octubre de 2026. Deben incorporarse al SDD v1.1 (Tabla 70).
+Aprobadas por la autora el 18 de octubre de 2026. Deben incorporarse al SDD v1.4 (Tabla 70).
 
 ## Decisiones de diseño
 
@@ -55,9 +55,9 @@ Aprobadas por la autora el 18 de octubre de 2026. Deben incorporarse al SDD v1.1
 | Git | `main` / `develop` / `feature/<nombre>`; Claude Code hace commits locales; push y PR los hace la autora. |
 | CI | GitHub Actions en ambos repositorios. |
 | Cuentas | Administrador inicial: `camilacastilloporras23@gmail.com`. Cuenta reservada: `integracion.jira@system.local`. |
-| Vite (D-67) | Vite 8.3.2 → **8.3.5** (patch, versión exacta) por GHSA-9jrq-w75r-8gcw, GHSA-rq7h-c2jc-7f22, GHSA-vfpm-58rq-9qcg y los avisos de `launch-editor` (GHSA-698v-4r3x-3vcv, GHSA-r825-w8mm-5pxw, GHSA-587h-7wmj-h5pm). Solo afectan al servidor de desarrollo, no al bundle de producción. Pendiente reflejarlo en el SDD v1.1 (Tabla 7). |
+| Vite (D-67) | Vite 8.3.2 → **8.3.5** (patch, versión exacta) por GHSA-9jrq-w75r-8gcw, GHSA-rq7h-c2jc-7f22, GHSA-vfpm-58rq-9qcg y los avisos de `launch-editor` (GHSA-698v-4r3x-3vcv, GHSA-r825-w8mm-5pxw, GHSA-587h-7wmj-h5pm). Solo afectan al servidor de desarrollo, no al bundle de producción. Pendiente reflejarlo en el SDD v1.4 (Tabla 7). |
 
-## Pendientes de diseño (resolver en diseño o en el SDD v1.1)
+## Pendientes de diseño (resolver en diseño o en el SDD v1.4)
 
 | Tema | Situación | Decisión provisional |
 |---|---|---|
@@ -69,9 +69,9 @@ Aprobadas por la autora el 18 de octubre de 2026. Deben incorporarse al SDD v1.1
 
 ## Pendiente de copiar al repositorio del backend
 
-D-78 (F-06, 24 de octubre de 2026), D-79 (F-07, 25 de octubre de 2026), D-98 y D-99 (F-09, 6 de noviembre de 2026), D-100 (F-12, 7 de noviembre de 2026) y D-112 y D-113 (F-13, 13 de noviembre de 2026) se decidieron en el frontend y todavía no están en el `DECISIONS_FASE3.md` del backend: copiarlas allí **al cierre de la fase**, junto con su incorporación al SDD v1.1 (Tabla 70).
+D-78 (F-06, 24 de octubre de 2026), D-79 (F-07, 25 de octubre de 2026), D-98 y D-99 (F-09, 6 de noviembre de 2026), D-100 (F-12, 7 de noviembre de 2026) y D-112 y D-113 (F-13, 13 de noviembre de 2026) se decidieron en el frontend y todavía no están en el `DECISIONS_FASE3.md` del backend: copiarlas allí **al cierre de la fase**, junto con su incorporación al SDD v1.4 (Tabla 70).
 
-## Pendiente para el SDD v1.1
+## Pendiente para el SDD v1.4
 
 D-60 a D-79, D-98, D-99, D-100, D-112 y D-113 (y la ampliación de la Tabla 59 de D-64; la Tabla 59 también debe recibir la fila de `FORBIDDEN` por Origin no permitido de D-77, con su mensaje); color fijo por tipo de elemento (Tabla 54, ver Pendientes de diseño); Tabla 7 (helmet/cors marcados "Verified" sin estar en la base; Node 22.22); Figura 4
 (rutas `/apps/:appId` → rutas de D-57); §7.3.2 (el archivo de Figma no tiene página "Design system"
