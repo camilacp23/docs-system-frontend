@@ -1,0 +1,137 @@
+// GraphToolbar: the filter bar of the map (frame S-27).
+// Props: params (the filters of the URL), onChange(patch), nodes (the nodes of the graph shown, for the search), selectedKey,
+// onPick(key) (a node was chosen in the search), onReset, disabled (the graph is not loaded), focused (the map shows
+// the neighborhood of a node: the type and environment filters do not apply, the contract takes none there).
+// Controls: one checkbox per node type (the last one cannot be cleared: an empty list would mean every type), the
+// environment, "Find a node…" (the keyboard alternative to the canvas: it lists the nodes by name and choosing one
+// selects it, centers it and opens its panel), "Show untraced only" (a filter of the client) and "Reset view".
+import { Filter } from 'lucide-react';
+import { useMemo } from 'react';
+
+import {
+  Button,
+  Checkbox,
+  ICON_STROKE_WIDTH,
+  SearchPicker,
+  Select,
+  type SearchPickerOption,
+} from '../../components/ui';
+
+import { NODE_TYPE_LABEL, NODE_TYPE_PLURAL_LABEL } from './graphLabels';
+import { NODE_TYPES, type GraphNode, type Environment, type NodeType } from './graphTypes';
+import { FOCUSED_FILTERS_REASON } from './mapTexts';
+import type { GraphParams, GraphParamsPatch } from './useGraphParams';
+
+interface GraphToolbarProps {
+  params: GraphParams;
+  onChange: (patch: GraphParamsPatch) => void;
+  nodes: readonly GraphNode[];
+  selectedKey: string | null;
+  onPick: (key: string) => void;
+  onReset: () => void;
+  disabled: boolean;
+  focused: boolean;
+}
+
+export function GraphToolbar({
+  params,
+  onChange,
+  nodes,
+  selectedKey,
+  onPick,
+  onReset,
+  disabled,
+  focused,
+}: GraphToolbarProps) {
+  const options = useMemo<SearchPickerOption[]>(
+    () =>
+      nodes.map((node) => ({
+        value: node.key,
+        label: node.name,
+        detail: NODE_TYPE_LABEL[node.type],
+      })),
+    [nodes],
+  );
+  const toggleType = (type: NodeType, checked: boolean) => {
+    const next = checked
+      ? NODE_TYPES.filter((candidate) => candidate === type || params.types.includes(candidate))
+      : params.types.filter((candidate) => candidate !== type);
+    if (next.length > 0) onChange({ types: next });
+  };
+  const filtersDisabled = disabled || focused;
+  const onlyOne = params.types.length === 1;
+
+  return (
+    <section
+      aria-label="Map filters"
+      className="flex flex-col gap-2 rounded-card border border-border-subtle bg-surface px-4 py-3 shadow-card"
+    >
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <fieldset
+          title={focused ? FOCUSED_FILTERS_REASON : undefined}
+          className="flex flex-wrap items-center gap-x-5 gap-y-1"
+        >
+          <legend className="sr-only">Element types</legend>
+          {NODE_TYPES.map((type) => {
+            const checked = params.types.includes(type);
+            return (
+              <Checkbox
+                key={type}
+                label={NODE_TYPE_PLURAL_LABEL[type]}
+                checked={checked}
+                disabled={filtersDisabled || (checked && onlyOne)}
+                onChange={(event) => {
+                  toggleType(type, event.target.checked);
+                }}
+              />
+            );
+          })}
+        </fieldset>
+        <div className="w-44" title={focused ? FOCUSED_FILTERS_REASON : undefined}>
+          <Select
+            aria-label="Environment"
+            value={params.environment}
+            disabled={filtersDisabled}
+            onChange={(event) => {
+              onChange({ environment: event.target.value as Environment | '' });
+            }}
+          >
+            <option value="">Environment: Any</option>
+            <option value="DEV">Environment: DEV</option>
+            <option value="PROD">Environment: PROD</option>
+          </Select>
+        </div>
+        <div className="w-60">
+          <SearchPicker
+            aria-label="Find a node"
+            placeholder="Find a node…"
+            options={options}
+            value={selectedKey ?? ''}
+            onChange={onPick}
+            disabled={disabled}
+            mono
+          />
+        </div>
+        <Button
+          aria-pressed={params.untraced}
+          disabled={filtersDisabled}
+          title={focused ? FOCUSED_FILTERS_REASON : undefined}
+          className={
+            params.untraced ? '!border-accent !bg-accent-soft !text-accent-ink' : undefined
+          }
+          iconLeft={<Filter aria-hidden="true" size={14} strokeWidth={ICON_STROKE_WIDTH} />}
+          onClick={() => {
+            onChange({ untraced: !params.untraced });
+          }}
+        >
+          Show untraced only
+        </Button>
+      </div>
+      <div>
+        <Button variant="ghost" size="sm" onClick={onReset}>
+          Reset view
+        </Button>
+      </div>
+    </section>
+  );
+}

@@ -8,6 +8,7 @@ import { createBrowserRouter, Navigate, type RouteObject } from 'react-router';
 import { AppShell } from '../../layout/AppShell';
 import { LoginPage } from '../../modules/auth/LoginPage';
 import { NotFoundPage, ServerErrorPage } from '../../modules/errors/ErrorPages';
+import { LazyDependencyMapPage } from '../../modules/dependency-map/LazyDependencyMapPage';
 import { ModulePlaceholder } from '../../modules/ModulePlaceholder';
 import { CollectionEditPage } from '../../modules/collections/CollectionEditPage';
 import { CollectionDetailPage } from '../../modules/collections/CollectionDetailPage';
@@ -34,6 +35,7 @@ const PAGES: Record<string, ReactNode> = {
   '/collections': <CollectionsListPage />,
   '/collections/:id': <CollectionDetailPage />,
   '/collections/:id/edit': <CollectionEditPage />,
+  '/dependency-map': <LazyDependencyMapPage />,
   '/screens': <ScreensListPage />,
   '/screens/:id': <ScreenDetailPage />,
   '/screens/:id/edit': <ScreenEditPage />,

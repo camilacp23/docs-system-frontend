@@ -1,0 +1,33 @@
+/* mapCanvas: the colors of the React Flow parts of the dependency map, taken from the design tokens (theme.css).
+   base.css (imported by GraphCanvas) only gives the structure; every color here is a token, none is hard-coded. */
+.map-flow {
+  --xy-background-color: transparent;
+  --xy-edge-label-color: var(--color-ink-700);
+  --xy-edge-label-background-color: var(--color-surface);
+  --xy-controls-button-background-color: var(--color-surface);
+  --xy-controls-button-background-color-hover: var(--color-control-hover);
+  --xy-controls-button-color: var(--color-ink-700);
+  --xy-controls-button-color-hover: var(--color-ink-900);
+  --xy-controls-button-border-color: var(--color-border);
+  --xy-minimap-background-color: var(--color-surface);
+  --xy-minimap-mask-background-color: rgb(14 32 65 / 0.08);
+  --xy-minimap-node-background-color: var(--color-border-control);
+  --xy-attribution-background-color: transparent;
+}
+
+.map-flow .react-flow__minimap {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.map-flow .react-flow__controls {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-chip);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.map-flow .react-flow__attribution {
+  font-size: var(--text-micro);
+}
