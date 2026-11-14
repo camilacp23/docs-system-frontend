@@ -60,14 +60,15 @@ import { deleteBlockReason, editBlockReason } from './screenActionBlock';
 import { FUTURE_TODO_LABEL } from './jiraTree';
 import { RESERVED_LABEL, toTagStatus } from './screenLabels';
 import { workflowActions, workflowToast, type WorkflowAction } from './screenWorkflow';
+import { SCREEN_TAB_KEYS, type ScreenTabKey } from './screenTabs';
 import { useScreen } from './useScreen';
 import { useScreenStatusChange } from './useScreenStatusChange';
 
 const LIST_PATH = '/screens';
 const TAB_PREFIX = 'screen';
 
-type TabKey = 'template' | 'components' | 'links' | 'todo';
-const TAB_KEYS: readonly TabKey[] = ['template', 'components', 'links', 'todo'];
+type TabKey = ScreenTabKey;
+const TAB_KEYS = SCREEN_TAB_KEYS;
 
 export function ScreenDetailPage() {
   const { id: rawId } = useParams();

@@ -7,6 +7,8 @@ import type { ReactNode } from 'react';
 
 import { cx, ICON_STROKE_WIDTH } from '../../components/ui';
 
+import { isHttpsUrl } from './httpsUrl';
+
 interface MiroLinkProps {
   href: string | null;
   children: ReactNode;
@@ -14,7 +16,7 @@ interface MiroLinkProps {
 }
 
 export function MiroLink({ href, children, className }: MiroLinkProps) {
-  if (href === null || !/^https:\/\//.test(href)) return null;
+  if (!isHttpsUrl(href)) return null;
   return (
     <a
       href={href}
