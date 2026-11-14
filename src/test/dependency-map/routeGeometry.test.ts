@@ -56,8 +56,8 @@ describe('geometry: about 500 elements', () => {
     check('all untraced', buildAllScene(onlyUntraced(large)));
   });
 
-  it('All elements view with 100 elements (a crowded one, below the limit of 150)', () => {
-    check('all 100', buildAllScene(makeLargeGraph(100)));
+  it('All elements view with 60 elements (the limit)', () => {
+    check('all 60', buildAllScene(makeLargeGraph(60)));
   });
 
   it.each([
@@ -102,9 +102,10 @@ describe('geometry: about 500 elements', () => {
       () => buildFocusScene(neighborhoodOf(large, 'screen:16', 2), 'screen:16', 2),
       3,
     );
+    measure('all 60 (the limit)', () => buildAllScene(makeLargeGraph(60)), 3);
     // Printed on purpose: the numbers go to the report. No threshold.
     console.log(['ROUTING-TIME', ...rows].join('\n'));
-    expect(rows).toHaveLength(4);
+    expect(rows).toHaveLength(5);
   });
 });
 

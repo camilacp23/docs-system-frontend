@@ -1,6 +1,6 @@
 // The Screens view and the All elements view (D-114): only screens and navigation with counters calculated in the client
 // (components by CONTAINS, variables by ACCESSES and CREATES, collections by ACCESSES), App (OnStart) at the start; and the
-// All elements view with screens as groups holding their components, packed pieces, and the limit of 150 nodes.
+// All elements view with screens as groups holding their components, packed pieces, and the limit of 60 nodes.
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -207,16 +207,16 @@ describe('All elements view', () => {
 });
 
 describe('the limit of the All elements view', () => {
-  it('draws up to 150 nodes and refuses more, counting the components', () => {
+  it('draws up to 60 nodes and refuses more, counting the components', () => {
     const at = (count: number): GraphData => ({
       nodes: Array.from({ length: count }, (_, index) =>
         componentNode(index + 1, `c${index + 1}`, 1),
       ),
       edges: [],
     });
-    expect(MAX_ALL_NODES).toBe(150);
-    expect(exceedsAllLimit(at(150))).toBe(false);
-    expect(exceedsAllLimit(at(151))).toBe(true);
+    expect(MAX_ALL_NODES).toBe(60);
+    expect(exceedsAllLimit(at(60))).toBe(false);
+    expect(exceedsAllLimit(at(61))).toBe(true);
     expect(exceedsAllLimit(makeLargeGraph(500))).toBe(true);
     expect(exceedsAllLimit(sampleGraph())).toBe(false);
   });

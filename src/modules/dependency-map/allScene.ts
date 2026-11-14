@@ -15,7 +15,8 @@ import { groupEdges } from './sceneEdges';
 import { componentsByScreen, groupLayout, unitKeyOf } from './screenGroups';
 import { makeNode, nodeKindOf, NO_BOUNDS, type Scene, type SceneNode } from './scene';
 
-export const MAX_ALL_NODES = 150;
+/** The routing grows fast with the size (60 elements take about 140 ms, 150 about 2 s), so past 60 the view is not drawn. */
+export const MAX_ALL_NODES = 60;
 
 export function exceedsAllLimit(data: GraphData): boolean {
   return data.nodes.length > MAX_ALL_NODES;

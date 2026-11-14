@@ -3,7 +3,7 @@
 // built-in types cannot do this: smoothstep is one path with at most two bends computed from the middle of the side of each box,
 // so two lines between the same columns lie on the same lane and a line between distant boxes goes over the ones in between.
 // Cost: the path is a string of a few segments, built from points that were computed once with the layout; a line is as light to
-// draw as a built-in one (the measurement is in the geometry test: routing 150 elements and 250 lines is done once per answer).
+// draw as a built-in one (the measurement is in the geometry test: routing the 60 elements of the limit takes about 140 ms, once per answer).
 // Props: the ones React Flow gives an edge. `data.route` is the polyline and the label slot, `data.labelShown` whether the label is
 // drawn: the label sits on a horizontal piece of the line where nothing else is, with a surface background (never black).
 import { BaseEdge, type EdgeProps } from '@xyflow/react';

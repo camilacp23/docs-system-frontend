@@ -1,5 +1,5 @@
 // The three views of the map (D-114): Screens (the default), focus and All elements, with their filters and reasons, the
-// notice past 150 nodes, the trail of the focus view and the highlight of a hovered, focused or selected node.
+// notice past 60 nodes, the trail of the focus view and the highlight of a hovered, focused or selected node.
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
@@ -173,7 +173,7 @@ describe('All elements view', () => {
     }
   });
 
-  it('draws nothing past 150 nodes and says what to do instead', async () => {
+  it('draws nothing past 60 nodes and says what to do instead', async () => {
     const user = setupUser();
     const { router } = await renderMap({
       path: '/dependency-map?view=all',
@@ -182,7 +182,7 @@ describe('All elements view', () => {
 
     expect(await screen.findByText('Too many elements to draw at once')).toBeVisible();
     expect(
-      screen.getByText(/This map has 500 elements, more than the 150 that stay readable\./),
+      screen.getByText(/This map has 500 elements, more than the 60 that stay readable\./),
     ).toBeVisible();
     expect(screen.queryByRole('region', { name: 'Dependency graph' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();
@@ -196,7 +196,7 @@ describe('All elements view', () => {
     expect(await screen.findByText('40 screens · 39 navigations')).toBeVisible();
   });
 
-  it('draws what is left after the filters when it is 150 nodes or fewer', async () => {
+  it('draws what is left after the filters when it is 60 nodes or fewer', async () => {
     await renderMap({
       path: '/dependency-map?view=all&untraced=1',
       graphs: { 1: makeLargeGraph(500) },

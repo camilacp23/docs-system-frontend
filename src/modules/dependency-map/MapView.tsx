@@ -6,7 +6,7 @@
 // on load).
 // Three views (D-114), each one a scene built from the loaded graph:
 //   Screens (default)  only the screens, as cards with counters, joined by their navigation;
-//   All elements       every element, the screens as groups that hold their components; past 150 nodes it is not drawn and a
+//   All elements       every element, the screens as groups that hold their components; past 60 nodes it is not drawn and a
 //                      notice offers to filter, switch to the Screens view or pick an element to focus on;
 //   focus              one element in the middle, what comes before it on the left and what comes after it on the right.
 //                      Clicking a neighbor puts it in the middle; a trail of up to five steps, in memory, goes back. The side
