@@ -4,6 +4,10 @@
 //   ETag that moves when a write changes something), GET /collections/{id}/fields (paged, by position),
 //   POST /collections, PUT /collections/{id} and DELETE /collections/{id}. Everything else (variables, screens,
 //   applications) goes to the variables fake (makeVariablesApi).
+//   GET /dependencies/{type}/{id} for a collection (D-103): the neighborhood the "Used by screens" card and the delete
+//   confirmation read, built from `usage` (init.usage / state.usage: the links of each collection to screens, one
+//   ACCESSES edge per link, like the real API); a collection with no entry is used by no screen and an unknown
+//   collection is 404. failNext('GET /dependencies/{type}/{id}', error) and hold() work as for the other operations.
 //   Writes check in the order of the real server: 400, 404, 422 APPLICATION_ARCHIVED, 412, 422 business rules,
 //   409 DUPLICATE_NAME (fixed by collectionsApiOrder.test.ts).
 //   PUT behaves like the server: If-Match is checked (412), nested items are reconciled by id (an id that is not of
@@ -60,8 +64,19 @@ export function makeField(
   return { id, name, dataType: 'TEXT', description: null, position, ...overrides };
 }
 
+/** One link of a screen to a collection: the edge of the graph (accessMode, usedIn) and the screen. */
+export interface ScreenLink {
+  screenId: number;
+  screenName: string;
+  accessMode: 'READ' | 'WRITE' | 'READ_WRITE';
+  usedIn: string;
+  isAppContext?: boolean;
+}
+
 export interface CollectionsApiInit extends VariablesApiInit {
   collections?: Collection[];
+  /** Links of each collection to screens, by collection id (default: none). */
+  usage?: Record<number, ScreenLink[]>;
 }
 
 const SORT_KEYS = ['name', 'updatedAt'] as const;
@@ -110,6 +125,7 @@ export function makeCollectionsApi(
     versions: new Map<number, number>(),
     nextId: 1000,
     nextNestedId: 5000,
+    usage: init.usage ?? {},
   };
   const calls: RecordedApiCall[] = [];
   const failures = new Map<string, ApiError[]>();
@@ -363,7 +379,7 @@ export function makeCollectionsApi(
   };
 
   async function handle(method: string, path: string, options: RecordedApiCall['options'] = {}) {
-    if (!path.startsWith('/collections')) {
+    if (!path.startsWith('/collections') && !path.startsWith('/dependencies')) {
       const fallback = variablesApi.client as unknown as Record<
         string,
         (p: string, o?: unknown) => Promise<unknown>
@@ -378,6 +394,40 @@ export function makeCollectionsApi(
     if (failure) throw failure;
     const query = options.query ?? {};
 
+    if (method === 'GET' && path === '/dependencies/{type}/{id}') {
+      const collection = find(options.path?.id);
+      const links = state.usage[collection.id] ?? [];
+      const screenIds = [...new Set(links.map((link) => link.screenId))].sort((a, b) => a - b);
+      const nodes = [
+        ...screenIds.map((screenId) => {
+          const link = links.find((candidate) => candidate.screenId === screenId);
+          return {
+            key: `screen:${screenId}`,
+            id: screenId,
+            type: 'SCREEN' as const,
+            name: link?.screenName ?? '',
+            documentationStatus: 'DRAFT' as const,
+            isAppContext: link?.isAppContext ?? false,
+            miroLink: null,
+          };
+        }),
+        {
+          key: `collection:${collection.id}`,
+          id: collection.id,
+          type: 'COLLECTION' as const,
+          name: collection.name,
+        },
+      ];
+      const edges = links.map((link, index) => ({
+        id: `sc:${index + 1}`,
+        source: `screen:${link.screenId}`,
+        target: `collection:${collection.id}`,
+        kind: 'ACCESSES' as const,
+        accessMode: link.accessMode,
+        usedIn: link.usedIn,
+      }));
+      return response({ data: { nodes, edges } }, `W/"usage-${collection.id}-${links.length}"`);
+    }
     if (method === 'GET' && path === '/collections') return response(listCollections(query));
     if (method === 'GET' && path === '/collections/{id}') {
       const collection = find(options.path?.id);

@@ -1,6 +1,7 @@
-// Delete collection (S-17): the confirmation with the impact computed from the collection (fields, variable
-// assignments, derivations; the API gives no screen links, D-79), Delete disabled until the impact is known, the
-// server refusals in the modal, archived and offline, and the list after deleting.
+// Delete collection (S-17): the confirmation with the impact (fields, variable assignments and derivations of the
+// collection, and its links to screens from GET /dependencies/collections/{id}?depth=1, D-103), Delete disabled until
+// both reads are known, the failure of either one with its own retry, the server refusals in the modal, archived and
+// offline, and the list after deleting.
 import { act, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -24,10 +25,11 @@ afterEach(() => {
 });
 
 describe('impactSummary', () => {
-  const impact = (fields: number, assignments: number, derivations: number) => ({
+  const impact = (fields: number, assignments: number, derivations: number, screens = 0) => ({
     fields,
     assignments,
     derivations,
+    screens,
   });
 
   it('counts only what exists and never invents a number', () => {
@@ -42,6 +44,20 @@ describe('impactSummary', () => {
     expect(impactSummary(impact(0, 0, 0))).toBeNull();
   });
 
+  it('adds the links to screens, counting screens and not links (D-103)', () => {
+    expect(impactSummary(impact(8, 3, 0, 2))).toBe(
+      'Its 8 fields, 3 variable assignments and its links to 2 screens are deleted too.',
+    );
+    expect(impactSummary(impact(8, 3, 1, 2))).toBe(
+      'Its 8 fields, 3 variable assignments, 1 derivation and its links to 2 screens are deleted too.',
+    );
+    expect(impactSummary(impact(0, 0, 0, 3))).toBe('Its links to 3 screens are deleted too.');
+    expect(impactSummary(impact(0, 0, 0, 1))).toBe('Its link to 1 screen is deleted too.');
+    expect(impactSummary(impact(2, 0, 0, 1))).toBe(
+      'Its 2 fields and its link to 1 screen are deleted too.',
+    );
+  });
+
   it('is computed from the collection itself', () => {
     expect(
       deleteImpact(
@@ -49,8 +65,9 @@ describe('impactSummary', () => {
           fields: [makeField(1, 'A', 0), makeField(2, 'B', 1)],
           derivedFrom: [{ id: 2, name: 'colY' }],
         }),
+        4,
       ),
-    ).toEqual({ fields: 2, assignments: 0, derivations: 1 });
+    ).toEqual({ fields: 2, assignments: 0, derivations: 1, screens: 4 });
   });
 });
 
@@ -62,11 +79,10 @@ describe('delete collection', () => {
     const dialog = await openDelete(user, 'colClientes');
     expect(
       await dialog.findByText(
-        'Its 4 fields, 3 variable assignments and 1 derivation are deleted too.',
+        'Its 4 fields, 3 variable assignments, 1 derivation and its links to 2 screens are deleted too.',
       ),
     ).toBeInTheDocument();
     expect(dialog.getByText(AUDIT_NOTE_TEXT)).toBeInTheDocument();
-    expect(dialog.queryByText(/screen/)).not.toBeInTheDocument();
     await user.click(dialog.getByRole('button', { name: 'Delete collection' }));
 
     await waitFor(() => {
@@ -90,6 +106,51 @@ describe('delete collection', () => {
 
     const text = (await dialog.findByText(/has no fields or links/)).closest('p');
     expect(text).toHaveTextContent('colVacia has no fields or links.');
+  });
+
+  it('counts the screens once each when a screen uses the collection in several places', async () => {
+    const user = setupUser();
+    await renderCollections({
+      usage: {
+        11: [
+          { screenId: 11, screenName: 'Inicio', accessMode: 'READ', usedIn: 'OnVisible' },
+          { screenId: 11, screenName: 'Inicio', accessMode: 'WRITE', usedIn: 'btnA.OnSelect' },
+          { screenId: 12, screenName: 'Detalle', accessMode: 'READ', usedIn: 'OnVisible' },
+        ],
+      },
+    });
+
+    const dialog = await openDelete(user, 'colClientes');
+
+    expect(
+      await dialog.findByText(/and its links to 2 screens are deleted too/),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps Delete disabled when the screens cannot be read, says so, and reads only that again', async () => {
+    const user = setupUser();
+    const { api } = await renderCollections({
+      prepare: (fake) => {
+        fake.failNext(
+          'GET /dependencies/{type}/{id}',
+          new ApiError({ status: 500, code: 'INTERNAL_ERROR' }),
+        );
+      },
+    });
+
+    const dialog = await openDelete(user, 'colClientes');
+
+    expect(
+      await dialog.findByText("Couldn't check what depends on this collection."),
+    ).toBeVisible();
+    expect(dialog.getByRole('button', { name: 'Delete collection' })).toBeDisabled();
+    expect(dialog.queryByText(/are deleted too/)).not.toBeInTheDocument();
+    const collectionReads = api.callsTo('GET /collections/{id}').length;
+    await user.click(dialog.getByRole('button', { name: 'Try again' }));
+    await dialog.findByText(/and its links to 2 screens are deleted too/);
+    expect(dialog.getByRole('button', { name: 'Delete collection' })).toBeEnabled();
+    expect(api.callsTo('GET /collections/{id}')).toHaveLength(collectionReads);
+    expect(api.callsTo('DELETE /collections/{id}')).toHaveLength(0);
   });
 
   it('keeps Delete disabled until the impact is known and offers to try again if it fails', async () => {
