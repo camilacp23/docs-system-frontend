@@ -17,6 +17,7 @@ import type { ApiClient } from '../../api/client';
 import type { GraphData, Environment } from '../../modules/dependency-map/graphTypes';
 
 import { makeVariablesApi, type RecordedApiCall } from './fakeVariablesApi';
+import { filterGraph, neighborhoodOf } from './graphQueries';
 import type { makeApplicationsClient } from './renderApp';
 
 export interface DependenciesApiInit {
@@ -39,31 +40,6 @@ function response(body: unknown, etag: string | null = null) {
 
 function notFound(element: string, id?: unknown): ApiError {
   return new ApiError({ status: 404, code: 'NOT_FOUND', details: { element, id } });
-}
-
-/** The nodes reachable from `startKey` in at most `depth` steps, both directions, with the edges between them. */
-export function neighborhoodOf(graph: GraphData, startKey: string, depth: number): GraphData {
-  const reached = new Set<string>([startKey]);
-  let frontier = [startKey];
-  for (let step = 0; step < depth; step += 1) {
-    const next: string[] = [];
-    for (const edge of graph.edges) {
-      for (const [from, to] of [
-        [edge.source, edge.target],
-        [edge.target, edge.source],
-      ] as const) {
-        if (frontier.includes(from) && !reached.has(to)) {
-          reached.add(to);
-          next.push(to);
-        }
-      }
-    }
-    frontier = next;
-  }
-  return {
-    nodes: graph.nodes.filter((node) => reached.has(node.key)),
-    edges: graph.edges.filter((edge) => reached.has(edge.source) && reached.has(edge.target)),
-  };
 }
 
 export function makeDependenciesApi(
@@ -109,24 +85,6 @@ export function makeDependenciesApi(
     return graph;
   }
 
-  function filtered(graph: GraphData, query: Record<string, unknown>): GraphData {
-    const types = Array.isArray(query.types) ? (query.types as string[]) : null;
-    const environment = typeof query.environment === 'string' ? query.environment : null;
-    const keep = new Set<string>();
-    for (const node of graph.nodes) {
-      if (types !== null && !types.includes(node.type)) continue;
-      if (environment !== null && (node.type === 'VARIABLE' || node.type === 'COLLECTION')) {
-        const present = state.environments[node.key] ?? ['DEV', 'PROD'];
-        if (!present.includes(environment as Environment)) continue;
-      }
-      keep.add(node.key);
-    }
-    return {
-      nodes: graph.nodes.filter((node) => keep.has(node.key)),
-      edges: graph.edges.filter((edge) => keep.has(edge.source) && keep.has(edge.target)),
-    };
-  }
-
   async function handle(method: string, path: string, options: RecordedApiCall['options'] = {}) {
     if (!path.startsWith('/dependencies')) {
       const fallback = variablesApi.client as unknown as Record<
@@ -146,7 +104,19 @@ export function makeDependenciesApi(
       const applicationId = query.applicationId;
       const graph = graphOf(applicationId);
       return response(
-        { data: filtered(graph, query) },
+        {
+          data: filterGraph(
+            graph,
+            {
+              types: Array.isArray(query.types)
+                ? (query.types as GraphData['nodes'][number]['type'][])
+                : null,
+              environment:
+                typeof query.environment === 'string' ? (query.environment as Environment) : null,
+            },
+            state.environments,
+          ),
+        },
         etagOf(
           `g${versionOf(applicationId as number)}-${JSON.stringify([query.types, query.environment])}`,
         ),
