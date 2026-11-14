@@ -10,7 +10,6 @@ import {
   LAYER_GAP,
   NODE_GAP,
   NODE_SIZE,
-  PIECE_GAP,
   type Position,
 } from '../../modules/dependency-map/layout';
 import {
@@ -166,27 +165,69 @@ describe('computeLayout', () => {
     expect(computeLayout({ nodes: [], edges: [] }).positions.size).toBe(0);
   });
 
-  it('stacks disconnected pieces from top to bottom in the order of their first node', () => {
+  it('packs disconnected pieces in rows, biggest first, and the first one stays at the origin', () => {
     const data: GraphData = {
       nodes: [
         screenNode(1, 'a1'),
         screenNode(2, 'a2'),
         screenNode(3, 'b1'),
         screenNode(4, 'b2'),
+        screenNode(5, 'b3'),
         variableNode(9, 'alone'),
       ],
-      edges: [navigates(1, 'screen:1', 'screen:2'), navigates(2, 'screen:3', 'screen:4')],
+      edges: [
+        navigates(1, 'screen:1', 'screen:2'),
+        navigates(2, 'screen:3', 'screen:4'),
+        navigates(3, 'screen:4', 'screen:5'),
+      ],
     };
     const { positions } = computeLayout(data);
-    const first = at(positions, 'screen:1');
-    const second = at(positions, 'screen:3');
-    const third = at(positions, 'variable:9');
-    expect(first.y).toBeLessThan(second.y);
-    expect(second.y).toBeLessThan(third.y);
-    expect(second.y - first.y).toBe(NODE_SIZE.SCREEN.height + PIECE_GAP);
-    // Every piece starts at the left edge.
-    expect([first.x, second.x, third.x]).toEqual([0, 0, 0]);
+    // The piece of three screens is the biggest: it goes first, at the origin.
+    expect(at(positions, 'screen:3')).toEqual({ x: 0, y: 0 });
     expectNoOverlap(data, positions);
+    expect(toPlain(computeLayout(data).positions)).toBe(toPlain(positions));
+  });
+
+  it('turns many small pieces into a block with the proportions of the canvas, not a thin strip', () => {
+    const data: GraphData = {
+      nodes: Array.from({ length: 40 }, (_, index) => screenNode(index + 1, `scr${index + 1}`)),
+      edges: [],
+    };
+    const { positions } = computeLayout(data);
+    let width = 0;
+    let height = 0;
+    for (const node of data.nodes) {
+      const position = at(positions, node.key);
+      width = Math.max(width, position.x + NODE_SIZE.SCREEN.width);
+      height = Math.max(height, position.y + NODE_SIZE.SCREEN.height);
+    }
+    // Stacking them gave a ratio of about 0.1; the canvas is 1.6. Anything close to it is a block.
+    expect(width / height).toBeGreaterThan(1);
+    expect(width / height).toBeLessThan(2.6);
+    expectNoOverlap(data, positions);
+    expect(toPlain(computeLayout(data).positions)).toBe(toPlain(positions));
+  });
+
+  it('does not move a graph that is one piece when it is packed', () => {
+    const data: GraphData = {
+      nodes: [screenNode(1, 'a'), screenNode(2, 'b')],
+      edges: [navigates(1, 'screen:1', 'screen:2')],
+    };
+    expect(at(computeLayout(data).positions, 'screen:1')).toEqual({ x: 0, y: 0 });
+  });
+
+  it('uses the size it is given for each node', () => {
+    const data: GraphData = {
+      nodes: [screenNode(1, 'a'), screenNode(2, 'b')],
+      edges: [navigates(1, 'screen:1', 'screen:2')],
+    };
+    const wide = { width: 500, height: 200 };
+    const { positions } = computeLayout(data, (node) =>
+      node.key === 'screen:1' ? wide : NODE_SIZE.SCREEN,
+    );
+    expect(at(positions, 'screen:2').x - at(positions, 'screen:1').x).toBe(wide.width + LAYER_GAP);
+    // Centered on the tallest column of the piece.
+    expect(at(positions, 'screen:2').y).toBe((wide.height - NODE_SIZE.SCREEN.height) / 2);
   });
 
   it('keeps the boxes of a layer apart by the constant gap', () => {

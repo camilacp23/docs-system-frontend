@@ -13,11 +13,14 @@
 //      CALCULATION ONLY. The edges are drawn with their real direction. Self loops (which the API never sends) and
 //      repeated edges are ignored.
 //   2. Layers: longest path over the graph without cycles; a node sits one layer to the right of its farthest source.
-//   3. Disconnected pieces are laid out one by one and stacked from top to bottom, in the order of their first node.
+//   3. Disconnected pieces are laid out one by one and packed in rows (a shelf), biggest first, until the whole map has
+//      the proportions of the canvas, so many small pieces make a block and not a thin strip.
 //   4. Inside a layer, nodes are ordered by the barycenter of their neighbors (those on the left in the downward
 //      sweep, those on the right in the upward one), four times, ties by the key of the node.
 //   5. Columns are stacked with constant gaps and centered on the tallest column of their piece.
-import type { GraphData, NodeType } from './graphTypes';
+// The size of a box comes from `sizeOf` (the default is NODE_SIZE by type), because the same node is drawn as a plain box,
+// as a card with counters or as a group that holds its components, depending on the view.
+import type { NodeType } from './graphTypes';
 
 export interface NodeSize {
   width: number;
@@ -35,10 +38,27 @@ export const NODE_SIZE: Record<NodeType, NodeSize> = {
 export const LAYER_GAP = 96;
 /** Vertical gap between two boxes of a layer. */
 export const NODE_GAP = 28;
-/** Vertical gap between two disconnected pieces of the graph. */
+/** Gap between two disconnected pieces of the graph, in a row and between rows. */
 export const PIECE_GAP = 64;
+/** The proportions the packed map aims for: the canvas of the design is 1440 x 900. */
+export const CANVAS_ASPECT = 1440 / 900;
 /** How many times the order of the layers is improved (a downward and an upward sweep each time). */
 export const ORDERING_PASSES = 4;
+
+/** What the layout needs to know of a node and of an edge: GraphData and the scenes of the views satisfy it. */
+export interface LayoutNode {
+  key: string;
+  type: NodeType;
+}
+
+export interface LayoutInput {
+  nodes: readonly LayoutNode[];
+  edges: ReadonlyArray<{ source: string; target: string }>;
+}
+
+export type SizeOf = (node: LayoutNode) => NodeSize;
+
+const sizeByType: SizeOf = (node) => NODE_SIZE[node.type];
 
 export interface Position {
   x: number;
@@ -188,13 +208,21 @@ function orderLayers(layers: number[][], graph: Acyclic, keys: readonly string[]
   }
 }
 
-export function computeLayout(data: GraphData): LayoutResult {
+interface PlacedPiece {
+  /** Position of each node of the piece, with the piece at the origin. */
+  positions: Map<string, Position>;
+  width: number;
+  height: number;
+  firstNode: number;
+}
+
+export function computeLayout(data: LayoutInput, sizeOf: SizeOf = sizeByType): LayoutResult {
   const started = performance.now();
   const count = data.nodes.length;
   const keys = data.nodes.map((node) => node.key);
   const indexOf = new Map<string, number>();
   keys.forEach((key, index) => indexOf.set(key, index));
-  const sizes = data.nodes.map((node) => NODE_SIZE[node.type]);
+  const sizes = data.nodes.map((node) => sizeOf(node));
 
   const targetsOf: number[][] = Array.from({ length: count }, () => []);
   for (const edge of data.edges) {
@@ -207,10 +235,8 @@ export function computeLayout(data: GraphData): LayoutResult {
 
   const graph = breakCycles(count, targetsOf);
   const layerOf = assignLayers(count, graph);
-  const positions = new Map<string, Position>();
 
-  let top = 0;
-  for (const members of connectedPieces(count, graph)) {
+  const pieces: PlacedPiece[] = connectedPieces(count, graph).map((members) => {
     const layerCount = members.reduce((most, node) => Math.max(most, (layerOf[node] ?? 0) + 1), 0);
     const layers: number[][] = Array.from({ length: layerCount }, () => []);
     for (const node of members) layers[layerOf[node] ?? 0]?.push(node);
@@ -222,10 +248,11 @@ export function computeLayout(data: GraphData): LayoutResult {
         0,
       ),
     );
-    const pieceHeight = Math.max(0, ...heights);
+    const height = Math.max(0, ...heights);
+    const positions = new Map<string, Position>();
     let left = 0;
     layers.forEach((column, layerIndex) => {
-      let y = top + (pieceHeight - (heights[layerIndex] ?? 0)) / 2;
+      let y = (height - (heights[layerIndex] ?? 0)) / 2;
       let width = 0;
       for (const node of column) {
         const size = sizes[node] ?? { width: 0, height: 0 };
@@ -235,7 +262,49 @@ export function computeLayout(data: GraphData): LayoutResult {
       }
       left += width + LAYER_GAP;
     });
-    top += pieceHeight + PIECE_GAP;
+    return {
+      positions,
+      width: Math.max(0, left - LAYER_GAP),
+      height,
+      firstNode: members[0] ?? 0,
+    };
+  });
+
+  return { positions: packPieces(pieces), durationMs: performance.now() - started };
+}
+
+/**
+ * Step 3: the pieces go in rows, biggest first (ties by their first node), and a row is closed when the next piece would pass
+ * the width that gives the whole map the proportions of the canvas. One piece stays where it is.
+ */
+function packPieces(pieces: readonly PlacedPiece[]): Map<string, Position> {
+  const positions = new Map<string, Position>();
+  if (pieces.length === 1) return new Map(pieces[0]?.positions);
+
+  const ordered = [...pieces].sort(
+    (a, b) => b.width * b.height - a.width * a.height || a.firstNode - b.firstNode,
+  );
+  const totalArea = ordered.reduce(
+    (sum, piece) => sum + (piece.width + PIECE_GAP) * (piece.height + PIECE_GAP),
+    0,
+  );
+  const widest = ordered.reduce((most, piece) => Math.max(most, piece.width), 0);
+  const rowWidth = Math.max(widest, Math.sqrt(totalArea * CANVAS_ASPECT));
+
+  let x = 0;
+  let y = 0;
+  let rowHeight = 0;
+  for (const piece of ordered) {
+    if (x > 0 && x + piece.width > rowWidth) {
+      x = 0;
+      y += rowHeight + PIECE_GAP;
+      rowHeight = 0;
+    }
+    for (const [key, position] of piece.positions) {
+      positions.set(key, { x: x + position.x, y: y + position.y });
+    }
+    x += piece.width + PIECE_GAP;
+    rowHeight = Math.max(rowHeight, piece.height);
   }
-  return { positions, durationMs: performance.now() - started };
+  return positions;
 }
