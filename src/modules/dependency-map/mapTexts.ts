@@ -8,3 +8,12 @@ export const NO_RESULTS_TEXT = 'No elements match these filters.';
 export const LOAD_FAILED_LEAD = "Couldn't load the dependency map.";
 export const NO_CONNECTIONS_TEXT = 'No connections.';
 export const FOCUSED_FILTERS_REASON = 'Filters apply to the full map.';
+export const ALL_VIEW_ONLY_REASON = 'Available in the All elements view.';
+export const TOO_MANY_TITLE = 'Too many elements to draw at once';
+export const SHOW_SCREENS_VIEW = 'Show Screens view';
+export const VIEW_LABEL = { screens: 'Screens', all: 'All elements' } as const;
+export const FOCUS_PATH_LABEL = 'Focus path';
+
+export function tooManyText(count: number, max: number): string {
+  return `This map has ${count} elements, more than the ${max} that stay readable. Filter it by type or environment, switch to the Screens view, or pick an element with "Find a node…" to focus on it.`;
+}

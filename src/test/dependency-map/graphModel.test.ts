@@ -1,35 +1,42 @@
-// graphModel: the response of the API becomes React Flow nodes and edges (every node variant, every edge kind), the
-// "untraced only" filter keeps the untraced variables and their neighbors without dangling edges, and an application
-// with only App (OnStart) counts as empty.
+// graphModel: a scene of a view becomes React Flow nodes and edges (kinds, sizes, groups with their children, step edges with
+// the style of their kind), the "untraced only" filter keeps the untraced variables and their neighbors without dangling
+// edges, an application with only App (OnStart) counts as empty, and the highlight keeps a node, its neighbors and their lines.
 import { describe, expect, it } from 'vitest';
 
+import { buildAllScene } from '../../modules/dependency-map/allScene';
 import { EDGE_STYLE } from '../../modules/dependency-map/edgeStyles';
-import {
-  isEmptyMap,
-  onlyUntraced,
-  ORIGIN_LABEL,
-  toFlowGraph,
-} from '../../modules/dependency-map/graphModel';
+import { buildFocusScene } from '../../modules/dependency-map/focusScene';
+import { isEmptyMap, onlyUntraced, sceneToFlow } from '../../modules/dependency-map/graphModel';
 import { EDGE_KINDS } from '../../modules/dependency-map/graphTypes';
-import { computeLayout, NODE_SIZE } from '../../modules/dependency-map/layout';
+import { computeHighlight, DIMMED_OPACITY } from '../../modules/dependency-map/highlight';
+import { buildScreensScene } from '../../modules/dependency-map/screensScene';
 import { sampleGraph, screenNode } from '../helpers/graphFixtures';
 
-describe('toFlowGraph', () => {
-  const data = sampleGraph();
-  const { nodes, edges } = toFlowGraph(data, computeLayout(data).positions);
+describe('sceneToFlow', () => {
+  const scene = buildAllScene(sampleGraph());
+  const { nodes, edges } = sceneToFlow(scene);
 
-  it('makes one node per graph node, keyed by the node key, with the type and the fixed size of its box', () => {
-    expect(nodes).toHaveLength(data.nodes.length);
-    for (const [index, node] of nodes.entries()) {
-      const source = data.nodes[index];
-      expect(node.id).toBe(source?.key);
-      expect(node.type).toBe(source?.type.toLowerCase());
-      expect(node.width).toBe(NODE_SIZE[source?.type ?? 'SCREEN'].width);
-      expect(node.height).toBe(NODE_SIZE[source?.type ?? 'SCREEN'].height);
-      expect(node.data.graphNode).toBe(source);
+  it('makes one node per box, keyed by the key, with the kind and the fixed size of its box', () => {
+    expect(nodes).toHaveLength(scene.nodes.length);
+    for (const [position, node] of nodes.entries()) {
+      const box = scene.nodes[position];
+      expect(node.id).toBe(box?.key);
+      expect(node.type).toBe(box?.kind);
+      expect(node.width).toBe(box?.width);
+      expect(node.height).toBe(box?.height);
+      expect(node.data.graphNode).toBe(box?.graphNode);
     }
-    expect(new Set(nodes.map((node) => node.type))).toEqual(
-      new Set(['screen', 'variable', 'collection', 'component']),
+  });
+
+  it('puts the components of a group inside it: parent, extent and a position relative to the group', () => {
+    const group = nodes.find((node) => node.id === 'screen:12');
+    const child = nodes.find((node) => node.id === 'component:31');
+    expect(group?.type).toBe('screenGroup');
+    expect(group?.parentId).toBeUndefined();
+    expect(child).toMatchObject({ parentId: 'screen:12', extent: 'parent' });
+    // The group comes before its children, as React Flow needs.
+    expect(nodes.indexOf(group as (typeof nodes)[number])).toBeLessThan(
+      nodes.indexOf(child as (typeof nodes)[number]),
     );
   });
 
@@ -44,22 +51,39 @@ describe('toFlowGraph', () => {
     expect(byKey.get('collection:21')).not.toHaveProperty('scope');
   });
 
-  it('makes one edge per graph edge with the built-in type and the style of its kind', () => {
-    expect(edges).toHaveLength(data.edges.length);
-    expect(new Set(edges.map((edge) => edge.data?.graphEdge.kind))).toEqual(new Set(EDGE_KINDS));
-    for (const edge of edges) {
-      expect(edge.type).toBe('default');
-      const kind = edge.data?.graphEdge.kind;
+  it('carries the counters of a card and the role of a box in the focus view', () => {
+    const cards = sceneToFlow(buildScreensScene(sampleGraph())).nodes;
+    expect(cards.every((node) => node.type === 'screenCard')).toBe(true);
+    expect(cards.find((node) => node.id === 'screen:12')?.data.counters).toEqual({
+      components: 2,
+      variables: 2,
+      collections: 1,
+    });
+    const focus = buildFocusScene(sampleGraph(), 'variable:1', 1);
+    const roles = sceneToFlow(focus as NonNullable<typeof focus>).nodes.map(
+      (node) => node.data.role,
+    );
+    expect(new Set(roles)).toEqual(new Set(['center', 'left', 'right']));
+  });
+
+  it('draws every edge as a step edge with the style of its kind', () => {
+    const focus = sceneToFlow(buildFocusScene(sampleGraph(), 'collection:21', 2) as never).edges;
+    expect(focus.length).toBeGreaterThan(0);
+    expect(new Set(focus.map((edge) => edge.data?.sceneEdge.kind)).size).toBeGreaterThan(1);
+    for (const edge of [...edges, ...focus]) {
+      expect(edge.type).toBe('smoothstep');
+      const kind = edge.data?.sceneEdge.kind;
       expect(kind).toBeDefined();
       if (kind) expect(edge.style?.stroke).toBe(EDGE_STYLE[kind].stroke);
+      expect(edge.focusable).toBe(false);
     }
   });
 
-  it('labels only the CREATES edges, with "origin", and keeps edges out of the tab order', () => {
-    for (const edge of edges) {
-      expect(edge.label).toBe(edge.data?.graphEdge.kind === 'CREATES' ? ORIGIN_LABEL : undefined);
-      expect(edge.focusable).toBe(false);
-    }
+  it('labels an edge with the label of the scene and leaves the others without one', () => {
+    const labels = sceneToFlow(buildFocusScene(sampleGraph(), 'screen:12', 1) as never).edges;
+    expect(labels.some((edge) => typeof edge.label === 'string')).toBe(true);
+    const plain = sceneToFlow(buildScreensScene(sampleGraph())).edges;
+    for (const edge of plain) expect(edge.label).toBeUndefined();
   });
 
   it('gives each edge kind its own line: no two kinds share color, width and dash together', () => {
@@ -70,6 +94,43 @@ describe('toFlowGraph', () => {
       (kind) => `${EDGE_STYLE[kind].strokeWidth}|${EDGE_STYLE[kind].strokeDasharray ?? 'solid'}`,
     );
     expect(new Set(patterns).size).toBe(EDGE_KINDS.length);
+  });
+});
+
+describe('computeHighlight', () => {
+  const scene = buildAllScene(sampleGraph());
+
+  it('is null when nothing is active or the key is not in the scene', () => {
+    expect(computeHighlight(scene, null)).toBeNull();
+    expect(computeHighlight(scene, 'variable:999')).toBeNull();
+  });
+
+  it('keeps the node, its neighbors and the lines between them', () => {
+    const lit = computeHighlight(scene, 'collection:20');
+    // colUsuarios feeds gUsuario and is derived by colClientes.
+    expect(lit?.nodes.has('collection:20')).toBe(true);
+    expect(lit?.nodes.has('variable:1')).toBe(true);
+    expect(lit?.nodes.has('collection:21')).toBe(true);
+    expect(lit?.nodes.has('variable:2')).toBe(false);
+    expect(lit?.edges.size).toBe(2);
+  });
+
+  it('counts the components of a group as the group, and a component brings its group', () => {
+    const group = computeHighlight(scene, 'screen:12');
+    // Detalle holds btnGuardar and lblNombre: their lines are its lines, so what they use is lit.
+    expect(group?.nodes.has('component:32')).toBe(true);
+    expect(group?.nodes.has('variable:1')).toBe(true);
+    const child = computeHighlight(scene, 'component:32');
+    expect(child?.nodes.has('screen:12')).toBe(true);
+    expect(child?.nodes.has('variable:1')).toBe(true);
+  });
+
+  it('is symmetrical: a neighbor of a lit node is lit from both ends', () => {
+    const fromVariable = computeHighlight(scene, 'variable:1');
+    const fromCollection = computeHighlight(scene, 'collection:20');
+    expect(fromVariable?.nodes.has('collection:20')).toBe(true);
+    expect(fromCollection?.nodes.has('variable:1')).toBe(true);
+    expect(DIMMED_OPACITY).toBeLessThan(0.5);
   });
 });
 

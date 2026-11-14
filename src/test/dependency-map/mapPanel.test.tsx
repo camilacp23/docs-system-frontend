@@ -7,8 +7,12 @@ import { describe, expect, it } from 'vitest';
 
 import { COMPONENTS_TAB } from '../../modules/screens/screenTabs';
 import { MIRO_LINK, screenNode, variableNode } from '../helpers/graphFixtures';
-import { renderMap } from '../helpers/renderMap';
+import { renderMap, type RenderMapOptions } from '../helpers/renderMap';
 import { setupUser } from '../helpers/setupUser';
+
+/** These tests are about the whole graph, which the All elements view draws; the default view is Screens. */
+const renderAll = (options: RenderMapOptions = {}) =>
+  renderMap({ path: '/dependency-map?view=all', ...options });
 
 const node = (name: string) => screen.findByRole('button', { name });
 const panel = async () =>
@@ -19,7 +23,7 @@ const section = (view: BoundFunctions<typeof queries>, title: string) =>
 describe('side panel: a screen', () => {
   it('opens with the name, the status, the link to its page and to its Miro diagram', async () => {
     const user = setupUser();
-    await renderMap();
+    await renderAll();
 
     const inicio = await node('Screen Inicio, Approved');
     await user.click(inicio);
@@ -40,7 +44,7 @@ describe('side panel: a screen', () => {
 
   it('lists its connections by kind, with the access mode and where it happens', async () => {
     const user = setupUser();
-    await renderMap();
+    await renderAll();
 
     await user.click(await node('Screen Inicio, Approved'));
 
@@ -62,7 +66,7 @@ describe('side panel: a screen', () => {
 
   it('shows the incoming navigation as "from"', async () => {
     const user = setupUser();
-    await renderMap();
+    await renderAll();
 
     await user.click(await node('Screen Detalle, In review'));
 
@@ -72,7 +76,7 @@ describe('side panel: a screen', () => {
 
   it('has no Miro button when the screen has no diagram', async () => {
     const user = setupUser();
-    await renderMap();
+    await renderAll();
 
     await user.click(await node('Screen Detalle, In review'));
 
@@ -86,7 +90,7 @@ describe('side panel: a screen', () => {
     ['javascript', 'javascript:alert(1)'],
   ])('never makes a %s address a Miro link', async (_name, miroLink) => {
     const user = setupUser();
-    await renderMap({
+    await renderAll({
       graphs: { 1: { nodes: [screenNode(1, 'Inicio', { miroLink })], edges: [] } },
     });
 
@@ -99,7 +103,7 @@ describe('side panel: a screen', () => {
 
   it('marks App (OnStart) as Reserved and lists the variables it creates as "origin"', async () => {
     const user = setupUser();
-    await renderMap();
+    await renderAll();
 
     await user.click(await node('Screen App (OnStart), In progress, Reserved'));
 
@@ -114,7 +118,7 @@ describe('side panel: a screen', () => {
 describe('side panel: variables, collections and components', () => {
   it('shows where a variable is created, who accesses it, what feeds it and what uses it', async () => {
     const user = setupUser();
-    await renderMap();
+    await renderAll();
 
     await user.click(await node('Variable gUsuario, Global'));
 
@@ -142,7 +146,7 @@ describe('side panel: variables, collections and components', () => {
 
   it('shows the assignment function of what a collection feeds and what it derives from', async () => {
     const user = setupUser();
-    await renderMap();
+    await renderAll();
 
     await user.click(await node('Collection colClientes'));
 
@@ -167,7 +171,7 @@ describe('side panel: variables, collections and components', () => {
 
   it('leads a component to the Components & navigation tab of its screen (D-102)', async () => {
     const user = setupUser();
-    const { router } = await renderMap();
+    const { router } = await renderAll();
 
     await user.click(await node('Component btnGuardar'));
 
@@ -184,8 +188,8 @@ describe('side panel: variables, collections and components', () => {
 
   it('still leads a component to its screen when the types filter leaves the screens out', async () => {
     const user = setupUser();
-    const { router } = await renderMap({
-      path: '/dependency-map?types=VARIABLE,COLLECTION,COMPONENT',
+    const { router } = await renderAll({
+      path: '/dependency-map?view=all&types=VARIABLE,COLLECTION,COMPONENT',
     });
 
     await user.click(await node('Component btnGuardar'));
@@ -203,7 +207,7 @@ describe('side panel: variables, collections and components', () => {
 
   it('says "No connections." for a node with none', async () => {
     const user = setupUser();
-    await renderMap({
+    await renderAll({
       graphs: { 1: { nodes: [screenNode(1, 'Inicio'), variableNode(5, 'gSuelta')], edges: [] } },
     });
 
@@ -216,7 +220,7 @@ describe('side panel: variables, collections and components', () => {
 describe('side panel: moving and closing', () => {
   it('opens the panel of a connection when it is chosen, so the graph can be walked without the canvas', async () => {
     const user = setupUser();
-    await renderMap();
+    await renderAll();
     await user.click(await node('Screen Inicio, Approved'));
 
     const accesses = section(await panel(), 'Accesses');
@@ -237,7 +241,7 @@ describe('side panel: moving and closing', () => {
 
   it('closes with the button and gives the focus back to the node', async () => {
     const user = setupUser();
-    await renderMap();
+    await renderAll();
     const inicio = await node('Screen Inicio, Approved');
     await user.click(inicio);
 
@@ -252,7 +256,7 @@ describe('side panel: moving and closing', () => {
 
   it('closes with Esc from inside the panel', async () => {
     const user = setupUser();
-    await renderMap();
+    await renderAll();
     const inicio = await node('Screen Inicio, Approved');
     await user.click(inicio);
     await panel();
@@ -267,7 +271,7 @@ describe('side panel: moving and closing', () => {
 
   it('opens from the keyboard: Tab to a node and Enter', async () => {
     const user = setupUser();
-    await renderMap();
+    await renderAll();
     const inicio = await node('Screen Inicio, Approved');
 
     inicio.focus();
@@ -279,7 +283,7 @@ describe('side panel: moving and closing', () => {
 
   it('keeps the selection of one node at a time', async () => {
     const user = setupUser();
-    await renderMap();
+    await renderAll();
 
     await user.click(await node('Screen Inicio, Approved'));
     await user.click(await node('Screen Detalle, In review'));
@@ -297,7 +301,7 @@ describe('side panel: moving and closing', () => {
 describe('find a node (keyboard alternative to the canvas)', () => {
   it('lists the nodes by name with their type, and choosing one selects it and opens its panel', async () => {
     const user = setupUser();
-    await renderMap();
+    await renderAll();
     await node('Screen Inicio, Approved');
 
     const search = screen.getByRole('combobox', { name: 'Find a node' });
@@ -319,7 +323,7 @@ describe('find a node (keyboard alternative to the canvas)', () => {
 
   it('works with the keyboard alone: type, arrow down, Enter', async () => {
     const user = setupUser();
-    await renderMap();
+    await renderAll();
     await node('Screen Inicio, Approved');
 
     await user.click(screen.getByRole('combobox', { name: 'Find a node' }));
@@ -333,7 +337,7 @@ describe('find a node (keyboard alternative to the canvas)', () => {
 
   it('only offers the nodes the map shows (the filters apply)', async () => {
     const user = setupUser();
-    await renderMap({ path: '/dependency-map?types=COLLECTION' });
+    await renderAll({ path: '/dependency-map?view=all&types=COLLECTION' });
     await node('Collection colClientes');
 
     await user.click(screen.getByRole('combobox', { name: 'Find a node' }));

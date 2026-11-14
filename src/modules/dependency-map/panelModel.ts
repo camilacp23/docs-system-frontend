@@ -9,7 +9,8 @@
 // Items follow the order of the response, which is deterministic (D-104 d).
 import { ACCESS_MODE_LABEL, ASSIGNMENT_FUNCTION_LABEL, EDGE_KIND_LABEL } from './graphLabels';
 import type { EdgeKind, GraphData, GraphEdge, GraphNode } from './graphTypes';
-import { ORIGIN_LABEL } from './graphModel';
+import { ORIGIN_LABEL } from './sceneEdges';
+import type { SceneEdge } from './scene';
 
 export interface GraphIndex {
   nodesByKey: ReadonlyMap<string, GraphNode>;
@@ -138,25 +139,33 @@ export function buildPanelSections(node: GraphNode, index: GraphIndex): PanelSec
   return [...sections.values()].sort((a, b) => order(a) - order(b));
 }
 
-/** The text of the tooltip of an edge (frame S-27c): "colUsuarios → gUsuario" and what the edge carries. */
-export function edgeTooltip(edge: GraphEdge, index: GraphIndex): { title: string; detail: string } {
-  const source = index.nodesByKey.get(edge.source)?.name ?? edge.source;
-  const target = index.nodesByKey.get(edge.target)?.name ?? edge.target;
-  const parts: string[] = [EDGE_KIND_LABEL[edge.kind]];
-  switch (edge.kind) {
-    case 'ACCESSES':
-      parts.push(ACCESS_MODE_LABEL[edge.accessMode], edge.usedIn);
-      break;
-    case 'FEEDS':
-      parts.push(ASSIGNMENT_FUNCTION_LABEL[edge.assignmentFunction]);
-      if (edge.tableFunction !== null) parts.push(edge.tableFunction);
-      parts.push(edge.usedIn);
-      break;
-    case 'CREATES':
-      parts.push(ORIGIN_LABEL);
-      break;
-    default:
-      break;
+/**
+ * The text of the tooltip of an edge (frame S-27c): "colUsuarios → gUsuario" and what the edge carries. An edge that groups
+ * several parallel ones says its kind and its label ("Accesses · Read ×3"); a single edge also says where it happens.
+ */
+export function edgeTooltip(line: SceneEdge, index: GraphIndex): { title: string; detail: string } {
+  const source = index.nodesByKey.get(line.source)?.name ?? line.source;
+  const target = index.nodesByKey.get(line.target)?.name ?? line.target;
+  const parts: string[] = [EDGE_KIND_LABEL[line.kind]];
+  const edge = line.edges[0];
+  if (line.count > 1) {
+    if (line.label !== null) parts.push(line.label);
+  } else if (edge !== undefined) {
+    switch (edge.kind) {
+      case 'ACCESSES':
+        parts.push(ACCESS_MODE_LABEL[edge.accessMode], edge.usedIn);
+        break;
+      case 'FEEDS':
+        parts.push(ASSIGNMENT_FUNCTION_LABEL[edge.assignmentFunction]);
+        if (edge.tableFunction !== null) parts.push(edge.tableFunction);
+        parts.push(edge.usedIn);
+        break;
+      case 'CREATES':
+        parts.push(ORIGIN_LABEL);
+        break;
+      default:
+        break;
+    }
   }
   return { title: `${source} → ${target}`, detail: parts.join(' · ') };
 }

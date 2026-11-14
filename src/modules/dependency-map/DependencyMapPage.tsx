@@ -17,7 +17,7 @@ import { useGraphParams } from './useGraphParams';
 function MapContainer() {
   const navigate = useNavigate();
   const { currentApplicationId } = useApplication();
-  const { params, setParams, clearAll, clearFocus, hasFilters } = useGraphParams();
+  const { params, setParams, clearAll, clearFilters, clearFocus, hasFilters } = useGraphParams();
   const { resource, data } = useDependencyGraph({ applicationId: currentApplicationId, params });
 
   // The selected application changed from the sidebar: the focus belongs to the other application, so it goes (the
@@ -65,6 +65,7 @@ function MapContainer() {
       hasFilters={hasFilters}
       setParams={setParams}
       clearAll={clearAll}
+      clearFilters={clearFilters}
       clearFocus={clearFocus}
       applicationId={currentApplicationId}
     />

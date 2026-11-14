@@ -87,7 +87,7 @@ describe('useDependencyGraph', () => {
 
   it('asks for the graph with the application and the filters, or for the neighborhood with the depth', async () => {
     const full = fakeClient([{ data: sampleGraph(), etag: 'W/"a"' }]);
-    const view = setup(full.client, 'types=SCREEN,VARIABLE&environment=PROD', 7);
+    const view = setup(full.client, 'view=all&types=SCREEN,VARIABLE&environment=PROD', 7);
     await waitFor(() => {
       expect(view.result.current.data).not.toBeNull();
     });
@@ -97,14 +97,14 @@ describe('useDependencyGraph', () => {
     });
 
     const focused = fakeClient([{ data: sampleGraph(), etag: 'W/"n"' }]);
-    const other = setup(focused.client, 'focus=collection:21&depth=3&types=SCREEN');
+    const other = setup(focused.client, 'focus=collection:21&depth=2&types=SCREEN');
     await waitFor(() => {
       expect(other.result.current.data).not.toBeNull();
     });
     // The focus asks for no application and no filters: the contract takes none there.
     expect(focused.get).toHaveBeenCalledWith('/dependencies/{type}/{id}', {
       path: { type: 'collections', id: 21 },
-      query: { depth: 3 },
+      query: { depth: 2 },
       signal: expect.any(AbortSignal) as AbortSignal,
     });
   });

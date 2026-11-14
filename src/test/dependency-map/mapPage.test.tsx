@@ -6,14 +6,21 @@ import { describe, expect, it } from 'vitest';
 import { ApiError } from '../../api/ApiError';
 import { collectionNode, sampleGraph, screenNode, variableNode } from '../helpers/graphFixtures';
 import { makeApplication } from '../helpers/renderApp';
-import { renderMap } from '../helpers/renderMap';
+import { renderMap, type RenderMapOptions } from '../helpers/renderMap';
 import { setupUser } from '../helpers/setupUser';
 
+/** These tests are about the whole graph, which the All elements view draws; the default view is Screens. */
+const renderAll = (options: RenderMapOptions = {}) =>
+  renderMap({ path: '/dependency-map?view=all', ...options });
+
 const node = (name: string) => screen.findByRole('button', { name });
+/** The cards of the Screens view say their counters in their accessible name. */
+const INICIO_CARD = 'Screen Inicio, Approved, 1 component, 1 variable, 1 collection';
+const DETALLE_CARD = 'Screen Detalle, In review, 2 components, 2 variables, 1 collection';
 
 describe('dependency map: the graph', () => {
   it('reads the graph of the selected application and draws one button per node', async () => {
-    const { api } = await renderMap();
+    const { api } = await renderAll();
 
     expect(await node('Screen Inicio, Approved')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Dependency map', level: 1 })).toBeVisible();
@@ -29,7 +36,7 @@ describe('dependency map: the graph', () => {
   });
 
   it('draws the status tag of a screen, "Reserved" on App (OnStart) and the dashed untraced variable', async () => {
-    await renderMap();
+    await renderAll();
 
     const app = await node('Screen App (OnStart), In progress, Reserved');
     expect(within(app).getByText('In progress')).toBeInTheDocument();
@@ -48,7 +55,7 @@ describe('dependency map: the graph', () => {
 
   it('cuts a long name with "…" and keeps the full name in the accessible name and the tooltip', async () => {
     const long = 'locMostrarDetalleDelClienteSeleccionado';
-    await renderMap({
+    await renderAll({
       graphs: { 1: { nodes: [screenNode(1, 'Inicio'), variableNode(5, long)], edges: [] } },
     });
 
@@ -59,7 +66,7 @@ describe('dependency map: the graph', () => {
   });
 
   it('draws the legend of the relationships with one sample line per kind, and the mini map and the zoom controls', async () => {
-    await renderMap();
+    await renderAll();
     await node('Screen Inicio, Approved');
 
     const legend = screen.getByRole('region', { name: 'Relationships' });
@@ -75,13 +82,13 @@ describe('dependency map: the graph', () => {
   });
 
   it('lets every role open it, the Reader included', async () => {
-    await renderMap({ role: 'READER' });
+    await renderAll({ role: 'READER' });
 
     expect(await node('Screen Inicio, Approved')).toBeInTheDocument();
   });
 
   it('reads an archived application like any other', async () => {
-    const { api } = await renderMap({
+    const { api } = await renderAll({
       applications: [makeApplication(1, { name: 'SAR', status: 'ARCHIVED' })],
     });
 
@@ -94,13 +101,13 @@ describe('dependency map: the graph', () => {
 describe('dependency map: filters in the URL', () => {
   it('sends the types as a list and keeps them in the URL; the default (every type) leaves no parameter', async () => {
     const user = setupUser();
-    const { api, router } = await renderMap();
+    const { api, router } = await renderAll();
     await node('Screen Inicio, Approved');
 
     await user.click(screen.getByRole('checkbox', { name: 'Components' }));
 
     await waitFor(() => {
-      expect(router.state.location.search).toBe('?types=SCREEN%2CVARIABLE%2CCOLLECTION');
+      expect(router.state.location.search).toBe('?view=all&types=SCREEN%2CVARIABLE%2CCOLLECTION');
     });
     await waitFor(() => {
       expect(api.callsTo('GET /dependencies/graph')).toHaveLength(2);
@@ -118,13 +125,13 @@ describe('dependency map: filters in the URL', () => {
 
     await user.click(screen.getByRole('checkbox', { name: 'Components' }));
     await waitFor(() => {
-      expect(router.state.location.search).toBe('');
+      expect(router.state.location.search).toBe('?view=all');
     });
     expect(await node('Component btnGuardar')).toBeInTheDocument();
   });
 
   it('reads the types of the URL on load', async () => {
-    const { api } = await renderMap({ path: '/dependency-map?types=VARIABLE,COLLECTION' });
+    const { api } = await renderAll({ path: '/dependency-map?view=all&types=VARIABLE,COLLECTION' });
 
     expect(await node('Collection colClientes')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Screen / })).not.toBeInTheDocument();
@@ -137,7 +144,7 @@ describe('dependency map: filters in the URL', () => {
   });
 
   it('does not let the last type be cleared: an empty list would mean every type', async () => {
-    await renderMap({ path: '/dependency-map?types=COLLECTION' });
+    await renderAll({ path: '/dependency-map?view=all&types=COLLECTION' });
     await node('Collection colClientes');
 
     expect(screen.getByRole('checkbox', { name: 'Collections' })).toBeDisabled();
@@ -145,7 +152,7 @@ describe('dependency map: filters in the URL', () => {
 
   it('sends the environment and keeps it in the URL', async () => {
     const user = setupUser();
-    const { api, router } = await renderMap({
+    const { api, router } = await renderAll({
       environments: { 'variable:2': ['PROD'], 'collection:22': ['DEV'] },
     });
     await node('Screen Inicio, Approved');
@@ -153,7 +160,7 @@ describe('dependency map: filters in the URL', () => {
     await user.selectOptions(screen.getByRole('combobox', { name: 'Environment' }), 'DEV');
 
     await waitFor(() => {
-      expect(router.state.location.search).toBe('?environment=DEV');
+      expect(router.state.location.search).toBe('?view=all&environment=DEV');
     });
     await waitFor(() => {
       expect(api.callsTo('GET /dependencies/graph')[1]?.options.query).toEqual({
@@ -174,13 +181,13 @@ describe('dependency map: filters in the URL', () => {
 
   it('shows only the untraced variables and their direct neighbors, with the edges between them', async () => {
     const user = setupUser();
-    const { api, router } = await renderMap();
+    const { api, router } = await renderAll();
     await node('Screen Inicio, Approved');
 
     await user.click(screen.getByRole('button', { name: 'Show untraced only' }));
 
     await waitFor(() => {
-      expect(router.state.location.search).toBe('?untraced=1');
+      expect(router.state.location.search).toBe('?view=all&untraced=1');
     });
     expect(screen.getByRole('button', { name: 'Show untraced only' })).toHaveAttribute(
       'aria-pressed',
@@ -204,24 +211,24 @@ describe('dependency map: filters in the URL', () => {
       nodes: [screenNode(1, 'Inicio'), variableNode(2, 'gA')],
       edges: [],
     };
-    const { router } = await renderMap({
+    const { router } = await renderAll({
       graphs: { 1: graph },
-      path: '/dependency-map?untraced=1',
+      path: '/dependency-map?view=all&untraced=1',
     });
 
     expect(await screen.findByText('No results')).toBeVisible();
     expect(screen.getByText('No elements match these filters.')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Clear filters' }));
     await waitFor(() => {
-      expect(router.state.location.search).toBe('');
+      expect(router.state.location.search).toBe('?view=all');
     });
     expect(await node('Variable gA, Global')).toBeInTheDocument();
   });
 
   it('"Reset view" drops every filter and the focus', async () => {
     const user = setupUser();
-    const { router } = await renderMap({
-      path: '/dependency-map?types=SCREEN,VARIABLE&environment=PROD&untraced=1',
+    const { router } = await renderAll({
+      path: '/dependency-map?view=all&types=SCREEN,VARIABLE&environment=PROD&untraced=1',
     });
     await screen.findByRole('checkbox', { name: 'Screens' });
 
@@ -230,14 +237,14 @@ describe('dependency map: filters in the URL', () => {
     await waitFor(() => {
       expect(router.state.location.search).toBe('');
     });
-    expect(await node('Screen Inicio, Approved')).toBeInTheDocument();
+    expect(await node(INICIO_CARD)).toBeInTheDocument();
   });
 });
 
 describe('dependency map: focus on a node', () => {
   it('reads the neighborhood with the depth, keeps both in the URL and goes back to the full map', async () => {
     const user = setupUser();
-    const { api, router } = await renderMap({ path: '/dependency-map?focus=variable:1' });
+    const { api, router } = await renderAll({ path: '/dependency-map?focus=variable:1' });
 
     const banner = await screen.findByRole('region', { name: 'Focus' });
     expect(within(banner).getByText('gUsuario')).toBeInTheDocument();
@@ -264,19 +271,19 @@ describe('dependency map: focus on a node', () => {
     await waitFor(() => {
       expect(router.state.location.search).toBe('');
     });
-    expect(await node('Screen Detalle, In review')).toBeInTheDocument();
+    expect(await node(DETALLE_CARD)).toBeInTheDocument();
     expect(api.callsTo('GET /dependencies/graph')).toHaveLength(1);
   });
 
   it('opens the focus from the panel of a node ("Focus on this node")', async () => {
     const user = setupUser();
-    const { api, router } = await renderMap();
+    const { api, router } = await renderAll();
 
     await user.click(await node('Screen Detalle, In review'));
     await user.click(screen.getByRole('button', { name: 'Focus on this node' }));
 
     await waitFor(() => {
-      expect(router.state.location.search).toBe('?focus=screen%3A12');
+      expect(router.state.location.search).toBe('?view=all&focus=screen%3A12');
     });
     expect(await screen.findByRole('region', { name: 'Focus' })).toBeVisible();
     await waitFor(() => {
@@ -292,20 +299,20 @@ describe('dependency map: focus on a node', () => {
 
   it('shows "This element doesn\'t exist" for a focus that does not exist, and goes back to the map', async () => {
     const user = setupUser();
-    const { router } = await renderMap({ path: '/dependency-map?focus=variable:999' });
+    const { router } = await renderAll({ path: '/dependency-map?focus=variable:999' });
 
     expect(await screen.findByText("This element doesn't exist")).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Back to Dependency map' }));
     await waitFor(() => {
       expect(router.state.location.search).toBe('');
     });
-    expect(await node('Screen Inicio, Approved')).toBeInTheDocument();
+    expect(await node(INICIO_CARD)).toBeInTheDocument();
   });
 
   it('ignores a focus that is not a node key', async () => {
-    const { api } = await renderMap({ path: '/dependency-map?focus=banana&depth=9' });
+    const { api } = await renderAll({ path: '/dependency-map?focus=banana&depth=9' });
 
-    expect(await node('Screen Inicio, Approved')).toBeInTheDocument();
+    expect(await node(INICIO_CARD)).toBeInTheDocument();
     expect(api.callsTo('GET /dependencies/{type}/{id}')).toHaveLength(0);
   });
 });
@@ -318,7 +325,7 @@ describe('dependency map: application', () => {
 
   it('reloads the map when the application is changed in the sidebar', async () => {
     const user = setupUser();
-    const { api } = await renderMap({
+    const { api } = await renderAll({
       applications: [makeApplication(1, { name: 'SAR' }), makeApplication(2, { name: 'Billing' })],
       graphs: { 1: sampleGraph(), 2: second },
     });
@@ -337,8 +344,8 @@ describe('dependency map: application', () => {
 
   it('drops the focus and the selection when the application changes (the element belongs to the other one)', async () => {
     const user = setupUser();
-    const { router } = await renderMap({
-      path: '/dependency-map?focus=variable:1&types=VARIABLE,COLLECTION',
+    const { router } = await renderAll({
+      path: '/dependency-map?view=all&focus=variable:1&types=VARIABLE,COLLECTION',
       applications: [makeApplication(1, { name: 'SAR' }), makeApplication(2, { name: 'Billing' })],
       graphs: { 1: sampleGraph(), 2: second },
     });
@@ -349,7 +356,7 @@ describe('dependency map: application', () => {
     await user.click(screen.getByRole('button', { name: 'Billing' }));
 
     await waitFor(() => {
-      expect(router.state.location.search).toBe('?types=VARIABLE%2CCOLLECTION');
+      expect(router.state.location.search).toBe('?view=all&types=VARIABLE%2CCOLLECTION');
     });
     expect(
       screen.queryByRole('complementary', { name: 'Selected element' }),
@@ -358,7 +365,7 @@ describe('dependency map: application', () => {
   });
 
   it('says "This application doesn\'t exist" when the API does not know the application', async () => {
-    await renderMap({ graphs: {} });
+    await renderAll({ graphs: {} });
 
     expect(await screen.findByText("This application doesn't exist")).toBeVisible();
     expect(screen.getByRole('button', { name: 'Back to Dashboard' })).toBeVisible();
@@ -367,7 +374,7 @@ describe('dependency map: application', () => {
 
 describe('dependency map: states', () => {
   it('shows a skeleton only after 300 ms, while the graph is loading', async () => {
-    const { api } = await renderMap({
+    const { api } = await renderAll({
       settled: false,
       prepare: (fake) => {
         fake.hold((call) => call.path === '/dependencies/graph');
@@ -380,7 +387,7 @@ describe('dependency map: states', () => {
   });
 
   it('says "Nothing to map yet" when the application has only App (OnStart)', async () => {
-    await renderMap({
+    await renderAll({
       graphs: {
         1: {
           nodes: [
@@ -400,7 +407,7 @@ describe('dependency map: states', () => {
 
   it('shows the failure inside the block, without breaking the page, and reads again with "Try again"', async () => {
     const user = setupUser();
-    const { api } = await renderMap({
+    const { api } = await renderAll({
       prepare: (fake) => {
         fake.failNext(
           'GET /dependencies/graph',

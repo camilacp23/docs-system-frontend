@@ -16,7 +16,7 @@ import { makeLargeGraph, sampleGraph } from '../test/helpers/graphFixtures';
 
 export function MapPreview() {
   const [search] = useSearchParams();
-  const { params, setParams, clearAll, clearFocus, hasFilters } = useGraphParams();
+  const { params, setParams, clearAll, clearFilters, clearFocus, hasFilters } = useGraphParams();
   const dataset = search.get('data') === 'large' ? 'large' : 'sample';
   const graph = useMemo(
     () => (dataset === 'large' ? makeLargeGraph(500) : sampleGraph()),
@@ -26,7 +26,7 @@ export function MapPreview() {
   const data = useMemo(() => {
     if (params.focus !== null) return neighborhoodOf(graph, params.focus.key, params.depth);
     return filterGraph(graph, {
-      types: params.types.length < 4 ? params.types : null,
+      types: params.view === 'all' && params.types.length < 4 ? params.types : null,
       environment: params.environment === '' ? null : params.environment,
     });
   }, [graph, params]);
@@ -41,6 +41,7 @@ export function MapPreview() {
           hasFilters={hasFilters}
           setParams={setParams}
           clearAll={clearAll}
+          clearFilters={clearFilters}
           clearFocus={clearFocus}
           applicationId={1}
           zoomToKey={search.get('zoom')}

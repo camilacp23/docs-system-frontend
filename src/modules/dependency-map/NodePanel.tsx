@@ -1,7 +1,7 @@
 // NodePanel: the side panel of the selected node (frames S-27b and S-28).
 // Props: node, index (the graph indexed by indexGraph), focusedKey (the node the map is focused on, if any),
 // onSelectNode(key) (an item of the panel was chosen: its panel opens), onFocus(node) (the "Focus on this node"
-// button), onClose.
+// button), onClose (omitted in the focus view, where the panel always shows the element in the middle).
 // It shows the type, the name, the tags of the node (documentation status, "Reserved", scope, "Untraced"), the link to
 // the page of the element (a component leads to the Components & navigation tab of its screen, D-102), for a screen the
 // link to its Miro diagram when it is an https address (another tab, rel="noopener noreferrer") and the connections
@@ -39,7 +39,7 @@ interface NodePanelProps {
   focusedKey: string | null;
   onSelectNode: (key: string) => void;
   onFocus: (node: GraphNode) => void;
-  onClose: () => void;
+  onClose?: (() => void) | undefined;
 }
 
 function iconType(node: GraphNode) {
@@ -76,7 +76,7 @@ export function NodePanel({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.stopPropagation();
-        closeRef.current();
+        closeRef.current?.();
       }
     };
     panel.addEventListener('keydown', onKeyDown);
@@ -116,14 +116,16 @@ export function NodePanel({
             )}
           </div>
         </div>
-        <button
-          type="button"
-          aria-label="Close panel"
-          onClick={onClose}
-          className="flex size-7.5 shrink-0 items-center justify-center rounded-chip text-primary hover:bg-accent-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
-        >
-          <X aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />
-        </button>
+        {onClose !== undefined && (
+          <button
+            type="button"
+            aria-label="Close panel"
+            onClick={onClose}
+            className="flex size-7.5 shrink-0 items-center justify-center rounded-chip text-primary hover:bg-accent-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
+          >
+            <X aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />
+          </button>
+        )}
       </div>
 
       <div className="flex flex-col gap-2">

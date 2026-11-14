@@ -1,51 +1,49 @@
-// graphModel: from the response of the API to what React Flow draws.
-// toFlowGraph(data, positions) -> { nodes, edges }
-//   nodes  one per graph node, id = its key, type = the lowercase node type ('screen', 'variable', ...), the fixed
-//          width and height of its box (so React Flow needs no measuring to place or cull them) and the position
-//          dagre gave it. `data.graphNode` keeps the variant of the contract.
-//   edges  one per graph edge with the built-in 'default' edge type and a style per kind (edgeStyles); the CREATES
-//          edge carries the label "origin" of the frame. Edges cannot be focused or selected: the side panel lists the
-//          connections of a node for the keyboard.
+// graphModel: from a scene of a view to what React Flow draws.
+// sceneToFlow(scene) -> { nodes, edges }
+//   nodes  one per box of the scene, id = its key, type = its kind ('screenCard', 'screen', 'screenGroup', 'variable', ...),
+//          the fixed width and height of its box (so React Flow needs no measuring to place or cull it) and its position.
+//          A component of a group has `parentId` and `extent: 'parent'`, so its position is relative to the group and it
+//          cannot leave it. `data` keeps the variant of the contract, the counters of a card and the role in the focus view.
+//   edges  one per drawn line, a 'smoothstep' (steps) from the right side of its source to the left side of its target,
+//          with the style of its kind (edgeStyles) and the label of the scene; the scene edge
+//          (with the original edges it groups) goes in `data` for the tooltip.
 // onlyUntraced(data) -> the untraced variables, their direct neighbors and the edges between those nodes ("Show
 // untraced only", a filter of the client: the contract has none). No edge points to a node that was left out.
+// isEmptyMap(data) -> true for an application with nothing but App (OnStart).
 import type { Edge, Node } from '@xyflow/react';
 
 import { edgeStyleOf } from './edgeStyles';
-import type { GraphData, GraphEdge, GraphNode } from './graphTypes';
-import { NODE_SIZE, type Position } from './layout';
+import type { GraphData, GraphNode } from './graphTypes';
+import type { Scene, SceneCounters, SceneEdge, SceneNodeKind } from './scene';
 
-export type MapNodeData = { graphNode: GraphNode };
-export type MapEdgeData = { graphEdge: GraphEdge };
-export type MapFlowNodeType = 'screen' | 'variable' | 'collection' | 'component';
-export type MapFlowNode = Node<MapNodeData, MapFlowNodeType>;
+export { ORIGIN_LABEL } from './sceneEdges';
+
+export type MapNodeData = {
+  graphNode: GraphNode;
+  width: number;
+  height: number;
+  counters: SceneCounters | null;
+  role: 'center' | 'left' | 'right' | null;
+};
+export type MapEdgeData = { sceneEdge: SceneEdge };
+export type MapFlowNode = Node<MapNodeData, SceneNodeKind>;
 export type MapFlowEdge = Edge<MapEdgeData>;
 
-export const ORIGIN_LABEL = 'origin';
-
-export function flowTypeOf(node: GraphNode): MapFlowNodeType {
-  switch (node.type) {
-    case 'SCREEN':
-      return 'screen';
-    case 'VARIABLE':
-      return 'variable';
-    case 'COLLECTION':
-      return 'collection';
-    case 'COMPONENT':
-      return 'component';
-  }
-}
-
-export function toFlowGraph(
-  data: GraphData,
-  positions: ReadonlyMap<string, Position>,
-): { nodes: MapFlowNode[]; edges: MapFlowEdge[] } {
-  const nodes = data.nodes.map<MapFlowNode>((graphNode) => ({
-    id: graphNode.key,
-    type: flowTypeOf(graphNode),
-    position: positions.get(graphNode.key) ?? { x: 0, y: 0 },
-    width: NODE_SIZE[graphNode.type].width,
-    height: NODE_SIZE[graphNode.type].height,
-    data: { graphNode },
+export function sceneToFlow(scene: Scene): { nodes: MapFlowNode[]; edges: MapFlowEdge[] } {
+  const nodes = scene.nodes.map<MapFlowNode>((box) => ({
+    id: box.key,
+    type: box.kind,
+    position: { x: box.x, y: box.y },
+    width: box.width,
+    height: box.height,
+    ...(box.parentKey === null ? {} : { parentId: box.parentKey, extent: 'parent' as const }),
+    data: {
+      graphNode: box.graphNode,
+      width: box.width,
+      height: box.height,
+      counters: box.counters,
+      role: box.role,
+    },
     draggable: false,
     connectable: false,
     // Selectable only so React Flow leaves pointer events on: it turns them off for a node that can neither be dragged,
@@ -54,17 +52,17 @@ export function toFlowGraph(
     selectable: true,
     focusable: false,
   }));
-  const edges = data.edges.map<MapFlowEdge>((graphEdge) => ({
-    id: graphEdge.id,
-    source: graphEdge.source,
-    target: graphEdge.target,
-    type: 'default',
-    style: edgeStyleOf(graphEdge.kind),
-    data: { graphEdge },
+  const edges = scene.edges.map<MapFlowEdge>((line) => ({
+    id: line.id,
+    source: line.source,
+    target: line.target,
+    type: 'smoothstep',
+    style: edgeStyleOf(line.kind),
+    data: { sceneEdge: line },
     interactionWidth: 14,
     focusable: false,
     selectable: false,
-    ...(graphEdge.kind === 'CREATES' ? { label: ORIGIN_LABEL } : {}),
+    ...(line.label === null ? {} : { label: line.label }),
   }));
   return { nodes, edges };
 }

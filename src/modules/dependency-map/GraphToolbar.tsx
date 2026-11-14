@@ -1,10 +1,12 @@
 // GraphToolbar: the filter bar of the map (frame S-27).
 // Props: params (the filters of the URL), onChange(patch), nodes (the nodes of the graph shown, for the search), selectedKey,
 // onPick(key) (a node was chosen in the search), onReset, disabled (the graph is not loaded), focused (the map shows
-// the neighborhood of a node: the type and environment filters do not apply, the contract takes none there).
-// Controls: one checkbox per node type (the last one cannot be cleared: an empty list would mean every type), the
-// environment, "Find a node…" (the keyboard alternative to the canvas: it lists the nodes by name and choosing one
-// selects it, centers it and opens its panel), "Show untraced only" (a filter of the client) and "Reset view".
+// the neighborhood of a node: the filters do not apply, the contract takes none there).
+// Controls: the view ("Screens", the default, or "All elements"), one checkbox per node type (the last one cannot be
+// cleared: an empty list would mean every type), the environment, "Find a node…" (the keyboard alternative to the canvas: it
+// lists the nodes by name and choosing one selects it, centers it and opens its panel), "Show untraced only" (a filter of the
+// client) and "Reset view". The type and untraced filters belong to the All elements view: the Screens view needs every type
+// for its counters. A control that does not apply says why.
 import { Filter } from 'lucide-react';
 import { useMemo } from 'react';
 
@@ -13,14 +15,15 @@ import {
   Checkbox,
   ICON_STROKE_WIDTH,
   SearchPicker,
+  SegmentedControl,
   Select,
   type SearchPickerOption,
 } from '../../components/ui';
 
 import { NODE_TYPE_LABEL, NODE_TYPE_PLURAL_LABEL } from './graphLabels';
 import { NODE_TYPES, type GraphNode, type Environment, type NodeType } from './graphTypes';
-import { FOCUSED_FILTERS_REASON } from './mapTexts';
-import type { GraphParams, GraphParamsPatch } from './useGraphParams';
+import { ALL_VIEW_ONLY_REASON, FOCUSED_FILTERS_REASON, VIEW_LABEL } from './mapTexts';
+import type { GraphParams, GraphParamsPatch, View } from './useGraphParams';
 
 interface GraphToolbarProps {
   params: GraphParams;
@@ -58,7 +61,14 @@ export function GraphToolbar({
       : params.types.filter((candidate) => candidate !== type);
     if (next.length > 0) onChange({ types: next });
   };
-  const filtersDisabled = disabled || focused;
+  const inScreens = params.view === 'screens';
+  const environmentDisabled = disabled || focused;
+  const allViewDisabled = disabled || focused || inScreens;
+  const allViewReason = focused
+    ? FOCUSED_FILTERS_REASON
+    : inScreens
+      ? ALL_VIEW_ONLY_REASON
+      : undefined;
   const onlyOne = params.types.length === 1;
 
   return (
@@ -67,10 +77,21 @@ export function GraphToolbar({
       className="flex flex-col gap-2 rounded-card border border-border-subtle bg-surface px-4 py-3 shadow-card"
     >
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-        <fieldset
-          title={focused ? FOCUSED_FILTERS_REASON : undefined}
-          className="flex flex-wrap items-center gap-x-5 gap-y-1"
-        >
+        <SegmentedControl<View>
+          name="map-view"
+          label="View"
+          value={params.view}
+          disabled={disabled}
+          options={[
+            { value: 'screens', label: VIEW_LABEL.screens },
+            { value: 'all', label: VIEW_LABEL.all },
+          ]}
+          onChange={(view) => {
+            // Choosing a view leaves the focus: the focus is a view of its own.
+            onChange({ view, focus: null });
+          }}
+        />
+        <fieldset title={allViewReason} className="flex flex-wrap items-center gap-x-5 gap-y-1">
           <legend className="sr-only">Element types</legend>
           {NODE_TYPES.map((type) => {
             const checked = params.types.includes(type);
@@ -79,7 +100,7 @@ export function GraphToolbar({
                 key={type}
                 label={NODE_TYPE_PLURAL_LABEL[type]}
                 checked={checked}
-                disabled={filtersDisabled || (checked && onlyOne)}
+                disabled={allViewDisabled || (checked && onlyOne)}
                 onChange={(event) => {
                   toggleType(type, event.target.checked);
                 }}
@@ -91,7 +112,7 @@ export function GraphToolbar({
           <Select
             aria-label="Environment"
             value={params.environment}
-            disabled={filtersDisabled}
+            disabled={environmentDisabled}
             onChange={(event) => {
               onChange({ environment: event.target.value as Environment | '' });
             }}
@@ -114,8 +135,8 @@ export function GraphToolbar({
         </div>
         <Button
           aria-pressed={params.untraced}
-          disabled={filtersDisabled}
-          title={focused ? FOCUSED_FILTERS_REASON : undefined}
+          disabled={allViewDisabled}
+          title={allViewReason}
           className={
             params.untraced ? '!border-accent !bg-accent-soft !text-accent-ink' : undefined
           }

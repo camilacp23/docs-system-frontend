@@ -1,8 +1,11 @@
 // useGraphParams: the filters and the focus of the dependency map, kept in the URL so a view can be shared.
-// useGraphParams() -> { params, setParams(patch), clearAll, clearFocus, hasFilters, hasView }
-//   Query names: types (the node types shown, comma separated as the contract takes them, `SCREEN,VARIABLE`; every
-//   type is the default and leaves no parameter), environment (DEV | PROD), untraced (`1`: only untraced variables and
-//   their neighbors, a filter of the client), focus (a node key, `variable:7`) and depth (1 to 3, 1 is the default).
+// useGraphParams() -> { params, setParams(patch), clearAll, clearFilters, clearFocus, hasFilters, hasView }
+//   clearAll drops everything ("Reset view"); clearFilters drops only the filters and keeps the view and the focus.
+//   Query names: view (`screens`, the default, or `all`: the Screens view and the All elements view), types (the node
+//   types shown in the All elements view, comma separated as the contract takes them, `SCREEN,VARIABLE`; every type is the
+//   default and leaves no parameter), environment (DEV | PROD), untraced (`1`: only untraced variables and their
+//   neighbors, a filter of the client), focus (a node key, `variable:7`) and depth (1 or 2, 1 is the default; the
+//   contract allows 3, which is read as 2).
 //   A value that is missing, the default or not valid is dropped. The selected node is not in the URL.
 //   Unknown parameters are kept.
 import { useCallback, useMemo } from 'react';
@@ -11,7 +14,7 @@ import { useSearchParams } from 'react-router';
 import { NODE_TYPES, nodeKeyOf, type Environment, type NodeType } from './graphTypes';
 
 export const DEFAULT_DEPTH = 1;
-export const DEPTHS = [1, 2, 3] as const;
+export const DEPTHS = [1, 2] as const;
 export type Depth = (typeof DEPTHS)[number];
 
 export interface Focus {
@@ -20,7 +23,10 @@ export interface Focus {
   key: string;
 }
 
+export type View = 'screens' | 'all';
+
 export interface GraphParams {
+  view: View;
   types: readonly NodeType[];
   environment: Environment | '';
   untraced: boolean;
@@ -29,6 +35,7 @@ export interface GraphParams {
 }
 
 export type GraphParamsPatch = Partial<{
+  view: View;
   types: readonly NodeType[];
   environment: Environment | '';
   untraced: boolean;
@@ -36,7 +43,8 @@ export type GraphParamsPatch = Partial<{
   depth: Depth;
 }>;
 
-const OWN_KEYS = ['types', 'environment', 'untraced', 'focus', 'depth'] as const;
+const FILTER_KEYS = ['types', 'environment', 'untraced'] as const;
+const OWN_KEYS = ['view', 'types', 'environment', 'untraced', 'focus', 'depth'] as const;
 const FOCUS_PATTERN = /^(screen|variable|collection|component):([1-9]\d{0,9})$/;
 const MAX_ID = 2147483647;
 
@@ -55,11 +63,13 @@ export function parseGraphParams(search: URLSearchParams): GraphParams {
   const environment = search.get('environment');
   const depth = Number(search.get('depth'));
   return {
+    view: search.get('view') === 'all' ? 'all' : 'screens',
     types: chosen.length === 0 ? NODE_TYPES : chosen,
     environment: environment === 'DEV' || environment === 'PROD' ? environment : '',
     untraced: search.get('untraced') === '1',
     focus: parseFocus(search.get('focus')),
-    depth: DEPTHS.find((candidate) => candidate === depth) ?? DEFAULT_DEPTH,
+    // The contract takes 1 to 3; the map shows 1 and 2, so a 3 in a link is read as 2.
+    depth: depth === 2 || depth === 3 ? 2 : DEFAULT_DEPTH,
   };
 }
 
@@ -76,6 +86,10 @@ export function useGraphParams() {
     (patch: GraphParamsPatch) => {
       setSearch((current) => {
         const next = new URLSearchParams(current);
+        if ('view' in patch) {
+          if (patch.view === 'all') next.set('view', 'all');
+          else next.delete('view');
+        }
         if ('types' in patch) {
           const types = patch.types ?? NODE_TYPES;
           const ordered = NODE_TYPES.filter((type) => types.includes(type));
@@ -116,6 +130,14 @@ export function useGraphParams() {
     });
   }, [setSearch]);
 
+  const clearFilters = useCallback(() => {
+    setSearch((current) => {
+      const next = new URLSearchParams(current);
+      for (const key of FILTER_KEYS) next.delete(key);
+      return next;
+    });
+  }, [setSearch]);
+
   const clearFocus = useCallback(() => {
     setParams({ focus: null });
   }, [setParams]);
@@ -125,6 +147,7 @@ export function useGraphParams() {
     params,
     setParams,
     clearAll,
+    clearFilters,
     clearFocus,
     hasFilters,
     hasView: hasFilters || params.focus !== null,

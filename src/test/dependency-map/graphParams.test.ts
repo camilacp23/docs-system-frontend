@@ -10,6 +10,7 @@ const parse = (query: string) => parseGraphParams(new URLSearchParams(query));
 describe('parseGraphParams', () => {
   it('defaults to the full map', () => {
     expect(parse('')).toEqual({
+      view: 'screens',
       types: NODE_TYPES,
       environment: '',
       untraced: false,
@@ -37,12 +38,19 @@ describe('parseGraphParams', () => {
     expect(parse('untraced=true').untraced).toBe(false);
   });
 
-  it('reads a focus as a node key and a depth from 1 to 3', () => {
+  it('opens the Screens view unless the URL asks for all elements', () => {
+    expect(parse('').view).toBe('screens');
+    expect(parse('view=all').view).toBe('all');
+    expect(parse('view=banana').view).toBe('screens');
+  });
+
+  it('reads a focus as a node key and a depth of 1 or 2, and a 3 as 2', () => {
     expect(parse('focus=variable:7&depth=2')).toMatchObject({
       focus: { type: 'VARIABLE', id: 7, key: 'variable:7' },
       depth: 2,
     });
     expect(parse('focus=collection:21').depth).toBe(1);
+    expect(parse('depth=3').depth).toBe(2);
     expect(parse('depth=4').depth).toBe(1);
     expect(parse('depth=0').depth).toBe(1);
   });
