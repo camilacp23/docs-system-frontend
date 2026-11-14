@@ -267,7 +267,10 @@ export function VariableUsage({ variable, dependencies }: VariableUsageProps) {
         )}
         <p className="border-t border-divider px-4 py-3 text-small text-ink-500">
           Links are edited in the screen (Module 4) or the collection.{' '}
-          <Link to="/dependency-map" className="font-semibold text-primary hover:underline">
+          <Link
+            to={`/dependency-map?focus=variable:${variable.id}`}
+            className="font-semibold text-primary hover:underline"
+          >
             Open in dependency map
           </Link>
         </p>

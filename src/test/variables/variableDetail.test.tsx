@@ -108,9 +108,10 @@ describe('variable detail', () => {
       '/screens/12',
     );
     expect(components.getByText('Writes the current user as author.')).toBeInTheDocument();
+    // The link opens the map focused on this variable (frame flow 4: variable, then focus on the node).
     expect(screen.getByRole('link', { name: 'Open in dependency map' })).toHaveAttribute(
       'href',
-      '/dependency-map',
+      '/dependency-map?focus=variable:1',
     );
   });
 
