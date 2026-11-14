@@ -1,11 +1,13 @@
 // auditLabels: the words of the audit log (S-32, S-32d, S-32f): the readable name of each audited table, the action
 // names, the sentence of a record ("<actor> updated screen Detalle"), the label of a field and the page an element
 // opens. Types come from the contract (AuditEntry, AuditEntityType); nothing here is sent to the API.
-import type { components } from '../../api/schema';
+import type { components, operations } from '../../api/schema';
 
 export type AuditEntry = components['schemas']['AuditEntry'];
 export type AuditEntityType = components['schemas']['AuditEntityType'];
 export type AuditAction = AuditEntry['action'];
+/** The query of GET /audit-log as the contract declares it. */
+export type AuditQuery = NonNullable<operations['listAuditLog']['parameters']['query']>;
 
 /** The audited tables, in the order of the "Element type" filter (SDD Table 39). */
 export const ENTITY_TYPES: readonly AuditEntityType[] = [
@@ -123,3 +125,20 @@ export function fieldLabel(key: string): string {
 export function isRedacted(key: string): boolean {
   return REDACTED_FIELDS.includes(key);
 }
+
+/** The actor of a write that did not come through the API (the API sends null, S-32). */
+export const OUTSIDE_APPLICATION = 'Outside the application';
+
+/** Who did it: "You" in a Developer's own view (S-32d), the name otherwise, or the text for a null actor. */
+export function actorText(entry: Pick<AuditEntry, 'actor'>, ownView: boolean): string {
+  if (entry.actor === null) return OUTSIDE_APPLICATION;
+  return ownView ? 'You' : entry.actor.name;
+}
+
+/** The classes of the round icon of each action: success, info, danger and neutral (the colors of the totals panel). */
+export const ACTION_TONE: Record<AuditAction, string> = {
+  CREATE: 'bg-success-bg text-success-ink',
+  UPDATE: 'bg-info-bg text-info-ink',
+  DELETE: 'bg-danger-bg text-danger',
+  EVENT: 'bg-disabled-bg text-ink-700',
+};
