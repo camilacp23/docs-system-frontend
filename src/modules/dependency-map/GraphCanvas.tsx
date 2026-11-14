@@ -7,8 +7,9 @@
 // onNodesChange). The edge type is 'routed' (see RoutedEdge): the lines were routed with the layout, so they are not computed
 // while drawing. A line shows its tooltip when hovered (S-27c); the same facts are in the side panel for the keyboard.
 // The chrome of the canvas keeps out of the way of the map:
-//   - a bar at the top with the "Relationships" button (the legend is a panel it opens, not a card over the map);
-//   - the zoom controls at the bottom right, and the mini map next to them, small, only while the map does not fit the canvas;
+//   - a bar at the top with the "Relationships" button (the legend is a panel it opens, not a card over the map) and "Minimap";
+//   - the zoom controls at the bottom right; the mini map, small and next to them, is OFF until the visitor turns it on with the
+//     "Minimap" button (the preference is kept in this browser only, never needed);
 //   - the first view and "fit view" RESERVE the space of that chrome (see canvasFit): no box starts under it. The first view is
 //     readable: the whole map when it fits at 100 % or less, never below READABLE_MIN_ZOOM; when it does not fit, the framed
 //     boxes start at the top left, or, if there is a box to keep in the middle (the focused element), around it.
@@ -20,7 +21,6 @@ import {
   Panel,
   ReactFlow,
   useReactFlow,
-  useViewport,
   type EdgeMouseHandler,
 } from '@xyflow/react';
 import '@xyflow/react/dist/base.css';
@@ -30,9 +30,11 @@ import type { Rect } from './edgeRouting';
 import type { MapFlowEdge, MapFlowNode } from './graphModel';
 import { MAP_EDGE_TYPES } from './mapEdgeTypes';
 import { MAP_NODE_TYPES } from './mapNodeTypes';
-import { fitViewport, MINIMAP_SIZE, overflowsCanvas } from './canvasFit';
+import { fitViewport, MINIMAP_SIZE } from './canvasFit';
 import { edgeTooltip, type GraphIndex } from './panelModel';
+import { MinimapToggle } from './MinimapToggle';
 import { RelationshipsMenu } from './RelationshipsMenu';
+import { useMinimapPreference } from './useMinimapPreference';
 import type { SceneEdge, SceneFit } from './scene';
 import './mapCanvas.css';
 
@@ -69,14 +71,15 @@ export function GraphCanvas({
   onPaneClick,
 }: GraphCanvasProps) {
   const { setViewport } = useReactFlow();
-  const viewport = useViewport();
+  const [minimapOn, toggleMinimap] = useMinimapPreference();
+  const minimapRef = useRef(minimapOn);
   const containerRef = useRef<HTMLDivElement>(null);
   const nodesRef = useRef(nodes);
   const [hovered, setHovered] = useState<Hovered | null>(null);
-  const [canvas, setCanvas] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
     nodesRef.current = nodes;
+    minimapRef.current = minimapOn;
   });
 
   /** The readable first view: see canvasFit. */
@@ -84,7 +87,6 @@ export function GraphCanvas({
     const container = containerRef.current;
     if (!container || nodesRef.current.length === 0) return;
     const size = { width: container.offsetWidth, height: container.offsetHeight };
-    setCanvas(size);
 
     // What the view frames: the boxes of `fit`, or everything that is drawn.
     const top = nodesRef.current.filter((node) => node.parentId === undefined);
@@ -112,6 +114,7 @@ export function GraphCanvas({
       content,
       anchor: anchorNode ? rectOf(anchorNode) : null,
       canvas: size,
+      minimap: minimapRef.current,
     });
     void setViewport({ x: view.x, y: view.y, zoom: view.zoom }, { duration: 0 });
   }, [setViewport, bounds, fit]);
@@ -132,7 +135,6 @@ export function GraphCanvas({
   }, []);
 
   const tooltip = hovered ? edgeTooltip(hovered.edge, index) : null;
-  const showMiniMap = canvas.width > 0 && overflowsCanvas(bounds, viewport, canvas);
 
   return (
     <div
@@ -167,7 +169,7 @@ export function GraphCanvas({
         onEdgeMouseLeave={hideTooltip}
       >
         <Controls showInteractive={false} onFitView={fitReadable} position="bottom-right" />
-        {showMiniMap && (
+        {minimapOn && (
           <MiniMap
             pannable
             zoomable
@@ -179,7 +181,10 @@ export function GraphCanvas({
           />
         )}
         <Panel position="top-left" className="!m-3">
-          <RelationshipsMenu />
+          <div className="flex items-start gap-2">
+            <RelationshipsMenu />
+            <MinimapToggle pressed={minimapOn} onToggle={toggleMinimap} />
+          </div>
         </Panel>
       </ReactFlow>
       {tooltip && hovered && (

@@ -78,6 +78,11 @@ export interface Scene {
   /** How long the routing took, all attempts together, and how many attempts it needed (a good scene needs one). */
   routingMs: number;
   attempts: number;
+  /**
+   * The focus view at depth 2 draws only the lines between neighbor columns: the relationships it leaves out, whole (the side
+   * panel lists them all and says how many they are). Empty in every other view.
+   */
+  undrawn: readonly GraphEdge[];
 }
 
 export function nodeKindOf(node: GraphNode): Exclude<SceneNodeKind, 'more'> {

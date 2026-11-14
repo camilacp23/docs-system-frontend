@@ -2,29 +2,18 @@
 // reserves the room of the chrome of the canvas and keeps the focused element in the middle; the path of a routed line.
 import { describe, expect, it } from 'vitest';
 
-import { fitViewport, INSETS, overflowsCanvas } from '../../modules/dependency-map/canvasFit';
+import { fitViewport, INSETS, MINIMAP_RIGHT_INSET } from '../../modules/dependency-map/canvasFit';
 import {
   buildFocusScene,
   MAX_COLUMN_NODES,
   moreKey,
 } from '../../modules/dependency-map/focusScene';
-import type { GraphData } from '../../modules/dependency-map/graphTypes';
 import { pathOfPoints } from '../../modules/dependency-map/routePath';
-import { screenNode, variableNode, creates, makeLargeGraph } from '../helpers/graphFixtures';
+import { crowdedGraph, makeLargeGraph, sampleGraph, skippingGraph } from '../helpers/graphFixtures';
 import { geometryProblems } from '../helpers/routeGeometry';
 
 const SCREENS = 15;
-
-/** One variable created by 15 screens: its left column has 15 elements. */
-function crowded(): GraphData {
-  const nodes = [variableNode(1, 'gShared')];
-  const edges = [];
-  for (let id = 1; id <= SCREENS; id += 1) {
-    nodes.push(screenNode(id, `Screen${String(id).padStart(2, '0')}`));
-    edges.push(creates(id, `screen:${id}`, 'variable:1'));
-  }
-  return { nodes, edges };
-}
+const crowded = () => crowdedGraph(SCREENS);
 
 describe('"+N more" in a crowded column', () => {
   it('shows the first 12 elements and a card with the rest, without lines for the hidden ones', () => {
@@ -77,6 +66,63 @@ describe('"+N more" in a crowded column', () => {
   });
 });
 
+describe('focus at depth 2: lines between neighbor columns only', () => {
+  /** The column of each box: the boxes of the top level sorted by where they start. */
+  function columnsOf(scene: NonNullable<ReturnType<typeof buildFocusScene>>) {
+    const xs = [
+      ...new Set(scene.nodes.filter((node) => node.parentKey === null).map((node) => node.x)),
+    ].sort((a, b) => a - b);
+    const byKey = new Map(scene.nodes.map((node) => [node.key, node]));
+    return (key: string) => xs.indexOf(byKey.get(byKey.get(key)?.parentKey ?? key)?.x ?? NaN);
+  }
+
+  it('draws no line that jumps a column, joins a column to itself or crosses from one side to the other', () => {
+    const scene = buildFocusScene(skippingGraph(), 'variable:1', 2) as NonNullable<
+      ReturnType<typeof buildFocusScene>
+    >;
+    const columnOf = columnsOf(scene);
+    expect(scene.edges.length).toBeGreaterThan(0);
+    for (const line of scene.edges) {
+      expect(Math.abs(columnOf(line.source) - columnOf(line.target)), line.id).toBe(1);
+    }
+    expect(geometryProblems(scene)).toEqual([]);
+  });
+
+  it('keeps every left-out relationship, whole, for the panel', () => {
+    const scene = buildFocusScene(skippingGraph(), 'variable:1', 2) as NonNullable<
+      ReturnType<typeof buildFocusScene>
+    >;
+    expect(scene.undrawn.map((edge) => edge.id).sort()).toEqual(['d:3', 'sv:6', 'sv:7']);
+    // Drawn + left out = every relationship between the boxes of the view.
+    const drawn = scene.edges.flatMap((line) => line.edges.map((edge) => edge.id));
+    expect([...drawn, ...scene.undrawn.map((edge) => edge.id)].sort()).toEqual(
+      skippingGraph()
+        .edges.map((edge) => edge.id)
+        .sort(),
+    );
+  });
+
+  it('draws every line at depth 1, and the other views leave nothing out', () => {
+    expect(buildFocusScene(skippingGraph(), 'variable:1', 1)?.undrawn).toEqual([]);
+    expect(buildFocusScene(sampleGraph(), 'variable:1', 1)?.undrawn).toEqual([]);
+  });
+
+  it('has no line between columns that are not neighbors on the 500-element map', () => {
+    const data = makeLargeGraph(500);
+    for (const key of ['screen:16', 'screen:2', 'screen:19']) {
+      const scene = buildFocusScene(data, key, 2) as NonNullable<
+        ReturnType<typeof buildFocusScene>
+      >;
+      const columnOf = columnsOf(scene);
+      for (const line of scene.edges) {
+        expect(Math.abs(columnOf(line.source) - columnOf(line.target)), `${key} ${line.id}`).toBe(
+          1,
+        );
+      }
+    }
+  });
+});
+
 describe('the first view of the canvas', () => {
   const canvas = { width: 1440, height: 700 };
 
@@ -117,10 +163,16 @@ describe('the first view of the canvas', () => {
     expect(centerX).toBeCloseTo(view.insets.left + free / 2, 5);
   });
 
-  it('asks for the mini map only when the drawn map goes past the free part', () => {
-    const bounds = { x: 0, y: 0, width: 800, height: 400 };
-    expect(overflowsCanvas(bounds, { x: 100, y: 100, zoom: 1 }, canvas)).toBe(false);
-    expect(overflowsCanvas(bounds, { x: 100, y: 100, zoom: 3 }, canvas)).toBe(true);
+  it('reserves the room of the mini map only when the visitor turned it on and the map does not fit', () => {
+    const big = { x: 0, y: 0, width: 6000, height: 4000 };
+    expect(fitViewport({ content: big, anchor: null, canvas }).insets.right).toBe(INSETS.right);
+    expect(fitViewport({ content: big, anchor: null, canvas, minimap: true }).insets.right).toBe(
+      MINIMAP_RIGHT_INSET,
+    );
+    const small = { x: 0, y: 0, width: 400, height: 300 };
+    expect(fitViewport({ content: small, anchor: null, canvas, minimap: true }).insets.right).toBe(
+      INSETS.right,
+    );
   });
 });
 

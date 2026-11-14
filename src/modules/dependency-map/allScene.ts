@@ -101,6 +101,7 @@ export function buildAllScene(data: GraphData): Scene {
       fit: null,
       failures: 0,
       routingMs: 0,
+      undrawn: [],
       attempts: 1,
     };
   });

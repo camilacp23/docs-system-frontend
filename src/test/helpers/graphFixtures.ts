@@ -115,6 +115,43 @@ export const navigates = (id: number, source: string, target: string): GraphEdge
   kind: 'NAVIGATES_TO',
 });
 
+/** One variable created by `count` screens: its left column has `count` boxes (crowded when count > 12). */
+export function crowdedGraph(count: number): GraphData {
+  const nodes: GraphNode[] = [variableNode(1, 'gShared')];
+  const edges: GraphEdge[] = [];
+  for (let id = 1; id <= count; id += 1) {
+    nodes.push(screenNode(id, `Screen${String(id).padStart(2, '0')}`));
+    edges.push(creates(id, `screen:${id}`, 'variable:1'));
+  }
+  return { nodes, edges };
+}
+
+/**
+ * A focus view at depth 2 with every kind of line that is NOT drawn: v1 in the middle; s1 and s2 before it (left 1), v2 after it
+ * (right 1), s4 before s1 (left 2). s1 -> s2 joins two boxes of a column, s1 -> v2 goes from one side to the other and
+ * s4 -> v2 jumps a column.
+ */
+export function skippingGraph(): GraphData {
+  return {
+    nodes: [
+      variableNode(1, 'gCenter'),
+      variableNode(2, 'gAfter'),
+      screenNode(1, 'First'),
+      screenNode(2, 'Second'),
+      screenNode(4, 'Origin'),
+    ],
+    edges: [
+      creates(1, 'screen:1', 'variable:1'),
+      creates(2, 'screen:2', 'variable:1'),
+      derives(5, 'variable:2', 'variable:1'),
+      navigates(4, 'screen:4', 'screen:1'),
+      navigates(3, 'screen:1', 'screen:2'),
+      accesses(6, 'screen:1', 'variable:2', 'READ', 'OnVisible'),
+      accesses(7, 'screen:4', 'variable:2', 'READ', 'OnVisible'),
+    ],
+  };
+}
+
 export const MIRO_LINK = 'https://miro.com/app/board/uXjVInicio=/';
 
 export function sampleGraph(): GraphData {

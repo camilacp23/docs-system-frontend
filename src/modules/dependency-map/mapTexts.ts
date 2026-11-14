@@ -14,6 +14,14 @@ export const SHOW_SCREENS_VIEW = 'Show Screens view';
 export const VIEW_LABEL = { screens: 'Screens', all: 'All elements' } as const;
 export const FOCUS_PATH_LABEL = 'Focus path';
 
+/** In the side panel of the focus view at depth 2: the relationships between other elements that the map does not draw. */
+export const NOT_DRAWN_TITLE = 'Not drawn';
+export function undrawnText(count: number): string {
+  return count === 1
+    ? '1 relationship between other elements is not drawn in this view. It is listed here.'
+    : `${count} relationships between other elements are not drawn in this view. They are listed here.`;
+}
+
 export function tooManyText(count: number, max: number): string {
   return `This map has ${count} elements, more than the ${max} that stay readable. Filter it by type or environment, switch to the Screens view, or pick an element with "Find a node…" to focus on it.`;
 }

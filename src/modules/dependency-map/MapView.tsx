@@ -127,16 +127,19 @@ export function MapView({
   const [keyboardKey, setKeyboardKey] = useState<string | null>(null);
   const [trail, setTrail] = useState<TrailEntry[]>([]);
   // The columns of the focus view that were opened with "+N more"; it starts again with every new focus.
-  const [opened, setOpened] = useState<{ focus: string | null; columns: ReadonlySet<string> }>({
-    focus: null,
-    columns: NO_COLUMNS,
-  });
+  const [opened, setOpened] = useState<{
+    focus: string | null;
+    columns: ReadonlySet<string>;
+    // The column opened or closed last: the view frames it again (see buildFocusScene).
+    framed: string | null;
+  }>({ focus: null, columns: NO_COLUMNS, framed: null });
 
   const data = source.data;
   const focus = params.focus;
   const focusKey = focus?.key ?? null;
   const focused = focus !== null;
   const expanded = opened.focus === focusKey ? opened.columns : NO_COLUMNS;
+  const framedColumn = opened.focus === focusKey ? opened.framed : null;
   const { showSkeleton, isSlow } = useDelayedLoading(source.status === 'loading');
 
   // "Show untraced only" is a filter of the All elements view.
@@ -152,7 +155,7 @@ export function MapView({
   const sceneState = useMemo<SceneState>(() => {
     if (shown === null) return null;
     if (focusKey !== null) {
-      const scene = buildFocusScene(shown, focusKey, params.depth, expanded);
+      const scene = buildFocusScene(shown, focusKey, params.depth, expanded, framedColumn);
       return scene === null ? null : { kind: 'scene', scene };
     }
     if (params.view === 'all') {
@@ -161,7 +164,7 @@ export function MapView({
         : { kind: 'scene', scene: buildAllScene(shown) };
     }
     return { kind: 'scene', scene: buildScreensScene(shown) };
-  }, [shown, focusKey, params.depth, params.view, expanded]);
+  }, [shown, focusKey, params.depth, params.view, expanded, framedColumn]);
   const scene = sceneState?.kind === 'scene' ? sceneState.scene : null;
   const flow = useMemo(() => (scene === null ? null : sceneToFlow(scene)), [scene]);
   const sceneKeys = useMemo(() => new Set(scene?.nodes.map((box) => box.key) ?? []), [scene]);
@@ -249,7 +252,7 @@ export function MapView({
         const column = key.slice(MORE_PREFIX.length);
         const columns = new Set(expanded);
         if (!columns.delete(column)) columns.add(column);
-        setOpened({ focus: focusKey, columns });
+        setOpened({ focus: focusKey, columns, framed: column });
         return;
       }
       const node = index?.nodesByKey.get(key);
@@ -479,6 +482,7 @@ export function MapView({
               node={selectedNode}
               index={index}
               focusedKey={focusKey}
+              notDrawn={scene?.undrawn}
               onSelectNode={activate}
               onFocus={focusOn}
               onClose={focused ? undefined : close}

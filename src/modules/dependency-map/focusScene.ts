@@ -1,6 +1,6 @@
 // focusScene: the focus view (D-114): one element in the middle, what comes before it on the left and what comes after it on
 // the right, by the flow of the data.
-// buildFocusScene(data, centerKey, depth, expanded?) -> Scene | null (null when the element is not in the graph).
+// buildFocusScene(data, centerKey, depth, expanded?, framedColumn?) -> Scene | null (null when the element is not in the graph).
 //
 // Which side a neighbor goes on is decided by which end of the edge is UPSTREAM (the one the data or the control comes from):
 //   CREATES        the screen that creates the variable is upstream           (source)
@@ -13,7 +13,9 @@
 //                  WRITE: the screen is upstream, the element it writes is downstream, it leaves it        (source)
 // A neighbor upstream of the center goes to the LEFT; one downstream goes to the RIGHT. A neighbor appears ONCE: if it has
 // relations in both directions with the center it goes to the left, and its edges keep their real direction.
-// Depth 2 adds one more column on each side: what is next to the neighbors, on the side of the neighbor, never twice.
+// Depth 2 adds one more column on each side: what is next to the neighbors, on the side of the neighbor, never twice. At depth 2
+// only the lines between NEIGHBOR columns are drawn (center - 1 - 2); the ones that jump a column, join two boxes of the same
+// column or go from one side to the other are left out (`undrawn` has them, the side panel lists them and says how many).
 //
 // The focused element is the one that stands out: its box is a little bigger than the others (the view marks it with
 // "Focused" and a thicker border), it is in the column of the middle, and the first view frames it and its neighbors of depth 1
@@ -81,6 +83,7 @@ export function buildFocusScene(
   centerKey: string,
   depth: number,
   expanded: ReadonlySet<string> = new Set(),
+  framedColumn: string | null = null,
 ): Scene | null {
   const nodesByKey = new Map(data.nodes.map((node) => [node.key, node]));
   if (!nodesByKey.has(centerKey)) return null;
@@ -183,10 +186,29 @@ export function buildFocusScene(
   });
   const visibleUnits = new Set(shown.flat());
 
-  // The lines between the boxes that are shown, and how many ports each box needs.
-  const drawn = edges.filter(
+  // The lines between the boxes that are shown, and how many ports each box needs. At depth 2 only the lines between
+  // NEIGHBOR columns are drawn (center - 1 - 2): one that jumps a column, joins two boxes of a column or goes from one side to
+  // the other would cross the whole map. They stay in the side panel, which says how many are left out.
+  const columnIndexOf = new Map<string, number>();
+  shown.forEach((column, index) => {
+    for (const unit of column) columnIndexOf.set(unit, index);
+  });
+  const shownEdges = edges.filter(
     (edge) => visibleUnits.has(unitOf(edge.source)) && visibleUnits.has(unitOf(edge.target)),
   );
+  const undrawnEdges =
+    depth >= 2
+      ? shownEdges.filter((edge) => {
+          const from = unitOf(edge.source);
+          const to = unitOf(edge.target);
+          return (
+            from !== to &&
+            Math.abs((columnIndexOf.get(from) ?? 0) - (columnIndexOf.get(to) ?? 0)) !== 1
+          );
+        })
+      : [];
+  const notDrawn = new Set(undrawnEdges);
+  const drawn = shownEdges.filter((edge) => !notDrawn.has(edge));
   const lines = groupEdges(
     drawn,
     'all',
@@ -226,7 +248,23 @@ export function buildFocusScene(
         crossings[gap] = (crossings[gap] ?? 0) + 1;
   }
 
-  const fitKeys = [centerUnit, ...[...firstRing.keys()].filter((unit) => visibleUnits.has(unit))];
+  // The first view frames the focused element and its neighbors. After a column was opened or closed with "+N more" (`framedColumn`)
+  // it frames that whole column instead, with its card.
+  const framedIndex =
+    framedColumn === null ? -1 : COLUMN_IDS.indexOf(framedColumn as (typeof COLUMN_IDS)[number]);
+  const fit =
+    framedColumn !== null && framedIndex >= 0
+      ? {
+          keys: [
+            ...(shown[framedIndex] ?? []),
+            ...(moreOf.has(framedIndex) ? [moreKey(framedColumn)] : []),
+          ],
+          anchorKey: null,
+        }
+      : {
+          keys: [centerUnit, ...[...firstRing.keys()].filter((unit) => visibleUnits.has(unit))],
+          anchorKey: centerUnit,
+        };
 
   return buildRouted((gapScale) => {
     const nodeGap = snapUp(NODE_GAP * gapScale);
@@ -302,10 +340,11 @@ export function buildFocusScene(
       nodes,
       edges: lines,
       bounds: NO_BOUNDS,
-      fit: { keys: fitKeys, anchorKey: centerUnit },
+      fit,
       failures: 0,
       routingMs: 0,
       attempts: 1,
+      undrawn: undrawnEdges,
     };
   });
 }

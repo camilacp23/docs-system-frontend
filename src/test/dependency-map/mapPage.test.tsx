@@ -87,14 +87,14 @@ describe('dependency map: the graph', () => {
     expect(button).toHaveFocus();
   });
 
-  it('has the zoom controls, and the mini map only when the map does not fit the canvas', async () => {
+  it('has the zoom controls, and no mini map until the visitor asks for it', async () => {
     await renderAll();
     await node('Screen Inicio, Approved');
 
     for (const name of ['Zoom In', 'Zoom Out', 'Fit View']) {
       expect(screen.getByRole('button', { name })).toBeInTheDocument();
     }
-    // The 13 elements fit: no mini map.
+    // The mini map is off by default (the "Minimap" button turns it on).
     expect(screen.queryByRole('img', { name: 'Minimap' })).not.toBeInTheDocument();
   });
 

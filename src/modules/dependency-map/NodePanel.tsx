@@ -1,7 +1,7 @@
 // NodePanel: the side panel of the selected node (frames S-27b and S-28).
 // Props: node, index (the graph indexed by indexGraph), focusedKey (the node the map is focused on, if any),
 // onSelectNode(key) (an item of the panel was chosen: its panel opens), onFocus(node) (the "Focus on this node"
-// button), onClose (omitted in the focus view, where the panel always shows the element in the middle).
+// button), notDrawn (the relationships the focus view at depth 2 does not draw: a section says how many and lists them), onClose (omitted in the focus view, where the panel always shows the element in the middle).
 // It shows the type, the name, the tags of the node (documentation status, "Reserved", scope, "Untraced"), the link to
 // the page of the element (a component leads to the Components & navigation tab of its screen, D-102), for a screen the
 // link to its Miro diagram when it is an https address (another tab, rel="noopener noreferrer") and the connections
@@ -27,9 +27,9 @@ import {
 import { RESERVED_LABEL, toTagStatus } from '../screens/screenLabels';
 import { SCOPE_LABEL } from '../variables/variableLabels';
 
-import { NODE_TYPE_LABEL, UNTRACED_TAG_LABEL } from './graphLabels';
-import type { GraphNode } from './graphTypes';
-import { NO_CONNECTIONS_TEXT } from './mapTexts';
+import { EDGE_KIND_LABEL, NODE_TYPE_LABEL, UNTRACED_TAG_LABEL } from './graphLabels';
+import type { GraphEdge, GraphNode } from './graphTypes';
+import { NO_CONNECTIONS_TEXT, NOT_DRAWN_TITLE, undrawnText } from './mapTexts';
 import { miroHrefOf, nodeHref, nodeOpenLabel } from './nodeLinks';
 import { buildPanelSections, type GraphIndex } from './panelModel';
 
@@ -37,10 +37,14 @@ interface NodePanelProps {
   node: GraphNode;
   index: GraphIndex;
   focusedKey: string | null;
+  /** The relationships the map leaves out (focus view, depth 2): the panel says how many and lists them. */
+  notDrawn?: readonly GraphEdge[];
   onSelectNode: (key: string) => void;
   onFocus: (node: GraphNode) => void;
   onClose?: (() => void) | undefined;
 }
+
+const NO_EDGES: readonly GraphEdge[] = [];
 
 function iconType(node: GraphNode) {
   return node.type.toLowerCase() as 'screen' | 'variable' | 'collection' | 'component';
@@ -50,6 +54,7 @@ export function NodePanel({
   node,
   index,
   focusedKey,
+  notDrawn = NO_EDGES,
   onSelectNode,
   onFocus,
   onClose,
@@ -202,6 +207,43 @@ export function NodePanel({
             </ul>
           </section>
         ))
+      )}
+
+      {notDrawn.length > 0 && (
+        <section aria-labelledby="panel-not-drawn">
+          <h3
+            id="panel-not-drawn"
+            className="mb-1 text-nav-section font-bold tracking-wider text-ink-500 uppercase"
+          >
+            {NOT_DRAWN_TITLE}
+          </h3>
+          <p className="mb-1 text-small text-ink-500">{undrawnText(notDrawn.length)}</p>
+          <ul>
+            {notDrawn.map((edge) => {
+              const source = index.nodesByKey.get(edge.source);
+              const target = index.nodesByKey.get(edge.target);
+              if (!source || !target) return null;
+              return (
+                <li key={edge.id} className="border-b border-divider last:border-b-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSelectNode(source.key);
+                    }}
+                    className="flex w-full items-center justify-between gap-3 rounded-chip px-1 py-2 text-left hover:bg-accent-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
+                  >
+                    <span className="min-w-0 truncate font-mono text-label font-semibold text-identifier">
+                      {source.name} → {target.name}
+                    </span>
+                    <span className="shrink-0 text-small text-ink-500">
+                      {EDGE_KIND_LABEL[edge.kind]}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       )}
     </aside>
   );
