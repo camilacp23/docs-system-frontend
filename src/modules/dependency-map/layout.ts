@@ -13,6 +13,9 @@
 //      CALCULATION ONLY. The edges are drawn with their real direction. Self loops (which the API never sends) and
 //      repeated edges are ignored.
 //   2. Layers: longest path over the graph without cycles; a node sits one layer to the right of its farthest source.
+//      A piece wider than the canvas is folded into bands, like the lines of a text: a chain of 40 screens that navigate to
+//      one another would be 13,000 units wide and be drawn at a size nobody can read, so after about a canvas width the
+//      next layers continue in a band below.
 //   3. Disconnected pieces are laid out one by one and packed in rows (a shelf), biggest first, until the whole map has
 //      the proportions of the canvas, so many small pieces make a block and not a thin strip.
 //   4. Inside a layer, nodes are ordered by the barycenter of their neighbors (those on the left in the downward
@@ -27,6 +30,9 @@ export interface NodeSize {
   height: number;
 }
 
+/** A screen drawn as a card with its counters (Screens view). */
+export const SCREEN_CARD_SIZE: NodeSize = { width: 232, height: 108 };
+
 export const NODE_SIZE: Record<NodeType, NodeSize> = {
   SCREEN: { width: 216, height: 76 },
   VARIABLE: { width: 196, height: 66 },
@@ -40,6 +46,8 @@ export const LAYER_GAP = 96;
 export const NODE_GAP = 28;
 /** Gap between two disconnected pieces of the graph, in a row and between rows. */
 export const PIECE_GAP = 64;
+/** A piece narrower than this is never folded: it is about the width of the canvas. */
+export const MIN_WRAP_WIDTH = 1500;
 /** The proportions the packed map aims for: the canvas of the design is 1440 x 900. */
 export const CANVAS_ASPECT = 1440 / 900;
 /** How many times the order of the layers is improved (a downward and an upward sweep each time). */
@@ -216,7 +224,16 @@ interface PlacedPiece {
   firstNode: number;
 }
 
-export function computeLayout(data: LayoutInput, sizeOf: SizeOf = sizeByType): LayoutResult {
+export interface LayoutOptions {
+  /** The piece that holds this node goes first (top left): App (OnStart) opens the Screens view. */
+  firstKey?: string;
+}
+
+export function computeLayout(
+  data: LayoutInput,
+  sizeOf: SizeOf = sizeByType,
+  options: LayoutOptions = {},
+): LayoutResult {
   const started = performance.now();
   const count = data.nodes.length;
   const keys = data.nodes.map((node) => node.key);
@@ -248,41 +265,81 @@ export function computeLayout(data: LayoutInput, sizeOf: SizeOf = sizeByType): L
         0,
       ),
     );
-    const height = Math.max(0, ...heights);
-    const positions = new Map<string, Position>();
-    let left = 0;
-    layers.forEach((column, layerIndex) => {
-      let y = (height - (heights[layerIndex] ?? 0)) / 2;
-      let width = 0;
-      for (const node of column) {
-        const size = sizes[node] ?? { width: 0, height: 0 };
-        positions.set(keys[node] ?? '', { x: Math.round(left), y: Math.round(y) });
-        y += size.height + NODE_GAP;
-        width = Math.max(width, size.width);
+    const widths = layers.map((column) =>
+      column.reduce((most, node) => Math.max(most, sizes[node]?.width ?? 0), 0),
+    );
+
+    // Fold the layers into bands when the piece is wider than the canvas.
+    const area = layers.reduce(
+      (sum, _column, index) => sum + ((widths[index] ?? 0) + LAYER_GAP) * (heights[index] ?? 0),
+      0,
+    );
+    const wrapWidth = Math.max(
+      MIN_WRAP_WIDTH,
+      Math.max(0, ...widths),
+      Math.sqrt(area * CANVAS_ASPECT),
+    );
+    const bands: number[][] = [];
+    let band: number[] = [];
+    let used = 0;
+    layers.forEach((_column, index) => {
+      const width = widths[index] ?? 0;
+      if (band.length > 0 && used + width > wrapWidth) {
+        bands.push(band);
+        band = [];
+        used = 0;
       }
-      left += width + LAYER_GAP;
+      band.push(index);
+      used += width + LAYER_GAP;
     });
+    bands.push(band);
+
+    const positions = new Map<string, Position>();
+    let top = 0;
+    let pieceWidth = 0;
+    for (const indexes of bands) {
+      const bandHeight = Math.max(0, ...indexes.map((index) => heights[index] ?? 0));
+      let left = 0;
+      for (const index of indexes) {
+        let y = top + (bandHeight - (heights[index] ?? 0)) / 2;
+        for (const node of layers[index] ?? []) {
+          positions.set(keys[node] ?? '', { x: Math.round(left), y: Math.round(y) });
+          y += (sizes[node]?.height ?? 0) + NODE_GAP;
+        }
+        left += (widths[index] ?? 0) + LAYER_GAP;
+      }
+      pieceWidth = Math.max(pieceWidth, left - LAYER_GAP);
+      top += bandHeight + PIECE_GAP;
+    }
     return {
       positions,
-      width: Math.max(0, left - LAYER_GAP),
-      height,
+      width: Math.max(0, pieceWidth),
+      height: Math.max(0, top - PIECE_GAP),
       firstNode: members[0] ?? 0,
     };
   });
 
-  return { positions: packPieces(pieces), durationMs: performance.now() - started };
+  return {
+    positions: packPieces(pieces, options.firstKey),
+    durationMs: performance.now() - started,
+  };
 }
 
 /**
  * Step 3: the pieces go in rows, biggest first (ties by their first node), and a row is closed when the next piece would pass
  * the width that gives the whole map the proportions of the canvas. One piece stays where it is.
  */
-function packPieces(pieces: readonly PlacedPiece[]): Map<string, Position> {
+function packPieces(pieces: readonly PlacedPiece[], firstKey?: string): Map<string, Position> {
   const positions = new Map<string, Position>();
   if (pieces.length === 1) return new Map(pieces[0]?.positions);
 
+  const holdsFirst = (piece: PlacedPiece) =>
+    firstKey !== undefined && piece.positions.has(firstKey) ? 0 : 1;
   const ordered = [...pieces].sort(
-    (a, b) => b.width * b.height - a.width * a.height || a.firstNode - b.firstNode,
+    (a, b) =>
+      holdsFirst(a) - holdsFirst(b) ||
+      b.width * b.height - a.width * a.height ||
+      a.firstNode - b.firstNode,
   );
   const totalArea = ordered.reduce(
     (sum, piece) => sum + (piece.width + PIECE_GAP) * (piece.height + PIECE_GAP),

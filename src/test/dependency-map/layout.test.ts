@@ -208,6 +208,45 @@ describe('computeLayout', () => {
     expect(toPlain(computeLayout(data).positions)).toBe(toPlain(positions));
   });
 
+  it('folds a long chain into bands instead of one 13,000 unit strip', () => {
+    // 40 screens that navigate to one another in a line: the case that made the first map unreadable.
+    const data: GraphData = {
+      nodes: Array.from({ length: 40 }, (_, index) => screenNode(index + 1, `s${index + 1}`)),
+      edges: Array.from({ length: 39 }, (_, index) =>
+        navigates(index + 1, `screen:${index + 1}`, `screen:${index + 2}`),
+      ),
+    };
+    const { positions } = computeLayout(data);
+    let width = 0;
+    let height = 0;
+    for (const node of data.nodes) {
+      const position = at(positions, node.key);
+      width = Math.max(width, position.x + NODE_SIZE.SCREEN.width);
+      height = Math.max(height, position.y + NODE_SIZE.SCREEN.height);
+    }
+    expect(width).toBeLessThan(2000);
+    expect(width / height).toBeLessThan(3.5);
+    expect(width / height).toBeGreaterThan(0.8);
+    // The chain still starts at the top left and goes on from left to right inside a band.
+    expect(at(positions, 'screen:1')).toEqual({ x: 0, y: 0 });
+    expect(at(positions, 'screen:2').x).toBeGreaterThan(at(positions, 'screen:1').x);
+    expectNoOverlap(data, positions);
+    expect(toPlain(computeLayout(data).positions)).toBe(toPlain(positions));
+  });
+
+  it('does not fold a short chain: it stays in one band', () => {
+    const data: GraphData = {
+      nodes: Array.from({ length: 4 }, (_, index) => screenNode(index + 1, `s${index + 1}`)),
+      edges: [
+        navigates(1, 'screen:1', 'screen:2'),
+        navigates(2, 'screen:2', 'screen:3'),
+        navigates(3, 'screen:3', 'screen:4'),
+      ],
+    };
+    const { positions } = computeLayout(data);
+    for (const node of data.nodes) expect(at(positions, node.key).y).toBe(0);
+  });
+
   it('does not move a graph that is one piece when it is packed', () => {
     const data: GraphData = {
       nodes: [screenNode(1, 'a'), screenNode(2, 'b')],

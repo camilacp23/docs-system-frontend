@@ -39,6 +39,13 @@ export const ACCESS_MODE_LABEL: Record<AccessMode, string> = {
   READ_WRITE: 'Read-write',
 };
 
+/** The access mode on a drawn edge (focus view): READ_WRITE reads "Read / Write" there. */
+export const ACCESS_EDGE_LABEL: Record<AccessMode, string> = {
+  READ: 'Read',
+  WRITE: 'Write',
+  READ_WRITE: 'Read / Write',
+};
+
 export const ASSIGNMENT_FUNCTION_LABEL: Record<AssignmentFunction, string> = {
   SET: 'Set',
   UPDATE_CONTEXT: 'UpdateContext',
