@@ -22,6 +22,10 @@ export interface RenderMapOptions {
 }
 
 export async function renderMap(options: RenderMapOptions = {}) {
+  // The route loads the map lazily. The first import in a cold test worker transforms and evaluates React Flow, which
+  // under load takes longer than the 1 s of findBy; loading the module first makes the wait one for the work, not the
+  // clock (no timeout is raised). Importing it again later costs nothing: it is cached.
+  await import('../../modules/dependency-map/DependencyMapPage');
   let api: ReturnType<typeof makeDependenciesApi> | undefined;
   const view = await renderApp({
     role: options.role ?? 'DEVELOPER',
