@@ -29,6 +29,7 @@ const hasOwnPage = (path: string) =>
   path.startsWith('/variables') ||
   path.startsWith('/collections') ||
   path.startsWith('/screens') ||
+  path === '/dependency-map' ||
   path === '/admin/users' ||
   path === '/admin/applications';
 
