@@ -157,6 +157,43 @@ describe('logout', () => {
     b.manager.stop();
   });
 
+  it('keeps why the user signed out (own role or password change) and tells the other tabs', async () => {
+    new FakeBackend().install();
+    const locks = new FakeLocks();
+    const bus = new FakeChannelBus();
+    const a = tab(locks, bus);
+    const b = tab(locks, bus);
+    await a.manager.login(EMAIL, PASSWORD);
+    await tick();
+
+    await a.manager.logout('ROLE_CHANGED');
+    await tick();
+    expect(a.manager.getSnapshot()).toMatchObject({
+      status: 'anonymous',
+      endReason: 'logout',
+      endNotice: 'ROLE_CHANGED',
+    });
+    expect(b.manager.getSnapshot()).toMatchObject({
+      endReason: 'logout',
+      endNotice: 'ROLE_CHANGED',
+    });
+
+    // A new sign-in forgets the notice.
+    await a.manager.login(EMAIL, PASSWORD);
+    expect(a.manager.getSnapshot().endNotice).toBeNull();
+    a.manager.stop();
+    b.manager.stop();
+  });
+
+  it('a plain logout carries no notice', async () => {
+    new FakeBackend().install();
+    const a = tab(new FakeLocks(), new FakeChannelBus());
+    await a.manager.login(EMAIL, PASSWORD);
+    await a.manager.logout();
+    expect(a.manager.getSnapshot().endNotice).toBeNull();
+    a.manager.stop();
+  });
+
   it('clears the session even when the call fails, and rethrows', async () => {
     const spy = new FakeBackend().install();
     const manager = new SessionManager({ lock: new FakeLocks(), createChannel: () => null });
@@ -178,6 +215,35 @@ describe('logout', () => {
     await rejected;
     expect(manager.getSnapshot().status).toBe('anonymous');
     expect(manager.getAccessToken()).toBeNull();
+  });
+});
+
+describe('replaceUser', () => {
+  it('swaps the user, keeps the token and the end of the session, and tells the other tabs', async () => {
+    new FakeBackend().install();
+    const locks = new FakeLocks();
+    const bus = new FakeChannelBus();
+    const a = tab(locks, bus);
+    const b = tab(locks, bus);
+    await a.manager.login(EMAIL, PASSWORD);
+    await tick();
+    const before = a.manager.getSnapshot();
+    const token = a.manager.getAccessToken();
+
+    a.manager.replaceUser({ ...TEST_USER, name: 'Ana M. Mora' });
+    await tick();
+    expect(a.manager.getSnapshot().user?.name).toBe('Ana M. Mora');
+    expect(a.manager.getSnapshot().endsAt).toBe(before.endsAt);
+    expect(a.manager.getAccessToken()).toBe(token);
+    expect(b.manager.getSnapshot().user?.name).toBe('Ana M. Mora');
+    a.manager.stop();
+    b.manager.stop();
+  });
+
+  it('does nothing without a session', () => {
+    const manager = new SessionManager({ lock: new FakeLocks(), createChannel: () => null });
+    manager.replaceUser(TEST_USER);
+    expect(manager.getSnapshot().user).toBeNull();
   });
 });
 

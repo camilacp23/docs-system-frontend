@@ -2,12 +2,12 @@
 // components and navigation, variables and collections with their origin rows, loading and error states, the
 // breadcrumb and the Reader view. Comments is not drawn yet; Future to do has its own file (screenJiraTab).
 import { screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';
 import { makeScreenDetail } from '../helpers/fakeScreensApi';
 import { renderScreens } from '../helpers/renderScreens';
+import { setupUser } from '../helpers/setupUser';
 
 /** The detail of Detalle once it is on screen. */
 async function open(options: Parameters<typeof renderScreens>[0] = {}) {
@@ -103,7 +103,7 @@ describe('screen detail: header', () => {
 
 describe('screen detail: tabs in the URL', () => {
   it('starts on Template without a parameter and follows the tab in the URL', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await open();
 
     expect(screen.getByRole('tab', { name: 'Template', selected: true })).toBeInTheDocument();
@@ -136,7 +136,7 @@ describe('screen detail: tabs in the URL', () => {
   });
 
   it('moves between tabs with the arrow keys and the Back button', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await open();
 
     screen.getByRole('tab', { name: 'Template' }).focus();
@@ -289,7 +289,7 @@ describe('screen detail: Components & navigation tab', () => {
   });
 
   it('follows a navigation to the other screen', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await openTab();
 
     await user.click(
@@ -379,7 +379,7 @@ describe('screen detail: Variables & collections tab', () => {
 
 describe('screen detail: states', () => {
   it('shows "This screen doesn\'t exist" for an unknown or malformed id, with a way back', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await renderScreens({ path: '/screens/999' });
 
     expect(await screen.findByText("This screen doesn't exist")).toBeInTheDocument();
@@ -397,7 +397,7 @@ describe('screen detail: states', () => {
   });
 
   it('shows the server error state with a retry', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await renderScreens({
       path: '/screens/12',
       prepare: (api) => {

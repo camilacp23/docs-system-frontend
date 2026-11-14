@@ -4,7 +4,6 @@
 // row (by the position of the body that was sent, also after the rows were moved), 412 keeping what the user edited,
 // the application archived, offline, and the Reader.
 import { act, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';
@@ -12,9 +11,8 @@ import type { CollectionWrite } from '../../modules/collections/collectionTypes'
 import { makeCollection, makeField } from '../helpers/fakeCollectionsApi';
 import { makeApplication } from '../helpers/renderApp';
 import { renderCollections, type RenderCollectionsOptions } from '../helpers/renderCollections';
-import { setupUser } from '../helpers/setupUser';
+import { setupUser, type User } from '../helpers/setupUser';
 
-type User = ReturnType<typeof userEvent.setup>;
 type Body = Required<CollectionWrite>;
 
 const render = (extra: Partial<RenderCollectionsOptions> = {}) =>
@@ -140,7 +138,7 @@ describe('edit collection: the form', () => {
   });
 
   it('goes back to the detail with Cancel', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await render();
     await ready();
 
@@ -186,7 +184,7 @@ describe('edit collection: the form', () => {
 
 describe('edit collection: the PUT is the complete representation', () => {
   it('sends the three arrays, with the ids of the server, even if the user touched nothing', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api, router } = await render();
     const { save } = await ready();
     await waitFor(() => {
@@ -208,7 +206,7 @@ describe('edit collection: the PUT is the complete representation', () => {
   });
 
   it('sends the three arrays when only the description changed', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await render();
     const { save } = await ready();
     await waitFor(() => {
@@ -225,7 +223,7 @@ describe('edit collection: the PUT is the complete representation', () => {
   });
 
   it('sends empty arrays, not missing ones, for a collection that has no assignments and no derivations', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await render({ path: '/collections/12/edit' });
     await screen.findByRole('heading', { name: /Edit colTemporal/ });
 
@@ -241,7 +239,7 @@ describe('edit collection: the PUT is the complete representation', () => {
   });
 
   it('sends empty arrays when the user removes every item', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await render();
     const { save } = await ready();
     await waitFor(() => {
@@ -270,7 +268,7 @@ describe('edit collection: the PUT is the complete representation', () => {
 
   // The only test of this form that types key by key (the others paste: how fast a text is typed is not their subject).
   it('follows the name key by key: a format error is shown on it and the PUT carries the name typed right', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await render();
     const { save } = await ready();
     const name = () => screen.getByLabelText(/^Name\b(?! of)/);
@@ -338,7 +336,7 @@ describe('edit collection: the PUT is the complete representation', () => {
   });
 
   it('turns the order of the rows into `position` when a field is moved up or down', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await render();
     const { save } = await ready();
     await waitFor(() => {
@@ -367,7 +365,7 @@ describe('edit collection: the PUT is the complete representation', () => {
   });
 
   it('moves a row with the keyboard, keeps the focus on the button and says the new position', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await render();
     await ready();
 
@@ -387,7 +385,7 @@ describe('edit collection: the PUT is the complete representation', () => {
   });
 
   it('keeps the focus on the neighbour button when the moved row reaches the edge', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await render();
     await ready();
 
@@ -400,7 +398,7 @@ describe('edit collection: the PUT is the complete representation', () => {
   });
 
   it('does not send a removed row and sends the remaining ones with consecutive positions', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await render();
     const { save } = await ready();
     await waitFor(() => {
@@ -428,7 +426,7 @@ describe('edit collection: the PUT is the complete representation', () => {
   });
 
   it('derives from several collections of the application and sends their ids', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await render();
     const { save } = await ready();
     await waitFor(() => {
@@ -446,7 +444,7 @@ describe('edit collection: the PUT is the complete representation', () => {
   });
 
   it('suggests the function of the scope of the chosen variable, without blocking another choice', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await render();
     await ready();
 
@@ -465,7 +463,7 @@ describe('edit collection: the PUT is the complete representation', () => {
   });
 
   it('checks only the rules of the contract and lists the controls that need attention', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await render();
     const { save } = await ready();
 
@@ -508,7 +506,7 @@ describe('edit collection: errors on the exact field or row', () => {
   }
 
   it('puts DUPLICATE_NAME on the name', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await render();
     await ready();
 
@@ -523,7 +521,7 @@ describe('edit collection: errors on the exact field or row', () => {
   });
 
   it('puts a repeated field name on the row where it was sent, also after the rows were moved', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await render();
     await ready();
 
@@ -550,7 +548,7 @@ describe('edit collection: errors on the exact field or row', () => {
   });
 
   it('puts a repeated assignment on its row', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await render();
     await ready();
 
@@ -574,7 +572,7 @@ describe('edit collection: errors on the exact field or row', () => {
   });
 
   it('puts SCOPE_MISMATCH on the function of its row', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await render();
     await ready();
 
@@ -596,7 +594,7 @@ describe('edit collection: errors on the exact field or row', () => {
   });
 
   it('puts CONTEXT_SCREEN_MISMATCH on the screen of its row (a variable with an origin screen)', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await render();
     await ready();
 
@@ -615,7 +613,7 @@ describe('edit collection: errors on the exact field or row', () => {
   });
 
   it('puts CONTEXT_SCREEN_MISMATCH of a variable without origin screen on the screen of its row', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await render();
     await ready();
 
@@ -643,7 +641,7 @@ describe('edit collection: errors on the exact field or row', () => {
   });
 
   it('puts CROSS_APPLICATION on the variable, on the screen or on the derivation it points to', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await render();
     await ready();
 
@@ -682,7 +680,7 @@ describe('edit collection: errors on the exact field or row', () => {
   });
 
   it('puts the 404 of a nested id on its row, with the catalog text', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await render();
     await ready();
 
@@ -725,7 +723,7 @@ describe('edit collection: errors on the exact field or row', () => {
   });
 
   it('puts the 404 of a reference that does not exist on the cell it points to', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await render();
     await ready();
 
@@ -748,7 +746,7 @@ describe('edit collection: errors on the exact field or row', () => {
   });
 
   it('puts the rules of derivedFrom (self and unique) and of an environment on their field', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await render();
     await ready();
 
@@ -776,7 +774,7 @@ describe('edit collection: errors on the exact field or row', () => {
   });
 
   it('puts an error that points to no field of the form in the form banner', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await render();
     await ready();
 
@@ -800,7 +798,7 @@ describe('edit collection: 412 (S-44)', () => {
   }
 
   it('keeps what the user edited, disables Save and offers Reload and Keep my changes visible', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await render();
     const { save } = await ready();
     await otherPersonSaves(api);
@@ -830,7 +828,7 @@ describe('edit collection: 412 (S-44)', () => {
   });
 
   it('loads the other version with Reload, discarding the edits, and saves with the new ETag', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await render();
     const { save } = await ready();
     await otherPersonSaves(api);
@@ -907,7 +905,7 @@ describe('edit collection: write blocks and roles', () => {
   });
 
   it('goes back to the list when the application is switched from the shell', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await render({
       applications: [makeApplication(1, { name: 'SAR' }), makeApplication(2, { name: 'Billing' })],
     });

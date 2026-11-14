@@ -3,7 +3,8 @@
 // 401 INVALID_CREDENTIALS -> the same danger banner whatever the cause (S-01b, D-27); 429 -> warning banner with the
 // minutes of `details` and a disabled button counting down "Try again in mm:ss" from Retry-After (seconds; if it is
 // missing, details.minutes x 60); anything else -> its catalog text. On success the session changes and the route
-// (GuestOnly) sends the user to the remembered page or /dashboard. Below 1280 px the left panel is hidden (SDD 7.3.7).
+// (GuestOnly) sends the user to the remembered page or /dashboard. When the user's own change of role or password
+// ended the session, an info banner says why (SessionSnapshot.endNotice). Below 1280 px the left panel is hidden (SDD 7.3.7).
 import { Clock, Lock, Mail } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
@@ -25,6 +26,11 @@ import { formatCountdown, useCountdown } from './useCountdown';
 
 export const EMAIL_ERROR_TEXT = 'Enter a valid email, e.g. name@domain.com.';
 export const PASSWORD_ERROR_TEXT = 'Enter your password.';
+/** Shown above the form when the user's own change of role or password ended their session (the server revokes it). */
+const SIGNED_OUT_NOTICE_TEXT = {
+  ROLE_CHANGED: 'Your role changed. Sign in again to continue.',
+  PASSWORD_CHANGED: 'Your password changed. Sign in again to continue.',
+} as const;
 
 const HIGHLIGHTS = [
   { type: 'screen', text: 'Screens' },
@@ -58,7 +64,7 @@ function waitSeconds(error: {
 }
 
 export function LoginPage() {
-  const { login } = useSession();
+  const { login, endNotice } = useSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -154,6 +160,9 @@ export function LoginPage() {
               </h1>
               <p className="text-body-lg text-ink-500">Use your department account.</p>
             </div>
+            {endNotice !== null && !banner && (
+              <Banner tone="info">{SIGNED_OUT_NOTICE_TEXT[endNotice]}</Banner>
+            )}
             {banner && (
               <Banner
                 tone={banner.tone}

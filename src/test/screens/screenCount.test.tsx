@@ -1,13 +1,13 @@
 // The screen count of the application card (D-98): the total of GET /screens with pageSize 1, App (OnStart)
 // included; it follows the application and is read again after a screen is created or deleted.
 import { screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';
 import { makeScreenDetail } from '../helpers/fakeScreensApi';
 import { makeApplication } from '../helpers/renderApp';
 import { renderScreens, sampleScreens } from '../helpers/renderScreens';
+import { setupUser } from '../helpers/setupUser';
 
 /** The sidebar card of the application. */
 const card = () => screen.getByText('Application').parentElement?.parentElement as HTMLElement;
@@ -55,7 +55,7 @@ describe('application card: screen count', () => {
   });
 
   it('follows the selected application', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await renderScreens({
       path: '/dashboard',
       screens: [
@@ -74,7 +74,7 @@ describe('application card: screen count', () => {
   });
 
   it('is read again after a screen is created', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await renderScreens({ path: '/screens?new=1' });
     expect(await within(card()).findByText('Power Apps · 5 screens')).toBeInTheDocument();
     const dialog = within(await screen.findByRole('dialog'));
@@ -87,7 +87,7 @@ describe('application card: screen count', () => {
   });
 
   it('is read again after a screen is deleted', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await renderScreens({ path: '/screens/13' });
     expect(await within(card()).findByText('Power Apps · 5 screens')).toBeInTheDocument();
 

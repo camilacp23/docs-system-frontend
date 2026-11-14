@@ -2,7 +2,6 @@
 // assignments, derivations; the API gives no screen links, D-79), Delete disabled until the impact is known, the
 // server refusals in the modal, archived and offline, and the list after deleting.
 import { act, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';
@@ -11,8 +10,7 @@ import { AUDIT_NOTE_TEXT } from '../../modules/shared/DeleteImpactBody';
 import { makeCollection, makeField } from '../helpers/fakeCollectionsApi';
 import { makeApplication } from '../helpers/renderApp';
 import { renderCollections } from '../helpers/renderCollections';
-
-type User = ReturnType<typeof userEvent.setup>;
+import { setupUser, type User } from '../helpers/setupUser';
 
 async function openDelete(user: User, name: string) {
   await screen.findByRole('link', { name });
@@ -58,7 +56,7 @@ describe('impactSummary', () => {
 
 describe('delete collection', () => {
   it('asks with the impact, deletes, says so and refreshes the list and the counts', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api, router } = await renderCollections();
 
     const dialog = await openDelete(user, 'colClientes');
@@ -85,7 +83,7 @@ describe('delete collection', () => {
   });
 
   it('says so when the collection has nothing attached', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await renderCollections({ collections: [makeCollection(1, 'colVacia')] });
 
     const dialog = await openDelete(user, 'colVacia');
@@ -95,7 +93,7 @@ describe('delete collection', () => {
   });
 
   it('keeps Delete disabled until the impact is known and offers to try again if it fails', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await renderCollections({
       prepare: (api) => {
         api.failNext(
@@ -117,7 +115,7 @@ describe('delete collection', () => {
   });
 
   it('cancels without deleting and returns the focus to the row menu', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await renderCollections();
 
     const dialog = await openDelete(user, 'colClientes');
@@ -130,7 +128,7 @@ describe('delete collection', () => {
   });
 
   it('shows the catalog message of a server refusal inside the modal', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await renderCollections();
 
     const dialog = await openDelete(user, 'colClientes');
@@ -145,7 +143,7 @@ describe('delete collection', () => {
   });
 
   it('goes back one page when the last row of a page is deleted', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const many = Array.from({ length: 21 }, (_, index) =>
       makeCollection(100 + index, `col${String(index).padStart(2, '0')}`),
     );
@@ -165,7 +163,7 @@ describe('delete collection', () => {
   });
 
   it('disables Delete with the reason while the browser is offline', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await renderCollections();
 
     const dialog = await openDelete(user, 'colClientes');
@@ -182,7 +180,7 @@ describe('delete collection', () => {
   });
 
   it('offers no delete when the application is archived', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await renderCollections({
       applications: [makeApplication(1, { name: 'SAR', status: 'ARCHIVED' })],
     });

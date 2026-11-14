@@ -526,7 +526,12 @@ export interface paths {
         };
         /**
          * Get a screen with its template, components and links
-         * @description Roles: all.
+         * @description Roles: all. The `ETag` is `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"`:
+         *     the counters change without touching `updatedAt` (Jira tickets created,
+         *     refreshed or updated by the webhook, comments), so `If-None-Match` compares
+         *     all of it and answers 304 only when neither the screen nor either counter
+         *     changed. The same `ETag` is sent by the answers of `POST /screens`,
+         *     `PUT /screens/{id}`, `PUT /screens/{id}/status` and `POST /screens/{id}/review`.
          */
         get: operations["getScreen"];
         /**
@@ -552,9 +557,13 @@ export interface paths {
          *     or deleted here, even when they are missing from the body. `usedIn = origin` in
          *     the body is a 400.
          *     `If-Match` is always checked when sent, also when the body changes nothing.
+         *     Only its `updatedAt` part is compared, inside the transaction: a change of
+         *     `pendingSubtasks` or `commentCount` between the read and the save is not a 412.
+         *     The former format `W/"<updatedAt ms>"` is accepted; a value in any other format
+         *     is a 412, whose `details.currentETag` is the full `ETag`.
          *     An update that changes nothing writes nothing: it answers 200 with the same
-         *     `ETag`, `updatedAt` and status. A change in any nested array also moves the
-         *     `ETag` of the screen.
+         *     `updatedAt` and status, and with the same `ETag` unless a counter changed. A
+         *     change in any nested array also moves the `ETag` of the screen.
          *     Resulting status: editing an APPROVED screen in any way (a column or a nested
          *     item) returns it to IN_PROGRESS; an UNDOCUMENTED screen in which a template
          *     field goes from no content to content (not null and not empty after trimming
@@ -630,7 +639,9 @@ export interface paths {
          *     not empty after trimming spaces).
          *     The errors are checked in this order: 400, 404, 422 APPLICATION_ARCHIVED,
          *     412, 422 INVALID_TRANSITION, 422 TEMPLATE_INCOMPLETE. `If-Match` is optional;
-         *     when sent it is compared with the screen locked inside the transaction.
+         *     when sent, its `updatedAt` part is compared with the screen locked inside the
+         *     transaction (same rule as `PUT /screens/{id}`: a change of the counters is not
+         *     a 412, and the former `W/"<updatedAt ms>"` format is accepted).
          *     Asking for the status the screen already has is a 422 INVALID_TRANSITION
          *     (`details { from, to }`, with `to` equal to `from`). TEMPLATE_INCOMPLETE applies
          *     only to IN_PROGRESS -> IN_REVIEW and lists in `details.fields` the template
@@ -884,7 +895,28 @@ export interface paths {
          * @description Roles: all. Built by joining the associative entities, the origin column,
          *     `component.screen_id`, and `dependency` (SDD Section 10). A graph is one
          *     resource, so it is not paginated; department scale is hundreds of nodes
-         *     (NFR-11). Optional filters reduce it.
+         *     (NFR-11). Optional filters reduce it. An `applicationId` that does not exist
+         *     (or is outside the `integer` range) is a 404.
+         *
+         *     Filters. `types` keeps only the nodes of those types (omitted = all four).
+         *     `environment` applies to `VARIABLE` and `COLLECTION` only (the ones present in
+         *     that environment); `SCREEN` and `COMPONENT` are never filtered by it, as in the
+         *     search. An edge whose end was left out is removed, so every edge points to two
+         *     nodes of the response.
+         *
+         *     Nodes and edges are variants (`GraphNode`, `GraphEdge`): each one declares only
+         *     its own fields, and a field that does not apply is absent, never null.
+         *
+         *     Order. The response is deterministic, because its `ETag` is a hash of the body.
+         *     Nodes: by type (`SCREEN`, `VARIABLE`, `COLLECTION`, `COMPONENT`) and then by `id`
+         *     ascending. Edges: by `kind` in the order `CONTAINS`, `CREATES`, `ACCESSES`,
+         *     `FEEDS`, `USES`, `DERIVES_FROM`, `NAVIGATES_TO` (SDD Table 63), then by the
+         *     number in the edge `id` and, if equal, by its prefix.
+         *
+         *     Navigation (FR-16). The Miro diagram of a screen is `miroLink` of its node. A
+         *     component belongs to the screen in `screenId`, which is present even when the
+         *     screen node was filtered out. The reserved App (OnStart) screen has
+         *     `isAppContext` true.
          */
         get: operations["getDependencyGraph"];
         put?: never;
@@ -904,7 +936,24 @@ export interface paths {
         };
         /**
          * Neighborhood of one element (FR-15, FR-16)
-         * @description Roles: all. Same shape as the graph, centered on one node.
+         * @description Roles: all. Same shape, variants and order as the graph (see `getDependencyGraph`),
+         *     centered on one node. It takes no `applicationId`: the application is the one of the
+         *     element, which is also the only application in the response. An element that does
+         *     not exist, or whose id is outside the `integer` range, is a 404. It accepts no
+         *     `types` or `environment` filter.
+         *
+         *     The response has the node `<type>:<id>` (for example `collection:21` for
+         *     `/dependencies/collections/21`) and the nodes reachable from it in at most `depth`
+         *     steps, following the edges in both directions. It has every edge of the application
+         *     between those nodes (not only the ones walked), so an edge between two neighbors is
+         *     included. A node or an edge appears once, also when the data has cycles (a collection
+         *     may derive from itself through others).
+         *
+         *     Source of the "Used by screens" card of a collection (S-15a, S-17). With `depth` 1
+         *     on a collection, the screens that use it are the `SCREEN` nodes joined to it by an
+         *     `ACCESSES` edge, and each edge gives the `accessMode` and `usedIn` of one link. A
+         *     screen may have several edges (one per `usedIn`), so the client groups them by
+         *     screen. The number of screens is the number of distinct sources.
          */
         get: operations["getNodeNeighborhood"];
         put?: never;
@@ -926,12 +975,43 @@ export interface paths {
          * Advanced search across documented elements (FR-17, FR-18)
          * @description Roles: all. The `query` and `filters` of SRS Table 25 are expressed as
          *     `q` plus one parameter per filter, consistent with the other listings.
-         *     `q` is optional (CP-03): a request may use filters only, but a request
-         *     without `q` and without any filter (`types`, `environment`,
-         *     `documentationStatus`, `scope`) returns 400 VALIDATION_ERROR (service rule).
-         *     Filters that apply only to some element types do not exclude the others:
-         *     `environment` applies to variables and collections, `documentationStatus`
-         *     to screens, and `scope` to variables.
+         *     `applicationId` is required, and one that does not exist (or is outside the
+         *     `integer` range) is a 404.
+         *
+         *     Text. `q` is optional (CP-03). It is trimmed before it is measured and must have
+         *     2 to 100 characters: one that is shorter once trimmed (for example only spaces) is a
+         *     400 with rule `minLength` on `q`. The search ignores case and accents: á, é, í, ó,
+         *     ú and ü match the vowel without the accent, in lower and upper case; ñ is not n.
+         *     `%` and `_` are ordinary characters.
+         *
+         *     Filters. `types`, `environment`, `documentationStatus` and `scope` are the filters. A
+         *     request with none of them and without `q` is a 400 with
+         *     `details.fields [{ field: q, rule: required }]`, and any one of them is enough, even
+         *     one that applies to none of the types selected. `types` is applied first. Then each
+         *     filter restricts only the types it applies to and leaves the others unfiltered:
+         *     `environment` applies to variables and collections, `documentationStatus` to
+         *     screens, and `scope` to variables.
+         *
+         *     What is searched. Screens: the name and the seven fields of the template. Variables:
+         *     the name and the description. Collections: the name, the description, the creation
+         *     condition and the names of its fields. Components: the name, the description, the
+         *     `onSelect` formula and the control `type`. A text also matches the `usedIn` of the
+         *     links of a variable or a collection, and the result is that variable or collection.
+         *
+         *     Results. There is one result per element, never one per link. `matchedIn` says where
+         *     the text was found; if it is found in several places, the first of this list wins:
+         *     `name`, `description`, `template`, `creationCondition`, `fieldName`, `onSelect`,
+         *     `type`, `usedIn`. Without `q` there is no text to find: `matchedIn` and `snippet`
+         *     are null. The `snippet` is plain text of up to 300 characters around the first
+         *     match, with an ellipsis where it was cut, and it is null when the match is the
+         *     name; for `usedIn` it is that `usedIn` (the one of the link with the lowest id).
+         *
+         *     Order. Exact name matches first (same case and accent rules), then by name
+         *     ascending, then by type (`SCREEN`, `VARIABLE`, `COLLECTION`, `COMPONENT`) and `id`.
+         *
+         *     Navigation (FR-18). `type` and `id` identify the element. A component also carries
+         *     its `screen`, and a variable the screen where it was created (null when it has none).
+         *     The variants (`SearchResult`) declare only their own fields.
          */
         get: operations["search"];
         put?: never;
@@ -951,8 +1031,33 @@ export interface paths {
         };
         /**
          * Documentation indicators (FR-19)
-         * @description Roles: all. Readers get the overview (aggregates only): `recentActivity`
-         *     is omitted for them, as SRS Table 26 grants Readers no audit access.
+         * @description Roles: all. An `applicationId` that does not exist (or is outside the `integer`
+         *     range) is a 404. An archived application has indicators like any other.
+         *
+         *     Documentation. The App (OnStart) screen counts in every figure of `documentation`.
+         *     `byStatus` always has the five statuses, also the ones that are 0, and adds up to
+         *     `totalScreens`. `approvedPercent` is `APPROVED` over `totalScreens`, as a number with
+         *     one decimal (rounded half up).
+         *
+         *     Variables and collections. `variables.untraced` counts the variables without an
+         *     origin screen. `collections.undocumented` counts the collections linked to no screen.
+         *
+         *     Jira. The figures of Jira always come from the local copy of the tickets, and this
+         *     operation never calls Jira (NFR-14). `jira.pendingSubtasks` is the number of Subtasks
+         *     of the application whose status category is not DONE. The Subtasks of each screen are
+         *     in `GET /screens` (`pendingSubtasks` of every screen, sortable with
+         *     `sort=-pendingSubtasks`). `jira.jiraAvailable` is true when the Jira client is
+         *     configured and its circuit breaker is not open; it does not ask Jira.
+         *     `jira.lastSyncedAt` is the latest time any ticket of the application was synchronized,
+         *     or null when there are none; the interface shows it as the age of the saved copy
+         *     when Jira is not available.
+         *
+         *     Recent activity. Administrators and Developers receive `recentActivity`: the 10 most
+         *     recent audit records of the application, newest first, of the whole team (not only the
+         *     caller's). Each one is a summary without the values (`oldValue`, `newValue`) or the
+         *     database role, because a Developer can only query their own actions in `GET /audit-log`.
+         *     Readers get the overview (SRS Table 26, `READER_OVERVIEW`): for them the
+         *     `recentActivity` key is absent (never null).
          */
         get: operations["getIndicators"];
         put?: never;
@@ -972,9 +1077,29 @@ export interface paths {
         };
         /**
          * Query the audit history (FR-21)
-         * @description Roles: Administrator (all records); Developer (own actions only: the
-         *     server forces `actorUserId` to the caller, and asking for another user
-         *     returns 403). Readers have no access. Newest first.
+         * @description Roles: Administrator (all records); Developer (own actions only). Readers have no
+         *     access (403 from `x-roles`). Newest first: `createdAt` descending and then `id`
+         *     descending, so the page is stable.
+         *
+         *     Developer (`DEVELOPER_OWN_ACTIONS`). Without `actorUserId` the server uses the caller.
+         *     Their own id is valid. Any other user is a 403 `FORBIDDEN` with the message of the
+         *     role and `details.reason = "OWN_ACTIONS"`. A malformed request is a 400 before it can
+         *     be a 403.
+         *
+         *     Filters. `applicationId` is a filter, not a parent: one that does not exist gives an
+         *     empty page, not a 404 (the records outlive what they describe, NFR-20).
+         *     `entityId` needs `entityType` (identifiers repeat between tables): without it the
+         *     answer is a 400 with rule `required` on `entityType`. `from` and `to` are ISO 8601
+         *     `date-time` values with a zone (`2026-11-01T00:00:00.000Z`); a date without a time is a
+         *     400 with rule `format`. Both limits are inclusive and are compared with `createdAt`;
+         *     `from` after `to` is a 400 with rule `range` on `to`.
+         *
+         *     Keys. The database stores column names, and this operation serves them in camelCase
+         *     (SDD Section 7.1): only the first-level keys of `oldValue` and `newValue` and the
+         *     items of `changedFields` are translated (`documentation_status` is
+         *     `documentationStatus`, `password_hash` is `passwordHash`, whose value is never
+         *     stored). The values are not touched, including the content of JSON columns such as
+         *     `report.parameters`. `entityType` keeps the name of the table.
          */
         get: operations["listAuditLog"];
         put?: never;
@@ -1530,6 +1655,31 @@ export interface components {
             description?: string | null;
         };
         /**
+         * @description A use of a variable or a collection by a component, as a screen returns it. A write
+         *     sends `targetId` instead of `target` (see `ComponentUseWrite`).
+         */
+        ComponentUse: {
+            id: number;
+            /** @enum {string} */
+            targetType: "VARIABLE" | "COLLECTION";
+            target: components["schemas"]["Ref"];
+            description: string | null;
+        };
+        /**
+         * @description A component of a screen, as a screen returns it. `uses` is always present (empty when
+         *     the component uses nothing) and is ordered by the name of the target and then by `id`.
+         *     A write sends `ComponentWrite`.
+         */
+        Component: {
+            id: number;
+            name: string;
+            /** @description Power Apps control type, free text (Button, Gallery, Text input...) */
+            type: string;
+            onSelect: string | null;
+            description: string | null;
+            uses: components["schemas"]["ComponentUse"][];
+        };
+        /**
          * @description Editable representation of a screen. The four lists are required (an empty
          *     list is valid; leaving one out is a 400); only `uses` of a component is
          *     optional. Limits: 300 components, 100 uses per component, 500 variable links,
@@ -1568,15 +1718,7 @@ export interface components {
         Screen: components["schemas"]["ScreenSummary"] & {
             miroLink: string | null;
             template: components["schemas"]["ScreenTemplate"];
-            components: (components["schemas"]["ComponentWrite"] & {
-                uses?: {
-                    id: number;
-                    /** @enum {string} */
-                    targetType: "VARIABLE" | "COLLECTION";
-                    target: components["schemas"]["Ref"];
-                    description?: string | null;
-                }[];
-            })[];
+            components: components["schemas"]["Component"][];
             variableLinks: {
                 id: number;
                 variable: components["schemas"]["Ref"];
@@ -1725,67 +1867,217 @@ export interface components {
             /** @description Required when returning */
             comment: string;
         };
-        GraphNode: {
+        /** @description A screen. `miroLink` is the diagram of FR-16; `isAppContext` marks the reserved App (OnStart) screen. */
+        ScreenNode: {
             /**
-             * @description Stable node key, e.g. screen:12
+             * @description Stable node key, `<type in lowercase>:<id>`
              * @example screen:12
              */
             key: string;
             id: number;
-            type: components["schemas"]["ElementType"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "SCREEN";
             name: string;
-            /** @description Owning screen for components */
-            screenId?: number | null;
-            documentationStatus?: components["schemas"]["DocumentationStatus"];
-            isAppContext?: boolean;
-            scope?: components["schemas"]["VariableScope"];
-            /** @description Variable without origin screen */
-            untraced?: boolean;
-            /** @description Screens only (FR-16) */
-            miroLink?: string | null;
+            documentationStatus: components["schemas"]["DocumentationStatus"];
+            isAppContext: boolean;
+            miroLink: string | null;
         };
-        GraphEdge: {
-            /** @example sv:45 */
+        /** @description A variable. `untraced` is true when it has no origin screen (FR-19); the interface draws it with a dashed border. */
+        VariableNode: {
+            /** @example variable:7 */
+            key: string;
+            id: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "VARIABLE";
+            name: string;
+            scope: components["schemas"]["VariableScope"];
+            untraced: boolean;
+        };
+        /** @description A collection. */
+        CollectionNode: {
+            /** @example collection:21 */
+            key: string;
+            id: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "COLLECTION";
+            name: string;
+        };
+        /** @description A component. `screenId` is the screen that contains it, also when that screen node is not in the response. */
+        ComponentNode: {
+            /** @example component:31 */
+            key: string;
+            id: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "COMPONENT";
+            name: string;
+            screenId: number;
+        };
+        /**
+         * @description A node of the graph; the variant is given by `type`, and each variant declares only
+         *     its own fields.
+         */
+        GraphNode: components["schemas"]["ScreenNode"] | components["schemas"]["VariableNode"] | components["schemas"]["CollectionNode"] | components["schemas"]["ComponentNode"];
+        /** @description A screen reads or writes a variable or a collection. One edge per link, so a screen can have several to the same element. The origin links are not here, because `CREATES` represents them. */
+        AccessEdge: {
+            /**
+             * @description Prefix `sv` (variable link) or `sc` (collection link) and the id of the row
+             * @example sc:5
+             */
+            id: string;
+            /** @description Node key of the screen */
+            source: string;
+            /** @description Node key of the variable or collection */
+            target: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "ACCESSES";
+            accessMode: components["schemas"]["AccessMode"];
+            usedIn: string;
+        };
+        /** @description A collection feeds a variable (a variable assignment, FR-09). */
+        FeedEdge: {
+            /**
+             * @description Prefix `vc` and the id of the assignment
+             * @example vc:3
+             */
+            id: string;
+            /** @description Node key of the collection */
+            source: string;
+            /** @description Node key of the variable */
+            target: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "FEEDS";
+            usedIn: string;
+            assignmentFunction: components["schemas"]["AssignmentFunction"];
+            tableFunction: string | null;
+        };
+        /**
+         * @description An edge with no data of its own. `CONTAINS` screen to component (prefix `ct`),
+         *     `CREATES` origin screen to variable (`cr`), `USES` component to variable or
+         *     collection, `DERIVES_FROM` collection to the collection it is built from, and
+         *     `NAVIGATES_TO` screen to screen (these three with prefix `d`).
+         */
+        StructureEdge: {
+            /** @example d:40 */
             id: string;
             /** @description Node key */
             source: string;
             /** @description Node key */
             target: string;
             /**
-             * @description CONTAINS screen->component; CREATES origin screen->variable; ACCESSES screen->variable/collection; FEEDS collection->variable; USES component->variable/collection; DERIVES_FROM collection->collection; NAVIGATES_TO screen->screen
+             * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            kind: "CONTAINS" | "CREATES" | "ACCESSES" | "FEEDS" | "USES" | "DERIVES_FROM" | "NAVIGATES_TO";
-            accessMode?: components["schemas"]["AccessMode"];
-            usedIn?: string;
-            assignmentFunction?: components["schemas"]["AssignmentFunction"];
-            tableFunction?: string | null;
+            kind: "CONTAINS" | "CREATES" | "USES" | "DERIVES_FROM" | "NAVIGATES_TO";
         };
+        /**
+         * @description An edge of the graph; the variant is given by `kind`, and each variant declares only
+         *     its own fields (`accessMode` and `usedIn` on `ACCESSES`; `usedIn`,
+         *     `assignmentFunction` and `tableFunction` on `FEEDS`).
+         */
+        GraphEdge: components["schemas"]["AccessEdge"] | components["schemas"]["FeedEdge"] | components["schemas"]["StructureEdge"];
         GraphEnvelope: {
             data: {
                 nodes: components["schemas"]["GraphNode"][];
                 edges: components["schemas"]["GraphEdge"][];
             };
         };
-        SearchResult: {
-            type: components["schemas"]["ElementType"];
-            id: number;
-            name: string;
-            /** @description Owning screen (components) or origin screen (variables) */
-            screen?: components["schemas"]["Ref"] | null;
+        ScreenSearchResult: {
             /**
-             * @description Where the text was found
+             * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            matchedIn: "name" | "description" | "template" | "usedIn";
-            snippet?: string | null;
-            documentationStatus?: components["schemas"]["DocumentationStatus"];
-            environments?: components["schemas"]["Environment"][];
+            type: "SCREEN";
+            id: number;
+            name: string;
+            /**
+             * @description Where the text was found; null without `q`
+             * @enum {string|null}
+             */
+            matchedIn: "name" | "template" | null;
+            snippet: string | null;
+            documentationStatus: components["schemas"]["DocumentationStatus"];
         };
+        VariableSearchResult: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "VARIABLE";
+            id: number;
+            name: string;
+            /**
+             * @description Where the text was found; null without `q`
+             * @enum {string|null}
+             */
+            matchedIn: "name" | "description" | "usedIn" | null;
+            snippet: string | null;
+            /** @description Screen where the variable was created; null when it has none */
+            screen: components["schemas"]["Ref"] | null;
+            environments: components["schemas"]["Environment"][];
+        };
+        CollectionSearchResult: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "COLLECTION";
+            id: number;
+            name: string;
+            /**
+             * @description Where the text was found; null without `q`
+             * @enum {string|null}
+             */
+            matchedIn: "name" | "description" | "creationCondition" | "fieldName" | "usedIn" | null;
+            snippet: string | null;
+            environments: components["schemas"]["Environment"][];
+        };
+        ComponentSearchResult: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "COMPONENT";
+            id: number;
+            name: string;
+            /**
+             * @description Where the text was found; null without `q`
+             * @enum {string|null}
+             */
+            matchedIn: "name" | "description" | "onSelect" | "type" | null;
+            snippet: string | null;
+            /** @description Screen that contains the component */
+            screen: components["schemas"]["Ref"];
+        };
+        /**
+         * @description One element found; the variant is given by `type`. `matchedIn` and `snippet` are null
+         *     when the search has no text. The element is opened with `type` and `id`; a component
+         *     is opened in its `screen`.
+         */
+        SearchResult: components["schemas"]["ScreenSearchResult"] | components["schemas"]["VariableSearchResult"] | components["schemas"]["CollectionSearchResult"] | components["schemas"]["ComponentSearchResult"];
         IndicatorsEnvelope: {
             data: {
+                /** @description Every figure includes the App (OnStart) screen. */
                 documentation: {
                     totalScreens: number;
+                    /** @description The five statuses, also the ones that are 0; they add up to `totalScreens`. */
                     byStatus: {
                         UNDOCUMENTED: number;
                         DRAFT: number;
@@ -1793,7 +2085,7 @@ export interface components {
                         IN_REVIEW: number;
                         APPROVED: number;
                     };
-                    /** @description Includes the App (OnStart) screen */
+                    /** @description APPROVED over `totalScreens`, with one decimal (rounded half up) */
                     approvedPercent: number;
                 };
                 variables: {
@@ -1806,13 +2098,39 @@ export interface components {
                     /** @description Not linked to any screen */
                     undocumented: number;
                 };
+                /** @description Always from the local copy of the tickets; Jira is never called (NFR-14). */
                 jira: {
+                    /** @description Subtasks of the application whose status category is not DONE */
                     pendingSubtasks: number;
+                    /** @description The Jira client is configured and its circuit breaker is not open */
                     jiraAvailable: boolean;
+                    /**
+                     * Format: date-time
+                     * @description Latest synchronization of any ticket of the application; null when there are none
+                     */
+                    lastSyncedAt: string | null;
                 };
-                /** @description Last 10 audit records; omitted for Readers */
-                recentActivity?: components["schemas"]["AuditEntry"][];
+                /** @description The 10 most recent audit records of the application, newest first, of the whole team. Absent (never null) for Readers. */
+                recentActivity?: components["schemas"]["ActivitySummary"][];
             };
+        };
+        /**
+         * @description Name of the audited table.
+         * @enum {string}
+         */
+        AuditEntityType: "app_user" | "application" | "screen" | "variable" | "collection" | "collection_field" | "component" | "element_environment" | "screen_variable" | "screen_collection" | "variable_collection" | "dependency" | "jira_ticket" | "comment" | "report";
+        /** @description An audit record without its values or its database role, for the recent activity of the dashboard. */
+        ActivitySummary: {
+            /** @description null = write outside the API */
+            actor: components["schemas"]["Ref"] | null;
+            /** @enum {string} */
+            action: "CREATE" | "UPDATE" | "DELETE" | "EVENT";
+            eventName: string | null;
+            entityType: components["schemas"]["AuditEntityType"];
+            entityId: string;
+            entityLabel: string | null;
+            /** Format: date-time */
+            createdAt: string;
         };
         AuditEntry: {
             /** @description BIGINT serialized as text */
@@ -1825,21 +2143,33 @@ export interface components {
              *     `screen` and the id of the screen in `entityId`; `newValue` carries its payload.
              */
             eventName?: string | null;
-            entityType: string;
+            entityType: components["schemas"]["AuditEntityType"];
+            /** @description Identifier as text; composite for some tables (`12:DEV`) */
             entityId: string;
+            /**
+             * @description Label recorded with the row (SDD Table 39): the name, or `used_in` for a screen or
+             *     variable link and an assignment, the relation type for a dependency, the Jira key for
+             *     a ticket, the text for a comment. Up to 300 characters.
+             */
             entityLabel?: string | null;
             applicationId?: number | null;
             /** @description null = write outside the API */
             actor: components["schemas"]["Ref"] | null;
-            /** @description Administrator only */
+            /** @description Database role that wrote the row. Administrator only; absent for anyone else. */
             dbRole?: string;
+            /** @description Names of the columns that changed in an UPDATE, in camelCase; empty otherwise. */
             changedFields: string[];
+            /**
+             * @description Image of the row before an UPDATE or a DELETE (null for CREATE and EVENT). First-level
+             *     keys in camelCase; values as stored. A redacted column (`passwordHash`) has no key.
+             */
             oldValue?: Record<string, never> | null;
             /**
-             * @description For an EVENT, the payload of the event. `DOCUMENTATION_APPROVED` and
-             *     `DOCUMENTATION_RETURNED` use `{ from, to, commentId }`: the status before and
-             *     after the decision and the id of the review comment, which is null when an
-             *     APPROVE created no comment.
+             * @description Image of the row after a CREATE or an UPDATE (null for DELETE), with first-level keys
+             *     in camelCase and values as stored. For an EVENT, the payload of the event.
+             *     `DOCUMENTATION_APPROVED` and `DOCUMENTATION_RETURNED` use `{ from, to, commentId }`: the
+             *     status before and after the decision and the id of the review comment, which is null
+             *     when an APPROVE created no comment.
              */
             newValue?: Record<string, never> | null;
             /** Format: date-time */
@@ -2030,17 +2360,6 @@ export interface components {
                 [name: string]: unknown;
             };
             content: {
-                /**
-                 * @example {
-                 *       "code": "FORBIDDEN",
-                 *       "message": "Your role doesn't allow this action.",
-                 *       "details": {
-                 *         "requiredRoles": [
-                 *           "ADMINISTRATOR"
-                 *         ]
-                 *       }
-                 *     }
-                 */
                 "application/json": components["schemas"]["Error"];
             };
         };
@@ -2190,7 +2509,11 @@ export interface components {
         Query: string;
         /** @description Only elements present in this environment. */
         EnvironmentFilter: components["schemas"]["Environment"];
-        /** @description ETag from the last GET; if the resource changed since, the update is rejected with 412. */
+        /**
+         * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
+         *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
+         *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+         */
         IfMatch: string;
         /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
         IfNoneMatch: string;
@@ -2199,7 +2522,11 @@ export interface components {
     headers: {
         /** @description URL of the created resource */
         Location: string;
-        /** @description Weak validator. A single resource with `updatedAt` sends one derived from it; listings and other responses send a weak hash of the body. */
+        /**
+         * @description Weak validator. A single resource with `updatedAt` sends one derived from it (`W/"<updatedAt ms>"`);
+         *     a screen also appends its `pendingSubtasks` and `commentCount` (`W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"`);
+         *     listings and other responses send a weak hash of the body.
+         */
         ETag: string;
         /** @description Identifier of the request, also written in the server log. Quote it when reporting a problem. */
         XRequestId: string;
@@ -2407,7 +2734,11 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description ETag from the last GET; if the resource changed since, the update is rejected with 412. */
+                /**
+                 * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
+                 *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
+                 *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+                 */
                 "If-Match"?: components["parameters"]["IfMatch"];
             };
             path: {
@@ -2614,7 +2945,11 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description ETag from the last GET; if the resource changed since, the update is rejected with 412. */
+                /**
+                 * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
+                 *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
+                 *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+                 */
                 "If-Match"?: components["parameters"]["IfMatch"];
             };
             path: {
@@ -2781,7 +3116,11 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description ETag from the last GET; if the resource changed since, the update is rejected with 412. */
+                /**
+                 * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
+                 *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
+                 *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+                 */
                 "If-Match"?: components["parameters"]["IfMatch"];
             };
             path: {
@@ -3015,7 +3354,11 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description ETag from the last GET; if the resource changed since, the update is rejected with 412. */
+                /**
+                 * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
+                 *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
+                 *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+                 */
                 "If-Match"?: components["parameters"]["IfMatch"];
             };
             path: {
@@ -3267,7 +3610,11 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description ETag from the last GET; if the resource changed since, the update is rejected with 412. */
+                /**
+                 * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
+                 *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
+                 *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+                 */
                 "If-Match"?: components["parameters"]["IfMatch"];
             };
             path: {
@@ -3330,7 +3677,11 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description ETag from the last GET; if the resource changed since, the update is rejected with 412. */
+                /**
+                 * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
+                 *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
+                 *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+                 */
                 "If-Match"?: components["parameters"]["IfMatch"];
             };
             path: {
@@ -3609,10 +3960,16 @@ export interface operations {
             query: {
                 /** @description Application whose elements are listed (NFR-16). */
                 applicationId: components["parameters"]["ApplicationId"];
-                /** @description Node types to include (comma-separated) */
+                /**
+                 * @description Node types to include (comma-separated, for example `SCREEN,VARIABLE`).
+                 *     Omitted = all types. Edges are kept only when both ends are kept.
+                 */
                 types?: components["schemas"]["ElementType"][];
-                /** @description Only elements present in this environment. */
-                environment?: components["parameters"]["EnvironmentFilter"];
+                /**
+                 * @description Keeps the variables and collections present in this environment. Screens and
+                 *     components are not filtered by it.
+                 */
+                environment?: components["schemas"]["Environment"];
             };
             header?: {
                 /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
@@ -3623,7 +3980,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Nodes and edges */
+            /** @description Nodes and edges, in the order described above */
             200: {
                 headers: {
                     ETag: components["headers"]["ETag"];
@@ -3637,11 +3994,13 @@ export interface operations {
             304: components["responses"]["NotModified"];
             400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
         };
     };
     getNodeNeighborhood: {
         parameters: {
             query?: {
+                /** @description Steps from the element, 1 to 3. A value outside that range is a 400. */
                 depth?: number;
             };
             header?: {
@@ -3649,6 +4008,7 @@ export interface operations {
                 "If-None-Match"?: components["parameters"]["IfNoneMatch"];
             };
             path: {
+                /** @description Plural of the node type (`screens` is `SCREEN`, `variables` is `VARIABLE`, and so on). */
                 type: "screens" | "variables" | "collections" | "components";
                 id: components["parameters"]["Id"];
             };
@@ -3656,7 +4016,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Nodes and edges around the element */
+            /** @description Nodes and edges around the element, in the order of the graph */
             200: {
                 headers: {
                     ETag: components["headers"]["ETag"];
@@ -3678,12 +4038,15 @@ export interface operations {
             query: {
                 /** @description Application whose elements are listed (NFR-16). */
                 applicationId: components["parameters"]["ApplicationId"];
-                /** @description Text to search (2 to 100 characters). Optional when at least one filter is sent. */
+                /** @description Text to search (2 to 100 characters once trimmed). Optional when at least one filter is sent. */
                 q?: string;
+                /** @description Element types to search (comma-separated). Omitted = all four. */
                 types?: components["schemas"]["ElementType"][];
-                /** @description Only elements present in this environment. */
-                environment?: components["parameters"]["EnvironmentFilter"];
+                /** @description Variables and collections present in this environment. Screens and components are not filtered by it. */
+                environment?: components["schemas"]["Environment"];
+                /** @description Screens with this status. Variables, collections and components are not filtered by it. */
                 documentationStatus?: components["schemas"]["DocumentationStatus"];
+                /** @description Variables with this scope. Screens, collections and components are not filtered by it. */
                 scope?: components["schemas"]["VariableScope"];
                 page?: components["parameters"]["Page"];
                 pageSize?: components["parameters"]["PageSize"];
@@ -3713,6 +4076,7 @@ export interface operations {
             304: components["responses"]["NotModified"];
             400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
         };
     };
     getIndicators: {
@@ -3744,17 +4108,21 @@ export interface operations {
             304: components["responses"]["NotModified"];
             400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
         };
     };
     listAuditLog: {
         parameters: {
             query?: {
                 applicationId?: number;
-                entityType?: "app_user" | "application" | "screen" | "variable" | "collection" | "collection_field" | "component" | "element_environment" | "screen_variable" | "screen_collection" | "variable_collection" | "dependency" | "jira_ticket" | "comment" | "report";
+                entityType?: components["schemas"]["AuditEntityType"];
+                /** @description Identifier of the element, as text (it can be composite, such as `12:DEV`). Requires `entityType`. */
                 entityId?: string;
                 actorUserId?: number;
                 action?: "CREATE" | "UPDATE" | "DELETE" | "EVENT";
+                /** @description Records at or after this instant (inclusive). */
                 from?: string;
+                /** @description Records at or before this instant (inclusive). */
                 to?: string;
                 page?: components["parameters"]["Page"];
                 pageSize?: components["parameters"]["PageSize"];
@@ -3768,7 +4136,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Page of audit records */
+            /** @description Page of audit records, newest first */
             200: {
                 headers: {
                     ETag: components["headers"]["ETag"];

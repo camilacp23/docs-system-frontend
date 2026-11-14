@@ -1,7 +1,6 @@
 // Delete a variable (S-13): the impact comes from the dependencies, DELETE, the way back to the list, the
 // failures, and the cases where deleting is not offered (Reader, archived application, offline).
 import { act, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';
@@ -17,6 +16,7 @@ import {
   renderVariables,
   type RenderVariablesOptions,
 } from '../helpers/renderVariables';
+import { setupUser, type User } from '../helpers/setupUser';
 
 const GUSUARIO_DEPENDENCIES: VariableDependencies = {
   variable: { id: 1, name: 'gUsuario' },
@@ -48,7 +48,7 @@ const GUSUARIO_DEPENDENCIES: VariableDependencies = {
 const render = (extra: Partial<RenderVariablesOptions> = {}) =>
   renderVariables({ dependencies: { 1: GUSUARIO_DEPENDENCIES }, ...extra });
 
-async function openDelete(user: ReturnType<typeof userEvent.setup>, name: string) {
+async function openDelete(user: User, name: string) {
   // A text query is far cheaper than a role query on this big page, so waiting does not slow the page down.
   await screen.findByText(name);
   await user.click(screen.getByRole('button', { name: `Actions for ${name}` }));
@@ -82,7 +82,7 @@ describe('deleteImpact', () => {
 
 describe('delete from the list', () => {
   it('shows the impact, deletes, and refreshes the list and the counters', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await render();
     const dialog = await openDelete(user, 'gUsuario');
 
@@ -114,7 +114,7 @@ describe('delete from the list', () => {
   });
 
   it('says so when the variable is linked to nothing', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await render();
     const dialog = await openDelete(user, 'gRegistroSel');
 
@@ -122,7 +122,7 @@ describe('delete from the list', () => {
   });
 
   it('keeps Delete disabled until the impact is known, then enables it', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     let gate: { release: () => void } | undefined;
     const { api } = await render({
       prepare: (fake) => {
@@ -141,7 +141,7 @@ describe('delete from the list', () => {
   });
 
   it('offers to try again when the impact cannot be read and never deletes blindly', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await render({
       prepare: (fake) => {
         fake.failNext(
@@ -164,7 +164,7 @@ describe('delete from the list', () => {
   });
 
   it('cancels and returns the focus to the action button', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await render();
     const dialog = await openDelete(user, 'gUsuario');
     await dialog.findByText(/is used in 3 screens/);
@@ -177,7 +177,7 @@ describe('delete from the list', () => {
   });
 
   it("shows the server's refusal inside the modal and keeps it open", async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await render();
     api.failNext(
       'DELETE /variables/{id}',
@@ -197,7 +197,7 @@ describe('delete from the list', () => {
   });
 
   it('goes back one page when the last row of a page is deleted', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const many = Array.from({ length: 21 }, (_, index) =>
       makeVariable(100 + index, `v${String(index).padStart(2, '0')}`),
     );
@@ -214,7 +214,7 @@ describe('delete from the list', () => {
   });
 
   it('disables Delete, with the reason, while the browser is offline', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await render();
     const dialog = await openDelete(user, 'gUsuario');
     await dialog.findByText(/is used in 3 screens/);
@@ -231,7 +231,7 @@ describe('delete from the list', () => {
   });
 
   it('disables Edit and Delete in the row menu, with the reason, on an archived application', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await render({ applications: [makeApplication(1, { name: 'SAR', status: 'ARCHIVED' })] });
     await screen.findByText('Read-only: the application is archived.');
     await screen.findByText('gUsuario');
@@ -258,7 +258,7 @@ describe('delete from the list', () => {
 
 describe('delete from the detail', () => {
   it('deletes and goes back to the list', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api, router } = await render({ path: '/variables/1' });
     await screen.findByRole('heading', { name: 'gUsuario', level: 1 });
 

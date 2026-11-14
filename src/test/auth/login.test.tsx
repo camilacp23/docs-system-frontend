@@ -1,7 +1,6 @@
 // Sign in (S-01a, S-01b, S-01c): client validation, 401 banner, 429 with a countdown from Retry-After (or
 // details.minutes), loading state, success and redirect to the remembered page.
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ToastProvider } from '../../components/ui';
@@ -11,6 +10,7 @@ import { appRoutes } from '../../app/router/router';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { FakeBackend, FakeLocks, TEST_USER } from '../helpers/fakeBackend';
 import { PASSWORD, renderApp } from '../helpers/renderApp';
+import { setupUser } from '../helpers/setupUser';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -27,6 +27,31 @@ function fill(email: string, password: string) {
   fireEvent.change(screen.getByLabelText(/^Email/), { target: { value: email } });
   fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: password } });
 }
+
+describe('notice after the user changed their own role or password', () => {
+  it.each([
+    ['ROLE_CHANGED', 'Your role changed. Sign in again to continue.'],
+    ['PASSWORD_CHANGED', 'Your password changed. Sign in again to continue.'],
+  ] as const)('%s tells why the session ended', async (notice, text) => {
+    const { manager } = await renderApp({ path: '/dashboard' });
+    await screen.findByRole('heading', { name: 'Dashboard' });
+    await act(async () => {
+      await manager.logout(notice);
+    });
+    await screen.findByRole('heading', { name: 'Sign in' });
+    expect(screen.getByText(text)).toBeInTheDocument();
+  });
+
+  it('a plain sign-out shows no notice', async () => {
+    const { manager } = await renderApp({ path: '/dashboard' });
+    await screen.findByRole('heading', { name: 'Dashboard' });
+    await act(async () => {
+      await manager.logout();
+    });
+    await screen.findByRole('heading', { name: 'Sign in' });
+    expect(screen.queryByText(/Sign in again to continue./)).not.toBeInTheDocument();
+  });
+});
 
 describe('login page', () => {
   it('renders the sign-in card with the exact copy', async () => {
@@ -45,7 +70,7 @@ describe('login page', () => {
   });
 
   it('validates on the client with the S-01c texts and does not call the API', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { backend } = await openLogin();
     await user.type(screen.getByLabelText(/^Email/), 'camila.castillo@');
     await user.click(screen.getByRole('button', { name: 'Sign in' }));
@@ -78,7 +103,7 @@ describe('login page', () => {
   });
 
   it('shows the S-01b banner on 401 (same text whatever the cause)', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await openLogin();
     await user.type(screen.getByLabelText(/^Email/), TEST_USER.email);
     await user.type(screen.getByLabelText(/^Password/), 'wrong');
@@ -90,7 +115,7 @@ describe('login page', () => {
   });
 
   it('shows the loading state while the request is in flight', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { backend } = await openLogin();
     backend.latencyMs = 50;
     await user.type(screen.getByLabelText(/^Email/), TEST_USER.email);
@@ -102,7 +127,7 @@ describe('login page', () => {
   });
 
   it('signs in and returns to the remembered page', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await openLogin({ path: '/variables/4?x=1' });
     // The guard sent the anonymous user to /login with the destination in the router state.
     expect(router.state.location.pathname).toBe('/login');
@@ -116,7 +141,7 @@ describe('login page', () => {
   });
 
   it('goes to /dashboard when there is no remembered page', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await openLogin();
     await user.type(screen.getByLabelText(/^Email/), TEST_USER.email);
     await user.type(screen.getByLabelText(/^Password/), PASSWORD);
@@ -127,7 +152,7 @@ describe('login page', () => {
   });
 
   it('toggles the password visibility', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await openLogin();
     const password = screen.getByLabelText(/^Password/);
     expect(password).toHaveAttribute('type', 'password');

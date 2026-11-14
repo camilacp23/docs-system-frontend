@@ -2,19 +2,19 @@
 // (template and lists empty), the success message and the navigation to the detail, server errors on their exact
 // field, archived application and offline.
 import { act, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';
 import { makeApplication } from '../helpers/renderApp';
 import { renderScreens } from '../helpers/renderScreens';
+import { setupUser, type User } from '../helpers/setupUser';
 
 /** The page once the selected application is known (the list is rebuilt when it becomes known). */
 async function appReady() {
   await screen.findAllByText(/screens? ·|Read-only: the application is archived/);
 }
 
-async function openModal(user: ReturnType<typeof userEvent.setup>) {
+async function openModal(user: User) {
   await appReady();
   await screen.findByRole('link', { name: 'Detalle' });
   await user.click(screen.getByRole('button', { name: 'New screen' }));
@@ -23,7 +23,7 @@ async function openModal(user: ReturnType<typeof userEvent.setup>) {
 }
 
 /** Puts a text in a field in one step: how fast it is typed does not matter in these tests. */
-async function fill(user: ReturnType<typeof userEvent.setup>, field: HTMLElement, text: string) {
+async function fill(user: User, field: HTMLElement, text: string) {
   await user.click(field);
   await user.paste(text);
 }
@@ -34,7 +34,7 @@ afterEach(() => {
 
 describe('New screen modal', () => {
   it('opens over the list with the name focused and closes with Cancel returning the focus', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await renderScreens();
     await screen.findByRole('link', { name: 'Detalle' });
     const opener = await screen.findByRole('button', { name: 'New screen' });
@@ -70,7 +70,7 @@ describe('New screen modal', () => {
   });
 
   it('opens from a link with ?new=1 and closes with Escape', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await renderScreens({ path: '/screens?new=1' });
     await appReady();
 
@@ -100,7 +100,7 @@ describe('New screen modal', () => {
   });
 
   it('checks the name and the https-only link before sending anything', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await renderScreens();
     const dialog = await openModal(user);
 
@@ -121,7 +121,7 @@ describe('New screen modal', () => {
   });
 
   it('sends the complete POST, goes to the new screen and says it was created', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api, router } = await renderScreens();
     const dialog = await openModal(user);
 
@@ -156,7 +156,7 @@ describe('New screen modal', () => {
   });
 
   it('sends a null link when it is left empty', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api, router } = await renderScreens();
     const dialog = await openModal(user);
 
@@ -170,7 +170,7 @@ describe('New screen modal', () => {
   });
 
   it('marks the name with the catalog text when it already exists in the application', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await renderScreens();
     const dialog = await openModal(user);
 
@@ -186,7 +186,7 @@ describe('New screen modal', () => {
   });
 
   it('does not allow taking the reserved name of App (OnStart)', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await renderScreens();
     const dialog = await openModal(user);
 
@@ -199,7 +199,7 @@ describe('New screen modal', () => {
   });
 
   it('marks the link when the server rejects its format', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await renderScreens({
       prepare: (api) => {
         api.failNext(
@@ -223,7 +223,7 @@ describe('New screen modal', () => {
   });
 
   it('shows a refusal that belongs to no field in the form', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await renderScreens({
       prepare: (api) => {
         api.failNext('POST /screens', new ApiError({ status: 403, code: 'FORBIDDEN' }));
@@ -238,7 +238,7 @@ describe('New screen modal', () => {
   });
 
   it('keeps the modal and the typed values while the request fails, so it can be sent again', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await renderScreens({
       prepare: (api) => {
         api.failNext('POST /screens', new ApiError({ status: 500, code: 'INTERNAL_ERROR' }));
@@ -260,7 +260,7 @@ describe('New screen modal', () => {
   });
 
   it('disables the button and the modal save, with the reason, when the application is archived', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await renderScreens({
       applications: [makeApplication(1, { name: 'SAR', status: 'ARCHIVED' })],
     });
@@ -289,7 +289,7 @@ describe('New screen modal', () => {
   });
 
   it('disables creating, with the reason, while the browser is offline', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await renderScreens();
     const dialog = await openModal(user);
 

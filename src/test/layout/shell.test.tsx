@@ -1,13 +1,14 @@
 // Shell: sidebar items per role (12 / 10 / 8), active item, application card and selector, top bar, sign out,
 // offline strip (S-46), no application registered, and the archived strip with Unarchive (S-09b).
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import pkg from '../../../package.json';
 import { ApiError } from '../../api/ApiError';
+import { NO_APPLICATIONS_TEXT } from '../../layout/AppShell';
 import { SIGN_OUT_FAILED_TEXT } from '../../layout/TopBar';
 import { makeApplication, renderApp } from '../helpers/renderApp';
+import { setupUser } from '../helpers/setupUser';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -29,7 +30,7 @@ describe('sidebar', () => {
   });
 
   it('collapses to icons that keep their names, and expands again', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     window.localStorage.removeItem('sidebar-collapsed');
     await renderApp({ role: 'ADMINISTRATOR' });
     const nav = await screen.findByRole('navigation', { name: 'Main' });
@@ -123,7 +124,7 @@ describe('top bar and application card', () => {
   });
 
   it('switches application through the selector', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { apps } = await renderApp({
       applications: [makeApplication(1, { name: 'SAR' }), makeApplication(2, { name: 'Billing' })],
     });
@@ -136,7 +137,7 @@ describe('top bar and application card', () => {
   });
 
   it('the user block is a menu button and shows no chevron', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await renderApp();
     const trigger = await screen.findByRole('button', { name: /Ana Mora/ });
     expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
@@ -148,7 +149,7 @@ describe('top bar and application card', () => {
   });
 
   it('Sign out ends the session and goes to /login', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router, backend, manager } = await renderApp();
     await user.click(await screen.findByRole('button', { name: /Ana Mora/ }));
     await user.click(screen.getByRole('menuitem', { name: 'Sign out' }));
@@ -162,7 +163,7 @@ describe('top bar and application card', () => {
   });
 
   it('warns when the server could not be reached to sign out', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { manager } = await renderApp();
     vi.spyOn(manager, 'logout').mockRejectedValue(
       new ApiError({ status: 0, code: 'NETWORK_ERROR' }),
@@ -208,7 +209,12 @@ describe('no application registered', () => {
 
   it('leaves /admin/applications reachable so the first one can be registered', async () => {
     await renderApp({ applications: [], path: '/admin/applications' });
-    expect(await screen.findByText('This module is not available yet.')).toBeInTheDocument();
+    // The page of the module itself (not the empty state of the shell) invites to register the first one.
+    expect(
+      await screen.findByText('Register the first application to start documenting it.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(NO_APPLICATIONS_TEXT)).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Applications' })).toBeInTheDocument();
   });
 });
 
@@ -239,7 +245,7 @@ describe('archived application (S-09b)', () => {
   });
 
   it('GETs the current representation and PUTs every field with If-Match, changing only the status', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { apps } = await renderApp({ applications: [archived] });
     await user.click(await screen.findByRole('button', { name: 'Unarchive' }));
     await waitFor(() => {
@@ -267,7 +273,7 @@ describe('archived application (S-09b)', () => {
   });
 
   it('on 412 reloads and shows the catalog message', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { apps } = await renderApp({ applications: [archived] });
     apps.state.putError = new ApiError({
       status: 412,

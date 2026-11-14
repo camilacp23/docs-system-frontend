@@ -1,7 +1,6 @@
 // Variable detail (S-11): data, environments with notes, origin screen, "where it is used" from the dependencies,
 // empty arrays, partial failure, not found, the application of the variable (D-78) and the buttons by role.
 import { screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';
@@ -16,6 +15,7 @@ import {
   sampleVariables,
   type RenderVariablesOptions,
 } from '../helpers/renderVariables';
+import { setupUser } from '../helpers/setupUser';
 
 const GUSUARIO_DEPENDENCIES: VariableDependencies = {
   variable: { id: 1, name: 'gUsuario' },
@@ -145,7 +145,7 @@ describe('variable detail', () => {
   });
 
   it('keeps the page when only the dependencies fail and recovers with Try again', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await open('/variables/1', {
       prepare: (api) => {
         api.failNext(
@@ -178,7 +178,7 @@ describe('variable detail', () => {
   });
 
   it('says the variable does not exist for an unknown or invalid id', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await renderVariables({ path: '/variables/999' });
 
     expect(
@@ -198,7 +198,7 @@ describe('variable detail', () => {
   });
 
   it('shows the server error with a retry', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await open('/variables/1', {
       prepare: (api) => {
         api.failNext(
@@ -297,7 +297,7 @@ describe('variable detail', () => {
   });
 
   it('goes back to the list when the application is switched from the shell', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await renderVariables({
       path: '/variables/1',
       dependencies: { 1: GUSUARIO_DEPENDENCIES },

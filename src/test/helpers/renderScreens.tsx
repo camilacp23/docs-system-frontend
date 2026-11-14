@@ -1,8 +1,7 @@
 // renderScreens: renderApp over the in-memory screens API (fakeScreensApi) with the sample data of the frames
 // S-18 / S-19: the screens App (OnStart) (Reserved, In progress), Detalle (In review), Inicio (Approved), Busqueda
 // (Draft) and Reportes (Undocumented), over the variables and collections of renderVariables / renderCollections.
-// (The uses carry `targetId` only because the contract types the response as ComponentWrite & the read shape;
-// the API returns `target`.) Detalle has a full detail (template 5 of 7, components, links with an origin row, a navigation).
+// Detalle has a full detail (template 5 of 7, components, links with an origin row, a navigation).
 // Options: role, path, applications, plus `screens` (full screens) and `variables` to replace the sample data and `prepare` to arm
 // failures or holds before the first read. Returns what renderApp returns plus `api`.
 import type { Application } from '../../application/ApplicationContext';
@@ -74,21 +73,26 @@ export function sampleScreens(): Screen[] {
             {
               id: 401,
               targetType: 'VARIABLE',
-              targetId: 3,
               target: { id: 3, name: 'gRegistroSel' },
               description: null,
             },
             {
               id: 402,
               targetType: 'COLLECTION',
-              targetId: 11,
               target: { id: 11, name: 'colClientes' },
               description: 'Reads the client list.',
             },
           ],
         },
         { id: 302, name: 'lblNombre', type: 'Label', onSelect: null, description: null, uses: [] },
-        { id: 303, name: 'galClientes', type: 'Gallery', onSelect: null, description: null },
+        {
+          id: 303,
+          name: 'galClientes',
+          type: 'Gallery',
+          onSelect: null,
+          description: null,
+          uses: [],
+        },
       ],
       variableLinks: [
         {

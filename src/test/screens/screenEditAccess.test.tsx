@@ -2,13 +2,13 @@
 // their reasons (SDD Table 56: review, archived application, no connection), the same reasons next to Save, the
 // breadcrumb and D-78 on the edit page.
 import { act, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { makeScreenDetail } from '../helpers/fakeScreensApi';
 import { makeApplication } from '../helpers/renderApp';
 import { renderScreens, sampleScreens } from '../helpers/renderScreens';
 import { openEdit } from '../helpers/screenEditHelpers';
+import { setupUser } from '../helpers/setupUser';
 
 const REVIEW_REASON =
   'This screen is in review. Edit it after the review, or withdraw it from review.';
@@ -66,7 +66,7 @@ describe('screen detail: the Edit button', () => {
   it.each(['ADMINISTRATOR', 'DEVELOPER'] as const)(
     'opens the edit page for the %s',
     async (role) => {
-      const user = userEvent.setup();
+      const user = setupUser();
       const { router } = await renderScreens({
         role,
         path: '/screens/13',
@@ -132,7 +132,7 @@ describe('screen detail: the Edit button', () => {
 
 describe('screens list: the Edit item of the row menu', () => {
   it('opens the edit page', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await renderScreens({ path: '/screens' });
 
     await user.click(await screen.findByRole('button', { name: 'Actions for Busqueda' }));
@@ -142,7 +142,7 @@ describe('screens list: the Edit item of the row menu', () => {
   });
 
   it('is disabled with the reason for a screen in review', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await renderScreens({ path: '/screens' });
 
     await user.click(await screen.findByRole('button', { name: 'Actions for Detalle' }));

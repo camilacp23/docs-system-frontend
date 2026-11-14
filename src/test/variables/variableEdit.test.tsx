@@ -2,7 +2,6 @@
 // what the user edited, the error of each rule on its exact field, SCOPE_CONFLICT with a fresh dependencies read,
 // archived and offline, and the Reader.
 import { act, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';
@@ -16,6 +15,7 @@ import {
   renderVariables,
   type RenderVariablesOptions,
 } from '../helpers/renderVariables';
+import { setupUser } from '../helpers/setupUser';
 
 const SET_ASSIGNMENTS: VariableDependencies = {
   variable: { id: 1, name: 'gUsuario' },
@@ -90,7 +90,7 @@ describe('edit variable', () => {
   });
 
   it('sends the COMPLETE representation with If-Match, says it was saved and shows the detail', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api, router } = await render();
     const { description, save } = await ready();
     await waitFor(() => {
@@ -130,7 +130,7 @@ describe('edit variable', () => {
   });
 
   it('edits the notes per environment, the environments and the origin screen', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await render();
     const { save } = await ready();
     await waitFor(() => {
@@ -153,7 +153,7 @@ describe('edit variable', () => {
   });
 
   it('checks the contract rules before sending', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await render();
     const { name, save } = await ready();
 
@@ -166,7 +166,7 @@ describe('edit variable', () => {
   });
 
   it('drops App (OnStart) as the origin when the scope becomes Context', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     await render();
     await ready();
     await waitFor(() => {
@@ -180,7 +180,7 @@ describe('edit variable', () => {
   });
 
   it('goes back to the detail with Cancel', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await render();
     await ready();
 
@@ -207,7 +207,7 @@ describe('edit variable: 412 (S-44)', () => {
   }
 
   it('keeps what the user edited, disables Save and offers Reload and Keep my changes visible', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await render();
     const { description, save } = await ready();
     await otherPersonSaves(api);
@@ -238,7 +238,7 @@ describe('edit variable: 412 (S-44)', () => {
   });
 
   it('Reload brings the other version into the form and Save works again with the new ETag', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api, router } = await render();
     const { description, save } = await ready();
     await otherPersonSaves(api);
@@ -265,7 +265,7 @@ describe('edit variable: 412 (S-44)', () => {
 
 describe('edit variable: errors on their field', () => {
   async function saveWithError(error: ApiError, extra: Partial<RenderVariablesOptions> = {}) {
-    const user = userEvent.setup();
+    const user = setupUser();
     const view = await render(extra);
     view.api.failNext('PUT /variables/{id}', error);
     const { save } = await ready();
@@ -392,7 +392,7 @@ describe('edit variable: errors on their field', () => {
       },
     });
     try {
-      const user = userEvent.setup();
+      const user = setupUser();
       const { api } = await render();
       const { save } = await ready();
       await waitFor(() => {
@@ -425,7 +425,7 @@ describe('edit variable: errors on their field', () => {
   });
 
   it('SCOPE_CONFLICT uses the answer of the new read, not an older one', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await render();
     const { save } = await ready();
     await waitFor(() => {
@@ -447,7 +447,7 @@ describe('edit variable: errors on their field', () => {
   });
 
   it('SCOPE_CONFLICT shows only the banner when the dependencies cannot be read', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { api } = await render();
     const { save } = await ready();
     await waitFor(() => {
@@ -527,7 +527,7 @@ describe('edit variable: access and state', () => {
   });
 
   it('goes back to the list when the application is switched from the shell', async () => {
-    const user = userEvent.setup();
+    const user = setupUser();
     const { router } = await render({
       applications: [makeApplication(1, { name: 'SAR' }), makeApplication(2, { name: 'Billing' })],
     });

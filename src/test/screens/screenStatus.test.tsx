@@ -2,6 +2,8 @@
 // transition of /status with its result (the status, the new ETag used by the next call, the notice and the focus), the
 // refusals of the API (412, INVALID_TRANSITION, APPLICATION_ARCHIVED, a screen that no longer exists) and the disabled
 // cases (archived application, no connection).
+// Every action runs through setupUser (inside act), so what it caused is rendered when the call returns: the
+// checks do not depend on when React decides to render under load.
 import { act, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -10,7 +12,7 @@ import type { Role } from '../../app/router/routes';
 import type { Screen } from '../../modules/screens/screenTypes';
 import { makeApplication } from '../helpers/renderApp';
 import { renderScreens, sampleScreens } from '../helpers/renderScreens';
-import { setupUser } from '../helpers/setupUser';
+import { setupUser, type User } from '../helpers/setupUser';
 
 type Status = Screen['documentationStatus'];
 
@@ -58,7 +60,7 @@ const serverStatus = (view: Awaited<ReturnType<typeof open>>) =>
 
 const button = (name: string) => screen.queryByRole('button', { name });
 
-async function menuItems(user: ReturnType<typeof setupUser>): Promise<string[]> {
+async function menuItems(user: User): Promise<string[]> {
   const trigger = screen.queryByRole('button', { name: 'More actions' });
   if (trigger === null) return [];
   await user.click(trigger);

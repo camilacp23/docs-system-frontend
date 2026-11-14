@@ -153,14 +153,6 @@ export function newNavigationRow(): NavigationRow {
   return { key: newRowKey(), targetScreenId: '', description: '' };
 }
 
-/** The read shape of a use: the contract types it as the write item plus the read item, so both are named. */
-type ReadUse = {
-  id: number;
-  targetType: UseTargetType;
-  target: { id: number; name: string };
-  description?: string | null;
-};
-
 export function valuesFromScreen(screen: Screen): ScreenEditValues {
   return {
     name: screen.name,
@@ -175,9 +167,7 @@ export function valuesFromScreen(screen: Screen): ScreenEditValues {
       type: component.type,
       onSelect: component.onSelect ?? '',
       description: component.description ?? '',
-      // The contract types `uses` as an intersection of two arrays (pending in the contract); the API returns the
-      // read shape, so it is named here once.
-      uses: ((component.uses ?? []) as unknown as readonly ReadUse[]).map((use) => ({
+      uses: component.uses.map((use) => ({
         key: `use-${use.id}`,
         id: use.id,
         targetType: use.targetType,

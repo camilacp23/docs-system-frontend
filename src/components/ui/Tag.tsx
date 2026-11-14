@@ -1,11 +1,11 @@
 // Tag: small pill for a classification (scope, environment, "Untraced"). The meaning is always in the text; the
-// tone only reinforces it. Props: tone ('neutral' | 'info' | 'success' | 'warning', default 'neutral'), icon
+// tone only reinforces it. Props: tone ('neutral' | 'info' | 'success' | 'warning' | 'danger', default 'neutral'), icon
 // (decorative 14 px Lucide element), mono (IBM Plex Mono, for Power Apps identifiers), children.
 import type { ReactNode } from 'react';
 
 import { cx } from './cx';
 
-export type TagTone = 'neutral' | 'info' | 'success' | 'warning';
+export type TagTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger';
 
 export interface TagProps {
   tone?: TagTone;
@@ -20,6 +20,7 @@ const TONE_CLASS: Record<TagTone, string> = {
   info: 'border-transparent bg-info-bg text-info-ink',
   success: 'border-transparent bg-success-bg text-success-ink',
   warning: 'border-warning-border bg-warning-bg text-warning-ink',
+  danger: 'border-transparent bg-danger-bg text-danger',
 };
 
 export function Tag({ tone = 'neutral', icon, mono = false, children, className }: TagProps) {

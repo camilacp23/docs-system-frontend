@@ -163,8 +163,7 @@ type ReadUse = {
   description: string | null;
 };
 
-const usesOf = (component: Screen['components'][number]): ReadUse[] =>
-  (component.uses ?? []) as unknown as ReadUse[];
+const usesOf = (component: Screen['components'][number]): ReadUse[] => component.uses;
 
 function checkNestedIds(body: ScreenUpdate, current: Screen): void {
   body.components.forEach((component, i) => {
@@ -386,7 +385,7 @@ export function applyScreenUpdate(
         target:
           use.targetType === 'VARIABLE' ? refVariable(use.targetId) : refCollection(use.targetId),
         description: use.description ?? null,
-      })) as unknown as NonNullable<Screen['components'][number]['uses']>,
+      })),
     })),
     // The rows of origin stay as they are, first, whatever the body says.
     variableLinks: [

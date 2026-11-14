@@ -2,7 +2,7 @@
 // 1. GET /applications/{id} for the current representation and its ETag.
 // 2. PUT /applications/{id} with EVERY field of ApplicationWrite as it is (the PUT replaces the whole
 //    representation: an omitted field is erased) changing only `status` to ACTIVE, with If-Match.
-// On success it reloads the applications. On 412 it also reloads and shows the catalog message; any other
+// On success it refreshes the applications (the strip changes in place). On 412 it also refreshes and shows the catalog message; any other
 // error shows its catalog message. No props.
 import { useState } from 'react';
 
@@ -14,7 +14,7 @@ import { Button, useToast } from '../components/ui';
 
 export function UnarchiveButton() {
   const client = useApi();
-  const { currentApplicationId, reload } = useApplication();
+  const { currentApplicationId, refresh } = useApplication();
   const toast = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -32,9 +32,9 @@ export function UnarchiveButton() {
         ifMatch: current.etag ?? undefined,
         body: { name, platform, description, jiraProjectKey, status: 'ACTIVE' },
       });
-      reload();
+      refresh();
     } catch (error) {
-      if (isApiError(error) && error.status === 412) reload();
+      if (isApiError(error) && error.status === 412) refresh();
       const message = isApiError(error) ? getErrorMessage(error, { element: 'application' }) : null;
       if (message) toast.show({ tone: 'warning', message });
     } finally {

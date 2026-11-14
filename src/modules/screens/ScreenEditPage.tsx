@@ -86,7 +86,6 @@ import { mapScreenEditError } from './screenEditErrors';
 import { toTagStatus } from './screenLabels';
 import { hasContent, TEMPLATE_FIELDS, type TemplateKey } from './templateFields';
 import { ScreenTemplateFields } from './ScreenTemplateFields';
-import type { Screen } from './screenTypes';
 import { useScreen } from './useScreen';
 
 const LIST_PATH = '/screens';
@@ -95,14 +94,6 @@ const CONFLICT_EXTRA = 'Your changes will be lost, so copy anything you need fir
 const APPROVED_LEAD = 'This screen is approved.';
 const APPROVED_TEXT = 'Saving changes returns it to In progress.';
 const SUBMIT_REQUIRED_TEXT = 'Required to submit for review.';
-
-/** The read shape of the uses of a component: the contract types them as an intersection (pending in the contract). */
-function readUses(component: Screen['components'][number]) {
-  return (component.uses ?? []) as unknown as ReadonlyArray<{
-    targetType: 'VARIABLE' | 'COLLECTION';
-    target: { id: number; name: string };
-  }>;
-}
 
 /** The row errors of the links with the element error under one name, as LinkRowsEditor reads them. */
 function linkErrors(
@@ -297,7 +288,7 @@ export function ScreenEditPage() {
   const saveReason = conflict !== null ? conflictMessage : blockReason;
 
   const variableList = variables.data ?? [];
-  const uses = loaded.components.flatMap((component) => readUses(component));
+  const uses = loaded.components.flatMap((component) => component.uses);
   const chosenVariables = [
     ...loaded.variableLinks.filter((link) => !link.isOrigin).map((link) => link.variable),
     ...uses.filter((use) => use.targetType === 'VARIABLE').map((use) => use.target),
