@@ -13,7 +13,7 @@ import { setupUser } from '../helpers/setupUser';
 const renderAll = (options: RenderMapOptions = {}) =>
   renderMap({ path: '/dependency-map?view=all', ...options });
 
-const node = (name: string) => screen.findByRole('button', { name });
+const node = (name: string | RegExp) => screen.findByRole('button', { name });
 /** The cards of the Screens view say their counters in their accessible name. */
 const INICIO_CARD = 'Screen Inicio, Approved, 1 component, 1 variable, 1 collection';
 const DETALLE_CARD = 'Screen Detalle, In review, 2 components, 2 variables, 1 collection';
@@ -65,20 +65,37 @@ describe('dependency map: the graph', () => {
     expect(within(button).queryByText(long)).not.toBeInTheDocument();
   });
 
-  it('draws the legend of the relationships with one sample line per kind, and the mini map and the zoom controls', async () => {
+  it('keeps the legend out of the map: a "Relationships" button opens it, Esc closes it', async () => {
+    const user = setupUser();
     await renderAll();
     await node('Screen Inicio, Approved');
+    expect(screen.queryByRole('region', { name: 'Relationships' })).not.toBeInTheDocument();
+
+    const button = screen.getByRole('button', { name: 'Relationships' });
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    await user.click(button);
 
     const legend = screen.getByRole('region', { name: 'Relationships' });
+    expect(button).toHaveAttribute('aria-expanded', 'true');
     expect(
       within(legend)
         .getAllByRole('listitem')
         .map((item) => item.textContent),
     ).toEqual(['Contains', 'Creates', 'Accesses', 'Feeds', 'Uses', 'Derives from', 'Navigates to']);
-    expect(screen.getByRole('img', { name: 'Minimap' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('region', { name: 'Relationships' })).not.toBeInTheDocument();
+    expect(button).toHaveFocus();
+  });
+
+  it('has the zoom controls, and the mini map only when the map does not fit the canvas', async () => {
+    await renderAll();
+    await node('Screen Inicio, Approved');
+
     for (const name of ['Zoom In', 'Zoom Out', 'Fit View']) {
       expect(screen.getByRole('button', { name })).toBeInTheDocument();
     }
+    // The 13 elements fit: no mini map.
+    expect(screen.queryByRole('img', { name: 'Minimap' })).not.toBeInTheDocument();
   });
 
   it('lets every role open it, the Reader included', async () => {
@@ -253,7 +270,7 @@ describe('dependency map: focus on a node', () => {
     expect(call?.options.query).toEqual({ depth: 1 });
     expect(api.callsTo('GET /dependencies/graph')).toHaveLength(0);
     // Depth 1 around gUsuario: its screens, the collection that feeds it and the component that uses it.
-    expect(await node('Variable gUsuario, Global')).toBeInTheDocument();
+    expect(await node('Variable gUsuario, Global, focused')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Collection colActivos' })).not.toBeInTheDocument();
 
     await user.click(within(banner).getByRole('radio', { name: '2' }));
@@ -263,8 +280,9 @@ describe('dependency map: focus on a node', () => {
     await waitFor(() => {
       expect(api.callsTo('GET /dependencies/{type}/{id}')[1]?.options.query).toEqual({ depth: 2 });
     });
-    // Two steps reach colClientes (through Inicio), three would be needed for colActivos.
-    expect(await node('Collection colClientes')).toBeInTheDocument();
+    // The first view frames the focused element and its direct neighbors: colClientes (two steps, through Inicio) is drawn
+    // but outside of it, so React Flow does not render it until the user pans; the 'Screen Inicio' that leads to it is there.
+    expect(await node(/^Screen Inicio/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Collection colActivos' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Show full map' }));
@@ -349,7 +367,7 @@ describe('dependency map: application', () => {
       applications: [makeApplication(1, { name: 'SAR' }), makeApplication(2, { name: 'Billing' })],
       graphs: { 1: sampleGraph(), 2: second },
     });
-    await user.click(await node('Variable gUsuario, Global'));
+    await user.click(await node('Variable gUsuario, Global, focused'));
     expect(await screen.findByRole('complementary', { name: 'Selected element' })).toBeVisible();
 
     await user.click(await screen.findByRole('button', { name: 'Switch application' }));

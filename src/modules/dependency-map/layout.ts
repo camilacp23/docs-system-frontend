@@ -23,6 +23,7 @@
 //   5. Columns are stacked with constant gaps and centered on the tallest column of their piece.
 // The size of a box comes from `sizeOf` (the default is NODE_SIZE by type), because the same node is drawn as a plain box,
 // as a card with counters or as a group that holds its components, depending on the view.
+import { PITCH, snap, snapUp } from './grid';
 import type { NodeType } from './graphTypes';
 
 export interface NodeSize {
@@ -31,21 +32,27 @@ export interface NodeSize {
 }
 
 /** A screen drawn as a card with its counters (Screens view). */
-export const SCREEN_CARD_SIZE: NodeSize = { width: 232, height: 108 };
+export const SCREEN_CARD_SIZE: NodeSize = { width: 232, height: 112 };
 
 export const NODE_SIZE: Record<NodeType, NodeSize> = {
-  SCREEN: { width: 216, height: 76 },
-  VARIABLE: { width: 196, height: 66 },
-  COLLECTION: { width: 196, height: 44 },
-  COMPONENT: { width: 168, height: 34 },
+  SCREEN: { width: 216, height: 80 },
+  VARIABLE: { width: 200, height: 72 },
+  COLLECTION: { width: 200, height: 48 },
+  COMPONENT: { width: 168, height: 40 },
 };
 
-/** Horizontal gap between two layers. */
-export const LAYER_GAP = 96;
-/** Vertical gap between two boxes of a layer. */
-export const NODE_GAP = 28;
-/** Gap between two disconnected pieces of the graph, in a row and between rows. */
-export const PIECE_GAP = 64;
+/** Horizontal gap between two layers with no line between them; every line that crosses it widens it by one PITCH. */
+export const LAYER_GAP = 128;
+/** Vertical gap between two boxes of a layer: room for lines to pass between them. */
+export const NODE_GAP = 32;
+/** Gap between two disconnected pieces of the graph, in a row and between rows (and between the bands of a folded piece). */
+export const PIECE_GAP = 96;
+
+/** The gap between two layers that `crossings` lines cross, `scale` times the base one (the router asks for more room when
+ * it could not give every line its own lane). */
+export function layerGap(crossings: number, scale = 1): number {
+  return snapUp(LAYER_GAP * scale) + crossings * PITCH;
+}
 /** A piece narrower than this is never folded: it is about the width of the canvas. */
 export const MIN_WRAP_WIDTH = 1500;
 /** The proportions the packed map aims for: the canvas of the design is 1440 x 900. */
@@ -227,6 +234,8 @@ interface PlacedPiece {
 export interface LayoutOptions {
   /** The piece that holds this node goes first (top left): App (OnStart) opens the Screens view. */
   firstKey?: string;
+  /** Multiplies the gaps: 1 by default; the router asks for more when the lines did not fit. */
+  gapScale?: number;
 }
 
 export function computeLayout(
@@ -235,6 +244,9 @@ export function computeLayout(
   options: LayoutOptions = {},
 ): LayoutResult {
   const started = performance.now();
+  const scale = options.gapScale ?? 1;
+  const pieceGap = snapUp(PIECE_GAP * scale);
+  const nodeGap = snapUp(NODE_GAP * scale);
   const count = data.nodes.length;
   const keys = data.nodes.map((node) => node.key);
   const indexOf = new Map<string, number>();
@@ -261,7 +273,7 @@ export function computeLayout(
 
     const heights = layers.map((column) =>
       column.reduce(
-        (sum, node, index) => sum + (sizes[node]?.height ?? 0) + (index > 0 ? NODE_GAP : 0),
+        (sum, node, index) => sum + (sizes[node]?.height ?? 0) + (index > 0 ? nodeGap : 0),
         0,
       ),
     );
@@ -269,9 +281,21 @@ export function computeLayout(
       column.reduce((most, node) => Math.max(most, sizes[node]?.width ?? 0), 0),
     );
 
+    // How many lines cross the gap after each layer: each one needs its own lane there, so the gap is that much wider.
+    const crossings = new Array<number>(layerCount).fill(0);
+    for (const node of members) {
+      for (const next of graph.successors[node] ?? []) {
+        for (let layer = layerOf[node] ?? 0; layer < (layerOf[next] ?? 0); layer += 1) {
+          crossings[layer] = (crossings[layer] ?? 0) + 1;
+        }
+      }
+    }
+    const gapAfter = (index: number) => layerGap(crossings[index] ?? 0, scale);
+
     // Fold the layers into bands when the piece is wider than the canvas.
     const area = layers.reduce(
-      (sum, _column, index) => sum + ((widths[index] ?? 0) + LAYER_GAP) * (heights[index] ?? 0),
+      (sum, _column, index) =>
+        sum + ((widths[index] ?? 0) + gapAfter(index)) * (heights[index] ?? 0),
       0,
     );
     const wrapWidth = Math.max(
@@ -290,7 +314,7 @@ export function computeLayout(
         used = 0;
       }
       band.push(index);
-      used += width + LAYER_GAP;
+      used += width + gapAfter(index);
     });
     bands.push(band);
 
@@ -301,26 +325,26 @@ export function computeLayout(
       const bandHeight = Math.max(0, ...indexes.map((index) => heights[index] ?? 0));
       let left = 0;
       for (const index of indexes) {
-        let y = top + (bandHeight - (heights[index] ?? 0)) / 2;
+        let y = top + snap((bandHeight - (heights[index] ?? 0)) / 2);
         for (const node of layers[index] ?? []) {
-          positions.set(keys[node] ?? '', { x: Math.round(left), y: Math.round(y) });
-          y += (sizes[node]?.height ?? 0) + NODE_GAP;
+          positions.set(keys[node] ?? '', { x: left, y });
+          y += (sizes[node]?.height ?? 0) + nodeGap;
         }
-        left += (widths[index] ?? 0) + LAYER_GAP;
+        left += (widths[index] ?? 0) + gapAfter(index);
       }
-      pieceWidth = Math.max(pieceWidth, left - LAYER_GAP);
-      top += bandHeight + PIECE_GAP;
+      pieceWidth = Math.max(pieceWidth, left - gapAfter(indexes[indexes.length - 1] ?? 0));
+      top += bandHeight + pieceGap;
     }
     return {
       positions,
       width: Math.max(0, pieceWidth),
-      height: Math.max(0, top - PIECE_GAP),
+      height: Math.max(0, top - pieceGap),
       firstNode: members[0] ?? 0,
     };
   });
 
   return {
-    positions: packPieces(pieces, options.firstKey),
+    positions: packPieces(pieces, options.firstKey, pieceGap),
     durationMs: performance.now() - started,
   };
 }
@@ -329,7 +353,11 @@ export function computeLayout(
  * Step 3: the pieces go in rows, biggest first (ties by their first node), and a row is closed when the next piece would pass
  * the width that gives the whole map the proportions of the canvas. One piece stays where it is.
  */
-function packPieces(pieces: readonly PlacedPiece[], firstKey?: string): Map<string, Position> {
+function packPieces(
+  pieces: readonly PlacedPiece[],
+  firstKey: string | undefined,
+  pieceGap: number,
+): Map<string, Position> {
   const positions = new Map<string, Position>();
   if (pieces.length === 1) return new Map(pieces[0]?.positions);
 
@@ -342,7 +370,7 @@ function packPieces(pieces: readonly PlacedPiece[], firstKey?: string): Map<stri
       a.firstNode - b.firstNode,
   );
   const totalArea = ordered.reduce(
-    (sum, piece) => sum + (piece.width + PIECE_GAP) * (piece.height + PIECE_GAP),
+    (sum, piece) => sum + (piece.width + pieceGap) * (piece.height + pieceGap),
     0,
   );
   const widest = ordered.reduce((most, piece) => Math.max(most, piece.width), 0);
@@ -354,13 +382,13 @@ function packPieces(pieces: readonly PlacedPiece[], firstKey?: string): Map<stri
   for (const piece of ordered) {
     if (x > 0 && x + piece.width > rowWidth) {
       x = 0;
-      y += rowHeight + PIECE_GAP;
+      y += rowHeight + pieceGap;
       rowHeight = 0;
     }
     for (const [key, position] of piece.positions) {
       positions.set(key, { x: x + position.x, y: y + position.y });
     }
-    x += piece.width + PIECE_GAP;
+    x += piece.width + pieceGap;
     rowHeight = Math.max(rowHeight, piece.height);
   }
   return positions;

@@ -198,8 +198,10 @@ describe('All elements view', () => {
 
   it('is the same scene for the same data', () => {
     const data = sampleGraph();
-    expect(JSON.stringify(buildAllScene(data))).toBe(
-      JSON.stringify(buildAllScene(JSON.parse(JSON.stringify(data)) as GraphData)),
+    const plain = (scene: unknown) =>
+      JSON.stringify(scene, (key, value: unknown) => (key === 'routingMs' ? undefined : value));
+    expect(plain(buildAllScene(data))).toBe(
+      plain(buildAllScene(JSON.parse(JSON.stringify(data)) as GraphData)),
     );
   });
 });

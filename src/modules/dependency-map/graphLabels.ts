@@ -52,3 +52,9 @@ export const ASSIGNMENT_FUNCTION_LABEL: Record<AssignmentFunction, string> = {
 };
 
 export const UNTRACED_TAG_LABEL = 'Untraced';
+
+/** The label of the focused element, on its card. */
+export const FOCUSED_LABEL = 'Focused';
+/** The card of a crowded column of the focus view: "+8 more", and "Show fewer" once it is open. */
+export const moreLabel = (hidden: number): string => `+${hidden} more`;
+export const SHOW_FEWER_LABEL = 'Show fewer';

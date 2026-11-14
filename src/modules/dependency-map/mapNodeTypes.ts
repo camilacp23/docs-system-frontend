@@ -4,6 +4,7 @@
 import {
   CollectionMapNode,
   ComponentMapNode,
+  MoreMapNode,
   ScreenCardNode,
   ScreenGroupNode,
   ScreenMapNode,
@@ -17,4 +18,5 @@ export const MAP_NODE_TYPES = {
   variable: VariableMapNode,
   collection: CollectionMapNode,
   component: ComponentMapNode,
+  more: MoreMapNode,
 };

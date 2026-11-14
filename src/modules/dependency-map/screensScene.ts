@@ -1,6 +1,6 @@
 // screensScene: the Screens view, the one the map opens with (D-114).
 // buildScreensScene(data) -> Scene with ONLY the screens, as cards, and ONLY the NAVIGATES_TO edges between them, placed in
-// layers by the navigation with App (OnStart) at the start.
+// layers by the navigation with App (OnStart) at the start, and with every line routed (see edgeRouting).
 // Each card carries counters computed here, in the client, from the graph already loaded:
 //   components   the CONTAINS edges of the screen;
 //   variables    the distinct variables of its ACCESSES edges and of its CREATES edges (the links of the origin screen are not
@@ -9,9 +9,11 @@
 //   collections  the distinct collections of its ACCESSES edges.
 // A variable counts once however many places of the screen use it: the number is of elements, not of links.
 import type { GraphData } from './graphTypes';
+import { heightFor } from './grid';
 import { computeLayout, SCREEN_CARD_SIZE } from './layout';
+import { buildRouted, degreesOf } from './routedScene';
 import { groupEdges } from './sceneEdges';
-import type { Scene, SceneCounters, SceneNode } from './scene';
+import { makeNode, NO_BOUNDS, type Scene, type SceneCounters } from './scene';
 
 export function screenCounters(data: GraphData): Map<string, SceneCounters> {
   const typeOf = new Map(data.nodes.map((node) => [node.key, node.type]));
@@ -54,29 +56,41 @@ export function buildScreensScene(data: GraphData): Scene {
       edge.kind === 'NAVIGATES_TO' && screenKeys.has(edge.source) && screenKeys.has(edge.target),
   );
   const firstKey = screens.find((node) => node.isAppContext)?.key;
-  const { positions } = computeLayout(
-    { nodes: screens, edges: navigation },
-    () => SCREEN_CARD_SIZE,
-    {
-      firstKey,
-    },
-  );
   const counters = screenCounters(data);
+  const lines = groupEdges(navigation, 'none');
+  const degrees = degreesOf(lines);
+  const sizeOf = (key: string) => ({
+    width: SCREEN_CARD_SIZE.width,
+    height: heightFor(SCREEN_CARD_SIZE.height, degrees.get(key) ?? 0),
+  });
 
-  const nodes: SceneNode[] = screens.map((graphNode) => {
-    const position = positions.get(graphNode.key) ?? { x: 0, y: 0 };
+  return buildRouted((gapScale) => {
+    const { positions } = computeLayout(
+      { nodes: screens, edges: navigation },
+      (node) => sizeOf(node.key),
+      { firstKey, gapScale },
+    );
     return {
-      key: graphNode.key,
-      kind: 'screenCard',
-      graphNode,
-      x: position.x,
-      y: position.y,
-      width: SCREEN_CARD_SIZE.width,
-      height: SCREEN_CARD_SIZE.height,
-      parentKey: null,
-      counters: counters.get(graphNode.key) ?? null,
-      role: null,
+      nodes: screens.map((graphNode) => {
+        const position = positions.get(graphNode.key) ?? { x: 0, y: 0 };
+        const size = sizeOf(graphNode.key);
+        return makeNode({
+          key: graphNode.key,
+          kind: 'screenCard',
+          graphNode,
+          x: position.x,
+          y: position.y,
+          width: size.width,
+          height: size.height,
+          counters: counters.get(graphNode.key) ?? null,
+        });
+      }),
+      edges: lines,
+      bounds: NO_BOUNDS,
+      fit: null,
+      failures: 0,
+      routingMs: 0,
+      attempts: 1,
     };
   });
-  return { nodes, edges: groupEdges(navigation, 'none') };
 }

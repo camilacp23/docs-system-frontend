@@ -74,6 +74,8 @@ import {
 } from './useGraphParams';
 
 const FOCUS_ZOOM = 1;
+const NO_COLUMNS: ReadonlySet<string> = new Set();
+const MORE_PREFIX = 'more:';
 /** How many steps the trail of the focus view keeps. */
 export const MAX_TRAIL = 5;
 
@@ -124,11 +126,17 @@ export function MapView({
   const [hoverKey, setHoverKey] = useState<string | null>(null);
   const [keyboardKey, setKeyboardKey] = useState<string | null>(null);
   const [trail, setTrail] = useState<TrailEntry[]>([]);
+  // The columns of the focus view that were opened with "+N more"; it starts again with every new focus.
+  const [opened, setOpened] = useState<{ focus: string | null; columns: ReadonlySet<string> }>({
+    focus: null,
+    columns: NO_COLUMNS,
+  });
 
   const data = source.data;
   const focus = params.focus;
   const focusKey = focus?.key ?? null;
   const focused = focus !== null;
+  const expanded = opened.focus === focusKey ? opened.columns : NO_COLUMNS;
   const { showSkeleton, isSlow } = useDelayedLoading(source.status === 'loading');
 
   // "Show untraced only" is a filter of the All elements view.
@@ -144,7 +152,7 @@ export function MapView({
   const sceneState = useMemo<SceneState>(() => {
     if (shown === null) return null;
     if (focusKey !== null) {
-      const scene = buildFocusScene(shown, focusKey, params.depth);
+      const scene = buildFocusScene(shown, focusKey, params.depth, expanded);
       return scene === null ? null : { kind: 'scene', scene };
     }
     if (params.view === 'all') {
@@ -153,7 +161,7 @@ export function MapView({
         : { kind: 'scene', scene: buildAllScene(shown) };
     }
     return { kind: 'scene', scene: buildScreensScene(shown) };
-  }, [shown, focusKey, params.depth, params.view]);
+  }, [shown, focusKey, params.depth, params.view, expanded]);
   const scene = sceneState?.kind === 'scene' ? sceneState.scene : null;
   const flow = useMemo(() => (scene === null ? null : sceneToFlow(scene)), [scene]);
   const sceneKeys = useMemo(() => new Set(scene?.nodes.map((box) => box.key) ?? []), [scene]);
@@ -183,11 +191,13 @@ export function MapView({
     if (highlight === null) return flow.edges;
     return flow.edges.map((edge) =>
       highlight.edges.has(edge.id)
-        ? edge
+        ? // A highlighted line shows its label, also when it does not touch the focused element.
+          edge.data === undefined
+          ? edge
+          : { ...edge, data: { ...edge.data, labelShown: true } }
         : {
             ...edge,
             style: { ...edge.style, opacity: DIMMED_OPACITY },
-            labelStyle: { opacity: DIMMED_OPACITY },
           },
     );
   }, [flow, highlight]);
@@ -234,6 +244,14 @@ export function MapView({
   /** A node was chosen, on the canvas or in the panel: select it, or in the focus view put it in the middle. */
   const activate = useCallback(
     (key: string) => {
+      if (key.startsWith(MORE_PREFIX)) {
+        // The card "+N more" / "Show fewer": opens or closes the rest of a crowded column.
+        const column = key.slice(MORE_PREFIX.length);
+        const columns = new Set(expanded);
+        if (!columns.delete(column)) columns.add(column);
+        setOpened({ focus: focusKey, columns });
+        return;
+      }
       const node = index?.nodesByKey.get(key);
       if (!node) return;
       if (focused) {
@@ -243,7 +261,7 @@ export function MapView({
       if (sceneKeys.has(key)) setSelection({ applicationId, key });
       else focusOn(node); // a node this view does not draw: look at it in the focus view
     },
-    [index, focused, focusKey, sceneKeys, applicationId, recenter, focusOn],
+    [index, focused, focusKey, sceneKeys, applicationId, recenter, focusOn, expanded],
   );
   const actions = useMemo(
     () => ({ activate, hover: setHoverKey, focusNode: setKeyboardKey }),
@@ -446,6 +464,8 @@ export function MapView({
               <GraphCanvas
                 nodes={nodes}
                 edges={edges}
+                bounds={scene.bounds}
+                fit={scene.fit}
                 layoutKey={scene}
                 index={index}
                 onPaneClick={() => {

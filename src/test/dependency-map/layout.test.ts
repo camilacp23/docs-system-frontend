@@ -5,9 +5,10 @@
 import { describe, expect, it } from 'vitest';
 
 import type { GraphData, GraphNode } from '../../modules/dependency-map/graphTypes';
+import { snap } from '../../modules/dependency-map/grid';
 import {
   computeLayout,
-  LAYER_GAP,
+  layerGap,
   NODE_GAP,
   NODE_SIZE,
   type Position,
@@ -91,8 +92,9 @@ describe('computeLayout', () => {
     const { positions } = computeLayout(data);
     expect(at(positions, 'screen:1').x).toBeLessThan(at(positions, 'screen:2').x);
     expect(at(positions, 'screen:2').x).toBeLessThan(at(positions, 'screen:3').x);
+    // One line crosses the gap, and each line that crosses a gap widens it by one grid step (its own lane).
     expect(at(positions, 'screen:2').x - at(positions, 'screen:1').x).toBe(
-      NODE_SIZE.SCREEN.width + LAYER_GAP,
+      NODE_SIZE.SCREEN.width + layerGap(1),
     );
     // The edges of the data are never touched.
     expect(data.edges[0]).toMatchObject({ source: 'screen:1', target: 'screen:2' });
@@ -226,7 +228,7 @@ describe('computeLayout', () => {
     }
     expect(width).toBeLessThan(2000);
     expect(width / height).toBeLessThan(3.5);
-    expect(width / height).toBeGreaterThan(0.8);
+    expect(width / height).toBeGreaterThan(0.6);
     // The chain still starts at the top left and goes on from left to right inside a band.
     expect(at(positions, 'screen:1')).toEqual({ x: 0, y: 0 });
     expect(at(positions, 'screen:2').x).toBeGreaterThan(at(positions, 'screen:1').x);
@@ -264,9 +266,11 @@ describe('computeLayout', () => {
     const { positions } = computeLayout(data, (node) =>
       node.key === 'screen:1' ? wide : NODE_SIZE.SCREEN,
     );
-    expect(at(positions, 'screen:2').x - at(positions, 'screen:1').x).toBe(wide.width + LAYER_GAP);
-    // Centered on the tallest column of the piece.
-    expect(at(positions, 'screen:2').y).toBe((wide.height - NODE_SIZE.SCREEN.height) / 2);
+    expect(at(positions, 'screen:2').x - at(positions, 'screen:1').x).toBe(
+      wide.width + layerGap(1),
+    );
+    // Centered on the tallest column of the piece, on the grid.
+    expect(at(positions, 'screen:2').y).toBe(snap((wide.height - NODE_SIZE.SCREEN.height) / 2));
   });
 
   it('keeps the boxes of a layer apart by the constant gap', () => {

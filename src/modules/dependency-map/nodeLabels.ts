@@ -3,7 +3,8 @@
 //   always in the accessible name and the tooltip (title) of the node.
 // nodeAriaLabel(node, counters?) -> "Screen Inicio, Approved", "Variable gUsuario, Global, untraced", "Collection
 //   colClientes", "Component btnGuardar": what a screen reader says for the button of a node. The card of a screen in the
-//   Screens view adds its counters: "Screen Inicio, Approved, 3 components, 2 variables, 1 collection".
+//   Screens view adds its counters ("Screen Inicio, Approved, 3 components, 2 variables, 1 collection"), and the
+//   focused element of the focus view ends with "focused".
 import { DOCUMENTATION_STATUS_LABEL } from '../../components/ui';
 import { RESERVED_LABEL, toTagStatus } from '../screens/screenLabels';
 import { countText, SCOPE_LABEL } from '../variables/variableLabels';
@@ -25,7 +26,11 @@ export function truncateName(name: string, type: NodeType): string {
   return name.length <= max ? name : `${name.slice(0, max - 1)}…`;
 }
 
-export function nodeAriaLabel(node: GraphNode, counters: SceneCounters | null = null): string {
+export function nodeAriaLabel(
+  node: GraphNode,
+  counters: SceneCounters | null = null,
+  focused = false,
+): string {
   const parts: string[] = [];
   switch (node.type) {
     case 'SCREEN':
@@ -46,5 +51,6 @@ export function nodeAriaLabel(node: GraphNode, counters: SceneCounters | null = 
       countText(counters.collections, 'collection'),
     );
   }
+  if (focused) parts.push('focused');
   return [`${NODE_TYPE_LABEL[node.type]} ${node.name}`, ...parts].join(', ');
 }

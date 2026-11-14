@@ -6,12 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { buildAllScene } from '../../modules/dependency-map/allScene';
 import { EDGE_STYLE } from '../../modules/dependency-map/edgeStyles';
 import { buildFocusScene } from '../../modules/dependency-map/focusScene';
-import {
-  HANDLE,
-  isEmptyMap,
-  onlyUntraced,
-  sceneToFlow,
-} from '../../modules/dependency-map/graphModel';
+import { isEmptyMap, onlyUntraced, sceneToFlow } from '../../modules/dependency-map/graphModel';
 import { EDGE_KINDS } from '../../modules/dependency-map/graphTypes';
 import { computeHighlight, DIMMED_OPACITY } from '../../modules/dependency-map/highlight';
 import { buildScreensScene } from '../../modules/dependency-map/screensScene';
@@ -71,41 +66,40 @@ describe('sceneToFlow', () => {
     expect(new Set(roles)).toEqual(new Set(['center', 'left', 'right']));
   });
 
-  it('draws every edge as a step edge with the style of its kind', () => {
+  it('draws every edge with the routed type, the style of its kind and the route of the router', () => {
     const focus = sceneToFlow(buildFocusScene(sampleGraph(), 'collection:21', 2) as never).edges;
     expect(focus.length).toBeGreaterThan(0);
     expect(new Set(focus.map((edge) => edge.data?.sceneEdge.kind)).size).toBeGreaterThan(1);
     for (const edge of [...edges, ...focus]) {
-      expect(edge.type).toBe('smoothstep');
+      expect(edge.type).toBe('routed');
       const kind = edge.data?.sceneEdge.kind;
       expect(kind).toBeDefined();
       if (kind) expect(edge.style?.stroke).toBe(EDGE_STYLE[kind].stroke);
       expect(edge.focusable).toBe(false);
+      // The path is the route that was computed with the layout, not one React Flow works out from the sides of the boxes.
+      expect(edge.data?.route?.points.length).toBeGreaterThanOrEqual(2);
+      expect(edge.data?.route).toBe(edge.data?.sceneEdge.route);
     }
   });
 
-  it('draws a line that goes right to left from the near sides, so it does not loop around the boxes', () => {
-    // A screen that READS a collection has the collection on its left: the stored edge goes from the screen to the collection.
+  it('draws a line from the border of its source to the border of its target through its own ports', () => {
     const reading = {
       nodes: [screenNode(1, 'Inicio'), collectionNode(1, 'colClientes')],
       edges: [accesses(1, 'screen:1', 'collection:1', 'READ', 'OnVisible')],
     };
-    const focus = buildFocusScene(reading, 'screen:1', 1) as NonNullable<
+    const scene = buildFocusScene(reading, 'screen:1', 1) as NonNullable<
       ReturnType<typeof buildFocusScene>
     >;
-    const line = sceneToFlow(focus).edges[0];
-    // Real direction kept: source is the screen, target the collection.
+    const line = sceneToFlow(scene).edges[0];
+    // Real direction kept: source is the screen, target the collection (which is on the screen's left).
     expect([line?.source, line?.target]).toEqual(['screen:1', 'collection:1']);
-    // Drawn from the left side of the screen to the right side of the collection, which is on its left.
-    expect([line?.sourceHandle, line?.targetHandle]).toEqual([HANDLE.leftOut, HANDLE.rightIn]);
-  });
-
-  it('draws a line that goes left to right from the right side of the source to the left side of the target', () => {
-    const forward = sceneToFlow(buildScreensScene(sampleGraph())).edges[0];
-    expect([forward?.sourceHandle, forward?.targetHandle]).toEqual([
-      HANDLE.rightOut,
-      HANDLE.leftIn,
-    ]);
+    const points = line?.data?.route?.points ?? [];
+    const screenBox = scene.nodes.find((node) => node.key === 'screen:1');
+    const collectionBox = scene.nodes.find((node) => node.key === 'collection:1');
+    expect(points[0]?.x).toBe(screenBox?.x); // leaves the left border of the screen
+    expect(points[points.length - 1]?.x).toBe(
+      (collectionBox?.x ?? 0) + (collectionBox?.width ?? 0),
+    );
   });
 
   it('puts the boxes above the lines and the components above their group', () => {
@@ -115,11 +109,17 @@ describe('sceneToFlow', () => {
     expect(flow.nodes.find((node) => node.id === 'component:31')?.zIndex).toBe(2);
   });
 
-  it('labels an edge with the label of the scene and leaves the others without one', () => {
-    const labels = sceneToFlow(buildFocusScene(sampleGraph(), 'screen:12', 1) as never).edges;
-    expect(labels.some((edge) => typeof edge.label === 'string')).toBe(true);
-    const plain = sceneToFlow(buildScreensScene(sampleGraph())).edges;
-    for (const edge of plain) expect(edge.label).toBeUndefined();
+  it('shows the label of a line only when it touches the focused element, in the focus view', () => {
+    const focus = sceneToFlow(buildFocusScene(sampleGraph(), 'variable:1', 2) as never).edges;
+    const touching = focus.filter((edge) => edge.data?.sceneEdge.labelFirst);
+    const others = focus.filter((edge) => !edge.data?.sceneEdge.labelFirst);
+    expect(touching.length).toBeGreaterThan(0);
+    expect(others.length).toBeGreaterThan(0);
+    expect(touching.every((edge) => edge.data?.labelShown === true)).toBe(true);
+    expect(others.every((edge) => edge.data?.labelShown === false)).toBe(true);
+    for (const edge of sceneToFlow(buildScreensScene(sampleGraph())).edges) {
+      expect(edge.data?.sceneEdge.label).toBeNull();
+    }
   });
 
   it('gives each edge kind its own line: no two kinds share color, width and dash together', () => {

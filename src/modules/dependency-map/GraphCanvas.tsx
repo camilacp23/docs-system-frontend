@@ -1,14 +1,18 @@
 // GraphCanvas: the React Flow canvas of the dependency map (frames S-27 to S-28).
-// Props: nodes, edges (from sceneToFlow, already placed), layoutKey (changes only when the map is placed again: the view is
-// fitted then and never when a node is selected), index (for the tooltip of an edge), onPaneClick.
-// Performance (NFR-11): the node types are a module constant, nodes are memoized, only the elements inside the viewport
-// are rendered (onlyRenderVisibleElements), nothing is draggable or connectable and the page owns the selection (React Flow
-// gets no onNodesChange). Edges are the built-in 'smoothstep' type (steps), with a style per kind. The mini map and the zoom
-// controls are the ones React Flow brings; the legend is a panel at the bottom left. Hovering an edge shows its tooltip
-// (S-27c); the same facts are in the side panel for the keyboard.
-// The first view is READABLE: when the whole map fits the canvas it is centered, at most at 100 %; when it does not, it is
-// shown at READABLE_MIN_ZOOM (the text never shrinks below about 9 px) starting at its top left corner, where App (OnStart) is,
-// and the mini map and panning go on from there. The "fit view" control does the same.
+// Props: nodes, edges (from sceneToFlow, already placed and routed), bounds (everything that is drawn), fit (the boxes the first
+// view frames and the one to keep in the middle, null for the whole map), layoutKey (changes only when the map is placed again:
+// the view is fitted then and never when a node is selected), index (for the tooltip of an edge), onPaneClick.
+// Performance (NFR-11): the node and edge types are module constants, nodes are memoized, only the elements inside the viewport
+// are rendered (onlyRenderVisibleElements), nothing is draggable or connectable and the page owns the selection (React Flow gets no
+// onNodesChange). The edge type is 'routed' (see RoutedEdge): the lines were routed with the layout, so they are not computed
+// while drawing. A line shows its tooltip when hovered (S-27c); the same facts are in the side panel for the keyboard.
+// The chrome of the canvas keeps out of the way of the map:
+//   - a bar at the top with the "Relationships" button (the legend is a panel it opens, not a card over the map);
+//   - the zoom controls at the bottom right, and the mini map next to them, small, only while the map does not fit the canvas;
+//   - the first view and "fit view" RESERVE the space of that chrome (see canvasFit): no box starts under it. The first view is
+//     readable: the whole map when it fits at 100 % or less, never below READABLE_MIN_ZOOM; when it does not fit, the framed
+//     boxes start at the top left, or, if there is a box to keep in the middle (the focused element), around it.
+//   - panning is limited to the map plus the room of the chrome.
 // Keyboard: every node holds a button (see MapNodes) and the canvas does not trap Tab.
 import {
   Controls,
@@ -16,32 +20,34 @@ import {
   Panel,
   ReactFlow,
   useReactFlow,
+  useViewport,
   type EdgeMouseHandler,
 } from '@xyflow/react';
 import '@xyflow/react/dist/base.css';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { EdgeLegend } from './EdgeLegend';
+import type { Rect } from './edgeRouting';
 import type { MapFlowEdge, MapFlowNode } from './graphModel';
+import { MAP_EDGE_TYPES } from './mapEdgeTypes';
 import { MAP_NODE_TYPES } from './mapNodeTypes';
+import { fitViewport, MINIMAP_SIZE, overflowsCanvas } from './canvasFit';
 import { edgeTooltip, type GraphIndex } from './panelModel';
-import type { SceneEdge } from './scene';
+import { RelationshipsMenu } from './RelationshipsMenu';
+import type { SceneEdge, SceneFit } from './scene';
 import './mapCanvas.css';
 
-/** The smallest zoom of the first view and of "fit view": 13 px text is about 9 px here. */
-export const READABLE_MIN_ZOOM = 0.7;
-/** A small map is not enlarged past its real size. */
-export const FIT_MAX_ZOOM = 1;
-/** The space kept around the map in the first view, in pixels. */
-export const FIT_PADDING = 32;
 /** How far the user can zoom out by hand. */
 const MIN_ZOOM = 0.2;
 const MAX_ZOOM = 2;
 const MINIMAP_NODE_COLOR = 'var(--color-border-control)';
+/** Panning goes this far (in map units) past the map: enough to bring its edge out from under the chrome. */
+const PAN_ROOM = { top: 160, right: 400, bottom: 120, left: 120 };
 
 interface GraphCanvasProps {
   nodes: MapFlowNode[];
   edges: MapFlowEdge[];
+  bounds: Rect;
+  fit: SceneFit | null;
   layoutKey: unknown;
   index: GraphIndex;
   onPaneClick: () => void;
@@ -53,44 +59,62 @@ interface Hovered {
   y: number;
 }
 
-export function GraphCanvas({ nodes, edges, layoutKey, index, onPaneClick }: GraphCanvasProps) {
+export function GraphCanvas({
+  nodes,
+  edges,
+  bounds,
+  fit,
+  layoutKey,
+  index,
+  onPaneClick,
+}: GraphCanvasProps) {
   const { setViewport } = useReactFlow();
+  const viewport = useViewport();
   const containerRef = useRef<HTMLDivElement>(null);
   const nodesRef = useRef(nodes);
   const [hovered, setHovered] = useState<Hovered | null>(null);
+  const [canvas, setCanvas] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
     nodesRef.current = nodes;
   });
 
-  /** The readable first view of the boxes of the map (components inside a group do not extend it). */
+  /** The readable first view: see canvasFit. */
   const fitReadable = useCallback(() => {
     const container = containerRef.current;
+    if (!container || nodesRef.current.length === 0) return;
+    const size = { width: container.offsetWidth, height: container.offsetHeight };
+    setCanvas(size);
+
+    // What the view frames: the boxes of `fit`, or everything that is drawn.
     const top = nodesRef.current.filter((node) => node.parentId === undefined);
-    if (!container || top.length === 0) return;
-    const minX = Math.min(...top.map((node) => node.position.x));
-    const minY = Math.min(...top.map((node) => node.position.y));
-    const maxX = Math.max(...top.map((node) => node.position.x + (node.width ?? 0)));
-    const maxY = Math.max(...top.map((node) => node.position.y + (node.height ?? 0)));
-    const mapWidth = Math.max(1, maxX - minX);
-    const mapHeight = Math.max(1, maxY - minY);
-    const room = {
-      width: Math.max(1, container.offsetWidth - 2 * FIT_PADDING),
-      height: Math.max(1, container.offsetHeight - 2 * FIT_PADDING),
-    };
-    const fits = Math.min(room.width / mapWidth, room.height / mapHeight);
-    const zoom = Math.min(FIT_MAX_ZOOM, Math.max(READABLE_MIN_ZOOM, fits));
-    // Centered when it fits at this zoom, from the top left corner when it does not.
-    const x =
-      mapWidth * zoom <= room.width
-        ? FIT_PADDING + (room.width - mapWidth * zoom) / 2 - minX * zoom
-        : FIT_PADDING - minX * zoom;
-    const y =
-      mapHeight * zoom <= room.height
-        ? FIT_PADDING + (room.height - mapHeight * zoom) / 2 - minY * zoom
-        : FIT_PADDING - minY * zoom;
-    void setViewport({ x, y, zoom }, { duration: 0 });
-  }, [setViewport]);
+    const rectOf = (node: MapFlowNode): Rect => ({
+      x: node.position.x,
+      y: node.position.y,
+      width: node.width ?? 0,
+      height: node.height ?? 0,
+    });
+    const framed = fit ? top.filter((node) => fit.keys.includes(node.id)).map(rectOf) : [];
+    const left = Math.min(...framed.map((rect) => rect.x));
+    const above = Math.min(...framed.map((rect) => rect.y));
+    const content: Rect =
+      framed.length === 0
+        ? bounds
+        : {
+            x: left,
+            y: above,
+            width: Math.max(...framed.map((rect) => rect.x + rect.width)) - left,
+            height: Math.max(...framed.map((rect) => rect.y + rect.height)) - above,
+          };
+    const anchorNode =
+      fit?.anchorKey == null ? null : top.find((node) => node.id === fit.anchorKey);
+    const view = fitViewport({
+      content,
+      anchor: anchorNode ? rectOf(anchorNode) : null,
+      canvas: size,
+    });
+    void setViewport({ x: view.x, y: view.y, zoom: view.zoom }, { duration: 0 });
+  }, [setViewport, bounds, fit]);
 
   // A new placement (new data) fits the view; selecting, panning or zooming never comes here.
   useEffect(() => {
@@ -108,6 +132,7 @@ export function GraphCanvas({ nodes, edges, layoutKey, index, onPaneClick }: Gra
   }, []);
 
   const tooltip = hovered ? edgeTooltip(hovered.edge, index) : null;
+  const showMiniMap = canvas.width > 0 && overflowsCanvas(bounds, viewport, canvas);
 
   return (
     <div
@@ -120,12 +145,17 @@ export function GraphCanvas({ nodes, edges, layoutKey, index, onPaneClick }: Gra
         nodes={nodes}
         edges={edges}
         nodeTypes={MAP_NODE_TYPES}
+        edgeTypes={MAP_EDGE_TYPES}
         onlyRenderVisibleElements
         // Manual z-index: every edge is at 0 and every box above it. In the default mode React Flow lifts an edge to the level
         // of the component it ends at, which is above the boxes of the other screens, and the line crosses their text.
         zIndexMode="manual"
         minZoom={MIN_ZOOM}
         maxZoom={MAX_ZOOM}
+        translateExtent={[
+          [bounds.x - PAN_ROOM.left, bounds.y - PAN_ROOM.top],
+          [bounds.x + bounds.width + PAN_ROOM.right, bounds.y + bounds.height + PAN_ROOM.bottom],
+        ]}
         nodesDraggable={false}
         nodesConnectable={false}
         nodesFocusable={false}
@@ -137,16 +167,19 @@ export function GraphCanvas({ nodes, edges, layoutKey, index, onPaneClick }: Gra
         onEdgeMouseLeave={hideTooltip}
       >
         <Controls showInteractive={false} onFitView={fitReadable} position="bottom-right" />
-        <MiniMap
-          pannable
-          zoomable
-          ariaLabel="Minimap"
-          nodeColor={MINIMAP_NODE_COLOR}
-          position="bottom-right"
-          className="!mr-14"
-        />
-        <Panel position="bottom-left" className="!m-3">
-          <EdgeLegend />
+        {showMiniMap && (
+          <MiniMap
+            pannable
+            zoomable
+            ariaLabel="Minimap"
+            nodeColor={MINIMAP_NODE_COLOR}
+            position="bottom-right"
+            style={MINIMAP_SIZE}
+            className="!mr-14"
+          />
+        )}
+        <Panel position="top-left" className="!m-3">
+          <RelationshipsMenu />
         </Panel>
       </ReactFlow>
       {tooltip && hovered && (

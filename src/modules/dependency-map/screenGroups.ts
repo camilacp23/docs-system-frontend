@@ -7,10 +7,11 @@
 //   header with the screen, then the components in a grid of 1, 2 or 3 columns, so a screen with many components stays
 //   compact. The size depends only on the number of components, so it is known before the map is placed.
 import type { ComponentNode, GraphData, GraphNode } from './graphTypes';
+import { snap, snapUp } from './grid';
 import { NODE_SIZE, type NodeSize, type Position } from './layout';
 
-export const GROUP_HEADER = 44;
-export const GROUP_PADDING = 12;
+export const GROUP_HEADER = 48;
+export const GROUP_PADDING = 16;
 export const CHILD_GAP = 8;
 
 export function componentsByScreen(data: GraphData): Map<string, ComponentNode[]> {
@@ -52,9 +53,9 @@ export function groupLayout(childCount: number): GroupLayout {
   const columns = groupColumns(childCount);
   const rows = Math.ceil(childCount / columns);
   const gridWidth = columns * child.width + (columns - 1) * CHILD_GAP;
-  const width = Math.max(NODE_SIZE.SCREEN.width, gridWidth + 2 * GROUP_PADDING);
+  const width = snapUp(Math.max(NODE_SIZE.SCREEN.width, gridWidth + 2 * GROUP_PADDING));
   const height = GROUP_HEADER + rows * child.height + (rows - 1) * CHILD_GAP + 2 * GROUP_PADDING;
-  const left = Math.round((width - gridWidth) / 2);
+  const left = snap((width - gridWidth) / 2);
   const positions = Array.from({ length: childCount }, (_, index) => ({
     x: left + (index % columns) * (child.width + CHILD_GAP),
     y: GROUP_HEADER + GROUP_PADDING + Math.floor(index / columns) * (child.height + CHILD_GAP),

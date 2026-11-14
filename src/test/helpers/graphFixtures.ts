@@ -207,7 +207,9 @@ export function makeLargeGraph(nodeCount = 500): GraphData {
   for (let id = 1; id <= variables; id += 1) {
     if (id % 11 !== 0) edges.push(creates(edgeId++, `screen:${pick(screens)}`, `variable:${id}`));
   }
-  for (let count = 0; count < 260; count += 1) {
+  // The number of links grows with the size, as in a real application (about 2.2 edges per element at 500).
+  const scaled = (base: number) => Math.round((base * nodeCount) / 500);
+  for (let count = 0; count < scaled(260); count += 1) {
     const target =
       random() < 0.6 ? `variable:${pick(variables)}` : `collection:${pick(collections)}`;
     edges.push(
@@ -220,7 +222,7 @@ export function makeLargeGraph(nodeCount = 500): GraphData {
       ),
     );
   }
-  for (let count = 0; count < 120; count += 1) {
+  for (let count = 0; count < scaled(120); count += 1) {
     edges.push(
       feeds(
         edgeId++,
@@ -232,7 +234,7 @@ export function makeLargeGraph(nodeCount = 500): GraphData {
       ),
     );
   }
-  for (let count = 0; count < 280; count += 1) {
+  for (let count = 0; count < scaled(280); count += 1) {
     const target =
       random() < 0.7 ? `variable:${pick(variables)}` : `collection:${pick(collections)}`;
     edges.push(uses(edgeId++, `component:${pick(components)}`, target));

@@ -1,6 +1,6 @@
 // focusScene: the focus view (D-114): one element in the middle, what comes before it on the left and what comes after it on
 // the right, by the flow of the data.
-// buildFocusScene(data, centerKey, depth) -> Scene | null (null when the element is not in the graph).
+// buildFocusScene(data, centerKey, depth, expanded?) -> Scene | null (null when the element is not in the graph).
 //
 // Which side a neighbor goes on is decided by which end of the edge is UPSTREAM (the one the data or the control comes from):
 //   CREATES        the screen that creates the variable is upstream           (source)
@@ -15,20 +15,38 @@
 // relations in both directions with the center it goes to the left, and its edges keep their real direction.
 // Depth 2 adds one more column on each side: what is next to the neighbors, on the side of the neighbor, never twice.
 //
+// The focused element is the one that stands out: its box is a little bigger than the others (the view marks it with
+// "Focused" and a thicker border), it is in the column of the middle, and the first view frames it and its neighbors of depth 1
+// (`fit`), keeping it in the middle when they do not fit.
+//
+// A column with more than MAX_COLUMN_NODES boxes shows the first ones (in the order of the column, which is deterministic) and
+// a card "+N more" that expands the rest (`expanded` holds the ids of the columns that are open, e.g. "left2"). Hidden
+// boxes have no lines.
+//
 // A screen holds its components: the screen is a group (its components inside, see screenGroups) and the CONTAINS edges are
-// not drawn. A component whose screen is in the graph lives in that group, so its edges leave from inside the group and
-// the group is the box that takes the column. A component without its screen in the graph is a box of its own.
+// not drawn. A component whose screen is in the graph lives in that group, so its edges leave from the border of the group
+// and the group is the box that takes the column. A component without its screen in the graph is a box of its own.
 //
 // Layout: columns from the outside in; the first column on each side is ordered by type and name, the second by the
-// barycenter of its neighbors in the first, ties by key. The columns are centered on the tallest one. Deterministic.
+// barycenter of its neighbors in the first, ties by key. The columns are centered on the tallest one. The gap between two columns
+// grows with the number of lines that cross it (each one has its own lane), and every line is routed (see edgeRouting).
 import type { GraphData, GraphEdge, GraphNode, NodeType } from './graphTypes';
+import { heightFor, PITCH, snap, snapUp } from './grid';
 import { NODE_GAP, NODE_SIZE, type NodeSize } from './layout';
+import { buildRouted, degreesOf } from './routedScene';
 import { groupEdges } from './sceneEdges';
 import { componentsByScreen, groupLayout, unitKeyOf } from './screenGroups';
-import { nodeKindOf, type Scene, type SceneNode } from './scene';
+import { makeNode, nodeKindOf, NO_BOUNDS, type Scene, type SceneNode } from './scene';
 
-export const FOCUS_COLUMN_GAP = 140;
+/** The base gap between two columns, before the lanes of the lines that cross it. */
+export const FOCUS_COLUMN_GAP = 160;
 export const MAX_FOCUS_DEPTH = 2;
+/** A column shows this many boxes; the rest are behind "+N more". */
+export const MAX_COLUMN_NODES = 12;
+/** The card "+N more" and "Show fewer". */
+export const MORE_SIZE: NodeSize = { width: 200, height: 48 };
+/** The focused element is this much bigger than a plain box. */
+export const CENTER_SCALE = 1.15;
 
 type Side = 'left' | 'right' | 'center';
 
@@ -52,8 +70,18 @@ export function upstreamKeyOf(edge: GraphEdge): string {
 }
 
 const TYPE_RANK: Record<NodeType, number> = { SCREEN: 0, VARIABLE: 1, COLLECTION: 2, COMPONENT: 3 };
+const COLUMN_IDS = ['left2', 'left1', 'center', 'right1', 'right2'] as const;
 
-export function buildFocusScene(data: GraphData, centerKey: string, depth: number): Scene | null {
+export function moreKey(column: string): string {
+  return `more:${column}`;
+}
+
+export function buildFocusScene(
+  data: GraphData,
+  centerKey: string,
+  depth: number,
+  expanded: ReadonlySet<string> = new Set(),
+): Scene | null {
   const nodesByKey = new Map(data.nodes.map((node) => [node.key, node]));
   if (!nodesByKey.has(centerKey)) return null;
   const groups = componentsByScreen(data);
@@ -91,8 +119,9 @@ export function buildFocusScene(data: GraphData, centerKey: string, depth: numbe
   for (const { unit, isLeft } of neighbors.get(centerUnit) ?? []) {
     firstRing.set(unit, (firstRing.get(unit) ?? false) || isLeft);
   }
-  for (const [unit, isLeft] of firstRing)
+  for (const [unit, isLeft] of firstRing) {
     placement.set(unit, { side: isLeft ? 'left' : 'right', ring: 1 });
+  }
   if (depth >= 2) {
     for (const [unit] of firstRing) {
       const side = placement.get(unit)?.side ?? 'right';
@@ -109,10 +138,9 @@ export function buildFocusScene(data: GraphData, centerKey: string, depth: numbe
   for (const [unit, { side, ring }] of placement) columns[columnOf(side, ring)]?.push(unit);
 
   const nodeOf = (unit: string) => nodesByKey.get(unit) as GraphNode;
-  const nameOf = (unit: string) => nodeOf(unit).name;
   const byTypeAndName = (a: string, b: string) => {
-    const keyA = `${TYPE_RANK[nodeOf(a).type]}|${nameOf(a)}|${a}`;
-    const keyB = `${TYPE_RANK[nodeOf(b).type]}|${nameOf(b)}|${b}`;
+    const keyA = `${TYPE_RANK[nodeOf(a).type]}|${nodeOf(a).name}|${a}`;
+    const keyB = `${TYPE_RANK[nodeOf(b).type]}|${nodeOf(b).name}|${b}`;
     return keyA < keyB ? -1 : keyA > keyB ? 1 : 0;
   };
   columns[1]?.sort(byTypeAndName);
@@ -138,67 +166,146 @@ export function buildFocusScene(data: GraphData, centerKey: string, depth: numbe
     column.sort((a, b) => score(a) - score(b) || (a < b ? -1 : a > b ? 1 : 0));
   }
 
-  // Sizes and positions.
+  // A crowded column shows its first MAX_COLUMN_NODES boxes and a card for the rest.
+  interface MoreEntry {
+    column: string;
+    hidden: number;
+    expanded: boolean;
+  }
+  const moreOf = new Map<number, MoreEntry>();
+  const shown: string[][] = columns.map((column, index) => {
+    const id = COLUMN_IDS[index] ?? 'center';
+    if (index === 2 || column.length <= MAX_COLUMN_NODES) return column;
+    const open = expanded.has(id);
+    const hidden = column.length - MAX_COLUMN_NODES;
+    moreOf.set(index, { column: id, hidden, expanded: open });
+    return open ? column : column.slice(0, MAX_COLUMN_NODES);
+  });
+  const visibleUnits = new Set(shown.flat());
+
+  // The lines between the boxes that are shown, and how many ports each box needs.
+  const drawn = edges.filter(
+    (edge) => visibleUnits.has(unitOf(edge.source)) && visibleUnits.has(unitOf(edge.target)),
+  );
+  const lines = groupEdges(
+    drawn,
+    'all',
+    (edge) => unitOf(edge.source) === centerUnit || unitOf(edge.target) === centerUnit,
+  );
+  const degrees = degreesOf(lines, unitOf);
+
   const sizeOfUnit = (unit: string): NodeSize => {
     const children = groups.get(unit);
-    return children ? groupLayout(children.length) : NODE_SIZE[nodeOf(unit).type];
+    const base = children ? groupLayout(children.length) : NODE_SIZE[nodeOf(unit).type];
+    const sized =
+      unit === centerUnit && !children
+        ? {
+            width: snapUp(base.width * CENTER_SCALE),
+            height: snapUp(base.height * CENTER_SCALE),
+          }
+        : base;
+    return { width: sized.width, height: heightFor(sized.height, degrees.get(unit) ?? 0) };
   };
-  const heights = columns.map((column) =>
-    column.reduce(
-      (sum, unit, index) => sum + sizeOfUnit(unit).height + (index > 0 ? NODE_GAP : 0),
-      0,
-    ),
-  );
-  const tallest = Math.max(0, ...heights);
-  const nodes: SceneNode[] = [];
-  let left = 0;
-  columns.forEach((column, columnIndex) => {
-    if (column.length === 0) return;
-    let y = (tallest - (heights[columnIndex] ?? 0)) / 2;
-    let width = 0;
-    for (const unit of column) {
-      const graphNode = nodeOf(unit);
-      const size = sizeOfUnit(unit);
-      const children = groups.get(unit);
-      const place = placement.get(unit);
-      const role = place?.side ?? null;
-      nodes.push({
-        key: unit,
-        kind: children ? 'screenGroup' : nodeKindOf(graphNode),
-        graphNode,
-        x: Math.round(left),
-        y: Math.round(y),
-        width: size.width,
-        height: size.height,
-        parentKey: null,
-        counters: null,
-        role,
-      });
-      if (children) {
-        const layout = groupLayout(children.length);
-        children.forEach((child, index) => {
-          const at = layout.positions[index] ?? { x: 0, y: 0 };
-          nodes.push({
-            key: child.key,
-            kind: 'component',
-            graphNode: child,
-            x: at.x,
-            y: at.y,
-            width: NODE_SIZE.COMPONENT.width,
-            height: NODE_SIZE.COMPONENT.height,
-            parentKey: unit,
-            counters: null,
-            role,
-          });
-        });
-      }
-      y += size.height + NODE_GAP;
-      width = Math.max(width, size.width);
-    }
-    left += width + FOCUS_COLUMN_GAP;
-  });
 
-  const placed = new Set(nodes.map((node) => node.key));
-  const drawn = edges.filter((edge) => placed.has(edge.source) && placed.has(edge.target));
-  return { nodes, edges: groupEdges(drawn, 'all') };
+  // Which displayed column each box is in: the lines that cross the gap after a column widen it.
+  const present = shown
+    .map((column, index) => ({ column, index, more: moreOf.get(index) }))
+    .filter(({ column, more }) => column.length > 0 || more !== undefined);
+  const positionOfColumn = new Map(present.map((entry, order) => [entry.index, order]));
+  const columnOfUnit = new Map<string, number>();
+  shown.forEach((column, index) => {
+    for (const unit of column) columnOfUnit.set(unit, positionOfColumn.get(index) ?? 0);
+  });
+  const crossings = new Array<number>(present.length).fill(0);
+  for (const line of lines) {
+    const from = columnOfUnit.get(unitOf(line.source)) ?? 0;
+    const to = columnOfUnit.get(unitOf(line.target)) ?? 0;
+    if (from === to) crossings[from] = (crossings[from] ?? 0) + 1;
+    else
+      for (let gap = Math.min(from, to); gap < Math.max(from, to); gap += 1)
+        crossings[gap] = (crossings[gap] ?? 0) + 1;
+  }
+
+  const fitKeys = [centerUnit, ...[...firstRing.keys()].filter((unit) => visibleUnits.has(unit))];
+
+  return buildRouted((gapScale) => {
+    const nodeGap = snapUp(NODE_GAP * gapScale);
+    const heights = present.map(({ column, more }) => {
+      const stack = column.map((unit) => sizeOfUnit(unit).height);
+      if (more) stack.push(MORE_SIZE.height);
+      return stack.reduce((sum, height, index) => sum + height + (index > 0 ? nodeGap : 0), 0);
+    });
+    const tallest = Math.max(0, ...heights);
+    const nodes: SceneNode[] = [];
+    let left = 0;
+    present.forEach(({ column, index, more }, order) => {
+      const side: Side = index < 2 ? 'left' : index === 2 ? 'center' : 'right';
+      let y = snap((tallest - (heights[order] ?? 0)) / 2);
+      let width = 0;
+      for (const unit of column) {
+        const graphNode = nodeOf(unit);
+        const size = sizeOfUnit(unit);
+        const children = groups.get(unit);
+        nodes.push(
+          makeNode({
+            key: unit,
+            kind: children ? 'screenGroup' : nodeKindOf(graphNode),
+            graphNode,
+            x: left,
+            y,
+            width: size.width,
+            height: size.height,
+            role: placement.get(unit)?.side ?? side,
+          }),
+        );
+        if (children) {
+          const layout = groupLayout(children.length);
+          children.forEach((child, childIndex) => {
+            const at = layout.positions[childIndex] ?? { x: 0, y: 0 };
+            nodes.push(
+              makeNode({
+                key: child.key,
+                kind: 'component',
+                graphNode: child,
+                x: at.x,
+                y: at.y,
+                width: NODE_SIZE.COMPONENT.width,
+                height: NODE_SIZE.COMPONENT.height,
+                parentKey: unit,
+                role: placement.get(unit)?.side ?? side,
+              }),
+            );
+          });
+        }
+        y += size.height + nodeGap;
+        width = Math.max(width, size.width);
+      }
+      if (more) {
+        nodes.push(
+          makeNode({
+            key: moreKey(more.column),
+            kind: 'more',
+            graphNode: null,
+            x: left,
+            y,
+            width: MORE_SIZE.width,
+            height: MORE_SIZE.height,
+            role: side === 'center' ? null : side,
+            more,
+          }),
+        );
+        width = Math.max(width, MORE_SIZE.width);
+      }
+      left += width + snapUp(FOCUS_COLUMN_GAP * gapScale) + (crossings[order] ?? 0) * PITCH;
+    });
+    return {
+      nodes,
+      edges: lines,
+      bounds: NO_BOUNDS,
+      fit: { keys: fitKeys, anchorKey: centerUnit },
+      failures: 0,
+      routingMs: 0,
+      attempts: 1,
+    };
+  });
 }

@@ -4,7 +4,12 @@
 import { describe, expect, it } from 'vitest';
 
 import type { GraphData, GraphEdge } from '../../modules/dependency-map/graphTypes';
-import { buildFocusScene, upstreamKeyOf } from '../../modules/dependency-map/focusScene';
+import {
+  buildFocusScene,
+  CENTER_SCALE,
+  upstreamKeyOf,
+} from '../../modules/dependency-map/focusScene';
+import { snapUp } from '../../modules/dependency-map/grid';
 import { NODE_SIZE } from '../../modules/dependency-map/layout';
 import { groupLayout } from '../../modules/dependency-map/screenGroups';
 import type { Scene, SceneNode } from '../../modules/dependency-map/scene';
@@ -363,21 +368,26 @@ describe('focus view: layout', () => {
   });
 
   it('gives the same scene for the same data', () => {
-    const first = JSON.stringify(sceneOf(sampleGraph(), 'collection:21', 2));
+    // The time the routing took is the only thing that may differ.
+    const plain = (scene: Scene | null) =>
+      JSON.stringify(scene, (key, value: unknown) => (key === 'routingMs' ? undefined : value));
+    const first = plain(sceneOf(sampleGraph(), 'collection:21', 2));
     expect(
-      JSON.stringify(
-        sceneOf(JSON.parse(JSON.stringify(sampleGraph())) as GraphData, 'collection:21', 2),
-      ),
+      plain(sceneOf(JSON.parse(JSON.stringify(sampleGraph())) as GraphData, 'collection:21', 2)),
     ).toBe(first);
   });
 
-  it('sizes a plain box by its type', () => {
+  it('sizes a plain box by its type, and the focused element a little bigger, all on the grid', () => {
     const scene = sceneOf(
       { nodes: [variable, screen], edges: [creates(1, 'screen:1', 'variable:1')] },
       'variable:1',
     );
-    expect(nodeOf(scene, 'variable:1')).toMatchObject(NODE_SIZE.VARIABLE);
     expect(nodeOf(scene, 'screen:1')).toMatchObject(NODE_SIZE.SCREEN);
+    const center = nodeOf(scene, 'variable:1');
+    expect(center.width).toBeGreaterThan(NODE_SIZE.VARIABLE.width);
+    expect(center.height).toBeGreaterThanOrEqual(NODE_SIZE.VARIABLE.height);
+    expect(center.width).toBe(snapUp(NODE_SIZE.VARIABLE.width * CENTER_SCALE));
+    expect(center.width % 8).toBe(0);
     expect(contains(1, 'a', 'b').kind).toBe('CONTAINS');
   });
 });

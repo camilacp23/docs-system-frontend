@@ -50,7 +50,11 @@ function labelOf(edges: readonly GraphEdge[], labels: EdgeLabels): string | null
   }
 }
 
-export function groupEdges(edges: readonly GraphEdge[], labels: EdgeLabels): SceneEdge[] {
+export function groupEdges(
+  edges: readonly GraphEdge[],
+  labels: EdgeLabels,
+  labelFirst: (edge: GraphEdge) => boolean = () => true,
+): SceneEdge[] {
   const groups = new Map<string, GraphEdge[]>();
   for (const edge of edges) {
     const key = `${edge.kind}|${edge.source}|${edge.target}`;
@@ -68,6 +72,8 @@ export function groupEdges(edges: readonly GraphEdge[], labels: EdgeLabels): Sce
       label: labelOf(group, labels),
       count: group.length,
       edges: group,
+      labelFirst: labelFirst(first),
+      route: null,
     };
   });
 }

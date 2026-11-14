@@ -5,7 +5,7 @@
 // Controls: the view ("Screens", the default, or "All elements"), one checkbox per node type (the last one cannot be
 // cleared: an empty list would mean every type), the environment, "Find a node…" (the keyboard alternative to the canvas: it
 // lists the nodes by name and choosing one selects it, centers it and opens its panel), "Show untraced only" (a filter of the
-// client) and "Reset view". The type and untraced filters belong to the All elements view: the Screens view needs every type
+// client) and "Reset view" (at the end of the same row). The type and untraced filters belong to the All elements view: the Screens view needs every type
 // for its counters. A control that does not apply says why.
 import { Filter } from 'lucide-react';
 import { useMemo } from 'react';
@@ -147,9 +147,7 @@ export function GraphToolbar({
         >
           Show untraced only
         </Button>
-      </div>
-      <div>
-        <Button variant="ghost" size="sm" onClick={onReset}>
+        <Button variant="ghost" onClick={onReset} className="ml-auto">
           Reset view
         </Button>
       </div>
