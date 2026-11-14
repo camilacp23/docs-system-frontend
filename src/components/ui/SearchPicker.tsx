@@ -70,6 +70,11 @@ export function SearchPicker({
   // What the user typed; null while they are not searching (the input then shows the chosen label).
   const [query, setQuery] = useState<string | null>(null);
   const [active, setActive] = useState<string | null>(null);
+  // The latest onQueryChange, read by close() (which the effects below call from old renders).
+  const queryChangeRef = useRef(onQueryChange);
+  useEffect(() => {
+    queryChangeRef.current = onQueryChange;
+  });
 
   const chosen = options.find((option) => option.value === value);
   const text = query ?? chosen?.label ?? '';
@@ -86,7 +91,7 @@ export function SearchPicker({
 
   const close = () => {
     setOpen(false);
-    if (query !== null) onQueryChange?.('');
+    queryChangeRef.current?.('');
     setQuery(null);
     setActive(null);
   };
