@@ -1,5 +1,7 @@
 /* mapCanvas: the colors of the React Flow parts of the dependency map, taken from the design tokens (theme.css).
-   base.css (imported by GraphCanvas) only gives the structure; every color here is a token, none is hard-coded. */
+   base.css (imported by GraphCanvas) only gives the structure; every color here is a token, none is hard-coded.
+   base.css has no `fill` for the label of an edge: only React Flow's style.css does (`.react-flow__edge-textbg`), which is
+   not imported. Without a fill an SVG rect is painted black, so every labeled edge drew a black rectangle over the map. */
 .map-flow {
   --xy-background-color: transparent;
   --xy-edge-label-color: var(--color-ink-700);
@@ -30,4 +32,16 @@
 
 .map-flow .react-flow__attribution {
   font-size: var(--text-micro);
+}
+
+/* The background and the text of the label of an edge. Both fills must be set here: see the note at the top. */
+.map-flow .react-flow__edge-textbg {
+  fill: var(--color-surface);
+  stroke: var(--color-border-subtle);
+}
+
+.map-flow .react-flow__edge-text {
+  fill: var(--color-ink-700);
+  font-size: var(--text-small);
+  font-weight: 600;
 }
