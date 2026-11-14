@@ -6,11 +6,16 @@ import { describe, expect, it } from 'vitest';
 import { buildAllScene } from '../../modules/dependency-map/allScene';
 import { EDGE_STYLE } from '../../modules/dependency-map/edgeStyles';
 import { buildFocusScene } from '../../modules/dependency-map/focusScene';
-import { isEmptyMap, onlyUntraced, sceneToFlow } from '../../modules/dependency-map/graphModel';
+import {
+  HANDLE,
+  isEmptyMap,
+  onlyUntraced,
+  sceneToFlow,
+} from '../../modules/dependency-map/graphModel';
 import { EDGE_KINDS } from '../../modules/dependency-map/graphTypes';
 import { computeHighlight, DIMMED_OPACITY } from '../../modules/dependency-map/highlight';
 import { buildScreensScene } from '../../modules/dependency-map/screensScene';
-import { sampleGraph, screenNode } from '../helpers/graphFixtures';
+import { accesses, collectionNode, sampleGraph, screenNode } from '../helpers/graphFixtures';
 
 describe('sceneToFlow', () => {
   const scene = buildAllScene(sampleGraph());
@@ -77,6 +82,37 @@ describe('sceneToFlow', () => {
       if (kind) expect(edge.style?.stroke).toBe(EDGE_STYLE[kind].stroke);
       expect(edge.focusable).toBe(false);
     }
+  });
+
+  it('draws a line that goes right to left from the near sides, so it does not loop around the boxes', () => {
+    // A screen that READS a collection has the collection on its left: the stored edge goes from the screen to the collection.
+    const reading = {
+      nodes: [screenNode(1, 'Inicio'), collectionNode(1, 'colClientes')],
+      edges: [accesses(1, 'screen:1', 'collection:1', 'READ', 'OnVisible')],
+    };
+    const focus = buildFocusScene(reading, 'screen:1', 1) as NonNullable<
+      ReturnType<typeof buildFocusScene>
+    >;
+    const line = sceneToFlow(focus).edges[0];
+    // Real direction kept: source is the screen, target the collection.
+    expect([line?.source, line?.target]).toEqual(['screen:1', 'collection:1']);
+    // Drawn from the left side of the screen to the right side of the collection, which is on its left.
+    expect([line?.sourceHandle, line?.targetHandle]).toEqual([HANDLE.leftOut, HANDLE.rightIn]);
+  });
+
+  it('draws a line that goes left to right from the right side of the source to the left side of the target', () => {
+    const forward = sceneToFlow(buildScreensScene(sampleGraph())).edges[0];
+    expect([forward?.sourceHandle, forward?.targetHandle]).toEqual([
+      HANDLE.rightOut,
+      HANDLE.leftIn,
+    ]);
+  });
+
+  it('puts the boxes above the lines and the components above their group', () => {
+    const flow = sceneToFlow(buildAllScene(sampleGraph()));
+    expect(flow.edges.every((edge) => edge.zIndex === 0)).toBe(true);
+    expect(flow.nodes.find((node) => node.id === 'screen:12')?.zIndex).toBe(1);
+    expect(flow.nodes.find((node) => node.id === 'component:31')?.zIndex).toBe(2);
   });
 
   it('labels an edge with the label of the scene and leaves the others without one', () => {

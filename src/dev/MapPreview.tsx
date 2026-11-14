@@ -1,6 +1,6 @@
 // MapPreview: development page /dev/map. It renders the dependency map (MapView) over the graphs of the tests, with no
 // session and no API, so the design of the map can be looked at and photographed with any amount of elements.
-// Query: data=sample (13 elements, the sample of frame S-27, default) | data=large (500 elements, like `npm run
+// Query: level=<zoom> (with zoom=, default 1.6); data=sample (13 elements, the sample of frame S-27, default) | data=large (500 elements, like `npm run
 // sandbox:graph`); zoom=<node key> centers and zooms on a node on load; every other parameter is the one of the real page
 // (view, types, environment, untraced, focus, depth). The server is imitated by the same pure functions the fake API of the
 // tests uses (filterGraph, neighborhoodOf), so the data answers exactly as the API would.
@@ -45,6 +45,7 @@ export function MapPreview() {
           clearFocus={clearFocus}
           applicationId={1}
           zoomToKey={search.get('zoom')}
+          zoomLevel={Number(search.get('level')) || 1.6}
         />
       </ReactFlowProvider>
     </div>

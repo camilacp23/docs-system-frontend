@@ -121,6 +121,9 @@ export function GraphCanvas({ nodes, edges, layoutKey, index, onPaneClick }: Gra
         edges={edges}
         nodeTypes={MAP_NODE_TYPES}
         onlyRenderVisibleElements
+        // Manual z-index: every edge is at 0 and every box above it. In the default mode React Flow lifts an edge to the level
+        // of the component it ends at, which is above the boxes of the other screens, and the line crosses their text.
+        zIndexMode="manual"
         minZoom={MIN_ZOOM}
         maxZoom={MAX_ZOOM}
         nodesDraggable={false}

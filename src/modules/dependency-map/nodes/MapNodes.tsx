@@ -20,7 +20,7 @@ import { cx, ElementTypeIcon, StatusTag, Tag } from '../../../components/ui';
 import { RESERVED_LABEL, toTagStatus } from '../../screens/screenLabels';
 import { countText, SCOPE_LABEL } from '../../variables/variableLabels';
 import { UNTRACED_TAG_LABEL } from '../graphLabels';
-import type { MapFlowNode } from '../graphModel';
+import { HANDLE, type MapFlowNode } from '../graphModel';
 import type { GraphNode } from '../graphTypes';
 import { GROUP_HEADER } from '../screenGroups';
 import { HighlightContext, MapActionsContext, nodeButtonId } from '../mapContext';
@@ -28,6 +28,33 @@ import { nodeAriaLabel, truncateName } from '../nodeLabels';
 import type { SceneCounters } from '../scene';
 
 const HANDLE_CLASS = 'pointer-events-none opacity-0';
+
+/**
+ * The two handles of one side of a node, an in and an out, invisible: lines are drawn between them. A line that goes left
+ * to right uses the out of the right side and the in of the left side; one that goes right to left uses the out of the left
+ * side and the in of the right side (see sceneToFlow).
+ */
+function NodeHandles({ side }: { side: 'left' | 'right' }) {
+  const position = side === 'left' ? Position.Left : Position.Right;
+  return (
+    <>
+      <Handle
+        id={side === 'left' ? HANDLE.leftIn : HANDLE.rightIn}
+        type="target"
+        position={position}
+        isConnectable={false}
+        className={HANDLE_CLASS}
+      />
+      <Handle
+        id={side === 'left' ? HANDLE.leftOut : HANDLE.rightOut}
+        type="source"
+        position={position}
+        isConnectable={false}
+        className={HANDLE_CLASS}
+      />
+    </>
+  );
+}
 
 function NodeShell({
   node,
@@ -53,12 +80,7 @@ function NodeShell({
       style={{ width: data.width, height: data.height }}
       className={cx('relative transition-opacity', dimmed && 'opacity-25')}
     >
-      <Handle
-        type="target"
-        position={Position.Left}
-        isConnectable={false}
-        className={HANDLE_CLASS}
-      />
+      <NodeHandles side="left" />
       <button
         type="button"
         id={nodeButtonId(node.key)}
@@ -88,12 +110,7 @@ function NodeShell({
       >
         {children}
       </button>
-      <Handle
-        type="source"
-        position={Position.Right}
-        isConnectable={false}
-        className={HANDLE_CLASS}
-      />
+      <NodeHandles side="right" />
     </div>
   );
 }

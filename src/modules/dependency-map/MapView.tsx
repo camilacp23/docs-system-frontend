@@ -2,7 +2,8 @@
 // S-27b, S-27c, S-28): the header, the toolbar, the canvas, the side panel and the states.
 // Props: source ({ status, data, error, reload }: the graph, from the API in the page and from test data in /dev/map),
 // params / setParams / clearAll / clearFilters / clearFocus (the view, the filters and the focus, see useGraphParams), applicationId (the
-// selection belongs to the application it was made in), zoomToKey (development only: center and zoom on a node on load).
+// selection belongs to the application it was made in), zoomToKey and zoomLevel (development only: center and zoom on a node
+// on load).
 // Three views (D-114), each one a scene built from the loaded graph:
 //   Screens (default)  only the screens, as cards with counters, joined by their navigation;
 //   All elements       every element, the screens as groups that hold their components; past 150 nodes it is not drawn and a
@@ -94,6 +95,7 @@ export interface MapViewProps {
   clearFocus: () => void;
   applicationId: number | null;
   zoomToKey?: string | null;
+  zoomLevel?: number;
 }
 
 interface TrailEntry {
@@ -113,6 +115,7 @@ export function MapView({
   clearFocus,
   applicationId,
   zoomToKey = null,
+  zoomLevel = FOCUS_ZOOM,
 }: MapViewProps) {
   const { setCenter } = useReactFlow();
   const [selection, setSelection] = useState<{ applicationId: number | null; key: string } | null>(
@@ -198,7 +201,7 @@ export function MapView({
   }, [trail, focusKey, index]);
 
   const centerOn = useCallback(
-    (key: string) => {
+    (key: string, zoom: number = FOCUS_ZOOM) => {
       const box = scene?.nodes.find((candidate) => candidate.key === key);
       if (!scene || !box) return;
       const parent =
@@ -207,7 +210,7 @@ export function MapView({
           : scene.nodes.find((candidate) => candidate.key === box.parentKey);
       const x = box.x + (parent?.x ?? 0);
       const y = box.y + (parent?.y ?? 0);
-      void setCenter(x + box.width / 2, y + box.height / 2, { zoom: FOCUS_ZOOM, duration: 0 });
+      void setCenter(x + box.width / 2, y + box.height / 2, { zoom, duration: 0 });
     },
     [scene, setCenter],
   );
@@ -254,8 +257,8 @@ export function MapView({
 
   // Development page only: center and zoom on a node once the map is placed (for the screenshots of the design).
   useEffect(() => {
-    if (zoomToKey !== null && scene !== null) centerOn(zoomToKey);
-  }, [zoomToKey, scene, centerOn]);
+    if (zoomToKey !== null && scene !== null) centerOn(zoomToKey, zoomLevel);
+  }, [zoomToKey, zoomLevel, scene, centerOn]);
 
   const close = () => {
     const key = selectedKey;

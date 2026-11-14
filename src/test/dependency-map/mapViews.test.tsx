@@ -155,6 +155,24 @@ describe('All elements view', () => {
     });
   });
 
+  it('keeps every line below every box, also the lines that end at a component inside a group', async () => {
+    await renderMap({ path: '/dependency-map?view=all' });
+    await button('Component btnGuardar');
+
+    // React Flow lifts a line to the level of the component it ends at unless the z-index is manual: that put it over
+    // the boxes of other screens and crossed their text.
+    await waitFor(() => {
+      expect(edgeCount()).toBeGreaterThan(0);
+    });
+    const levels = [...document.querySelectorAll('.react-flow__edge')].map(
+      (edge) => (edge.parentElement as unknown as SVGElement).style.zIndex,
+    );
+    expect(new Set(levels)).toEqual(new Set(['0']));
+    for (const node of document.querySelectorAll<HTMLElement>('.react-flow__node')) {
+      expect(Number(node.style.zIndex)).toBeGreaterThanOrEqual(1);
+    }
+  });
+
   it('draws nothing past 150 nodes and says what to do instead', async () => {
     const user = setupUser();
     const { router } = await renderMap({
