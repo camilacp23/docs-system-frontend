@@ -5,12 +5,16 @@
 // The label of the element is a link when its type has a page (screens, variables, collections: a deleted one opens
 // that page's own "doesn't exist"), plain text otherwise. The actor is null for a write that did not come through
 // the API ("Outside the application", with the database role of the write for an Administrator, S-32).
-import { CircleCheck, Pencil, Plus, X } from 'lucide-react';
+// The chevron button opens the record's detail (AuditEntryDetail) under it: it has aria-expanded and aria-controls and
+// works with Enter and Space (it is a native button). Each record keeps its own open / closed state.
+import { ChevronDown, ChevronRight, CircleCheck, Pencil, Plus, X } from 'lucide-react';
+import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 
 import { cx, ICON_STROKE_WIDTH } from '../../components/ui';
 
+import { AuditEntryDetail } from './AuditEntryDetail';
 import { clockOf } from './auditDates';
 import {
   ACTION_TONE,
@@ -43,6 +47,9 @@ export function AuditEntryItem({ entry, timeZone, ownView }: AuditEntryItemProps
   const path = elementPath(entry);
   const label = elementLabel(entry);
   const changed = entry.action === 'UPDATE' ? entry.changedFields : [];
+  const [open, setOpen] = useState(false);
+  const detailId = useId();
+  const sentence = `${actorText(entry, ownView)} ${actionPhrase(entry)} ${label}`;
 
   return (
     <li className="group flex gap-4 px-5">
@@ -91,7 +98,28 @@ export function AuditEntryItem({ entry, timeZone, ownView }: AuditEntryItemProps
             ))}
           </ul>
         )}
+        {open && (
+          <div id={detailId}>
+            <AuditEntryDetail entry={entry} />
+          </div>
+        )}
       </div>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={open ? detailId : undefined}
+        aria-label={`Details of ${sentence}`}
+        onClick={() => {
+          setOpen(!open);
+        }}
+        className="mt-3.5 flex size-8 shrink-0 items-center justify-center self-start rounded-control text-ink-500 hover:bg-control-hover"
+      >
+        {open ? (
+          <ChevronDown aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />
+        ) : (
+          <ChevronRight aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />
+        )}
+      </button>
     </li>
   );
 }
