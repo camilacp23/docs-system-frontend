@@ -2,8 +2,8 @@
 // in IBM Plex Mono) and the "Details" card: description, whether the collection is linked to a screen
 // (`documented`, FR-19), the collections it is derived from (links) and, for each environment, its notes
 // ("No known differences." when it has none).
-// The API gives no list of the screens that use a collection, so the "Used by screens" card of the frame is not
-// drawn until the screens module exists (D-79).
+// Below the condition, the "Used by screens" card (UsedByScreensCard) lists the screens that use the collection with
+// the access mode of each use (D-103); it reads its own data, so if that read fails only the card shows an error.
 // Props: collection.
 import { Code, Info } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -12,6 +12,7 @@ import { Link } from 'react-router';
 import { ICON_STROKE_WIDTH, SectionCard, Tag } from '../../components/ui';
 
 import type { Collection } from './collectionTypes';
+import { UsedByScreensCard } from './UsedByScreensCard';
 
 const NO_DIFFERENCES_TEXT = 'No known differences.';
 const NO_DESCRIPTION_TEXT = 'No description.';
@@ -31,21 +32,24 @@ export function CollectionOverview({ collection }: { collection: Collection }) {
   const description = collection.description ?? '';
   return (
     <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)] items-start gap-4">
-      <SectionCard
-        title="Creation condition"
-        description="The formula that creates the collection"
-        icon={<Code size={16} strokeWidth={ICON_STROKE_WIDTH} />}
-      >
-        <div>
-          {condition === '' ? (
-            <p className="text-body-lg text-ink-500">{NO_CONDITION_TEXT}</p>
-          ) : (
-            <pre className="font-mono text-label break-words whitespace-pre-wrap text-ink-900">
-              {condition}
-            </pre>
-          )}
-        </div>
-      </SectionCard>
+      <div className="flex min-w-0 flex-col gap-4">
+        <SectionCard
+          title="Creation condition"
+          description="The formula that creates the collection"
+          icon={<Code size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+        >
+          <div>
+            {condition === '' ? (
+              <p className="text-body-lg text-ink-500">{NO_CONDITION_TEXT}</p>
+            ) : (
+              <pre className="font-mono text-label break-words whitespace-pre-wrap text-ink-900">
+                {condition}
+              </pre>
+            )}
+          </div>
+        </SectionCard>
+        <UsedByScreensCard collectionId={collection.id} />
+      </div>
 
       <SectionCard
         title="Details"

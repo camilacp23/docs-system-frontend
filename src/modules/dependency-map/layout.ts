@@ -1,0 +1,395 @@
+// layout: automatic placement of the graph, in layers from left to right. A pure function with no dependencies.
+// computeLayout(data) -> { positions, durationMs }
+//   positions  Map from node key to the top-left corner of its box, ready for React Flow.
+//   durationMs how long the placement took (performance.now), so the cost at department scale can be measured.
+// React Flow does not place nodes. The boxes have a fixed size per node type (NODE_SIZE, the same numbers the node
+// components draw with) and the gaps are constants, so nothing is measured in the DOM. The same data always gives the
+// same positions: every step visits nodes and edges in the order of the response, which the API fixes (D-104 d), and
+// every tie is broken by the key of the node.
+// Steps (all linear or near linear: about 500 nodes and 1100 edges take a few milliseconds, where the dagre library
+// measured 6 s on the same graph):
+//   1. Cycles (a collection derived from another that derives from it, D-74; screens that navigate to each other) are
+//      broken with a depth-first walk: the edges that return to a node still on the walk are reversed FOR THE
+//      CALCULATION ONLY. The edges are drawn with their real direction. Self loops (which the API never sends) and
+//      repeated edges are ignored.
+//   2. Layers: longest path over the graph without cycles; a node sits one layer to the right of its farthest source.
+//      A piece wider than the canvas is folded into bands, like the lines of a text: a chain of 40 screens that navigate to
+//      one another would be 13,000 units wide and be drawn at a size nobody can read, so after about a canvas width the
+//      next layers continue in a band below.
+//   3. Disconnected pieces are laid out one by one and packed in rows (a shelf), biggest first, until the whole map has
+//      the proportions of the canvas, so many small pieces make a block and not a thin strip.
+//   4. Inside a layer, nodes are ordered by the barycenter of their neighbors (those on the left in the downward
+//      sweep, those on the right in the upward one), four times, ties by the key of the node.
+//   5. Columns are stacked with constant gaps and centered on the tallest column of their piece.
+// The size of a box comes from `sizeOf` (the default is NODE_SIZE by type), because the same node is drawn as a plain box,
+// as a card with counters or as a group that holds its components, depending on the view.
+import { PITCH, snap, snapUp } from './grid';
+import type { NodeType } from './graphTypes';
+
+export interface NodeSize {
+  width: number;
+  height: number;
+}
+
+/** A screen drawn as a card with its counters (Screens view). */
+export const SCREEN_CARD_SIZE: NodeSize = { width: 232, height: 112 };
+
+export const NODE_SIZE: Record<NodeType, NodeSize> = {
+  SCREEN: { width: 216, height: 80 },
+  VARIABLE: { width: 200, height: 72 },
+  COLLECTION: { width: 200, height: 48 },
+  COMPONENT: { width: 168, height: 40 },
+};
+
+/** Horizontal gap between two layers with no line between them; every line that crosses it widens it by one PITCH. */
+export const LAYER_GAP = 128;
+/** Vertical gap between two boxes of a layer: room for lines to pass between them. */
+export const NODE_GAP = 32;
+/** Gap between two disconnected pieces of the graph, in a row and between rows (and between the bands of a folded piece). */
+export const PIECE_GAP = 96;
+
+/** The gap between two layers that `crossings` lines cross, `scale` times the base one (the router asks for more room when
+ * it could not give every line its own lane). */
+export function layerGap(crossings: number, scale = 1): number {
+  return snapUp(LAYER_GAP * scale) + crossings * PITCH;
+}
+/** A piece narrower than this is never folded: it is about the width of the canvas. */
+export const MIN_WRAP_WIDTH = 1500;
+/** The proportions the packed map aims for: the canvas of the design is 1440 x 900. */
+export const CANVAS_ASPECT = 1440 / 900;
+/** How many times the order of the layers is improved (a downward and an upward sweep each time). */
+export const ORDERING_PASSES = 4;
+
+/** What the layout needs to know of a node and of an edge: GraphData and the scenes of the views satisfy it. */
+export interface LayoutNode {
+  key: string;
+  type: NodeType;
+}
+
+export interface LayoutInput {
+  nodes: readonly LayoutNode[];
+  edges: ReadonlyArray<{ source: string; target: string }>;
+}
+
+export type SizeOf = (node: LayoutNode) => NodeSize;
+
+const sizeByType: SizeOf = (node) => NODE_SIZE[node.type];
+
+export interface Position {
+  x: number;
+  y: number;
+}
+
+export interface LayoutResult {
+  positions: ReadonlyMap<string, Position>;
+  durationMs: number;
+}
+
+interface Acyclic {
+  successors: number[][];
+  predecessors: number[][];
+}
+
+/** Step 1: the edges as a graph without cycles. Returned lists keep the order of the edges of the response. */
+function breakCycles(count: number, targetsOf: readonly number[][]): Acyclic {
+  const successors: number[][] = Array.from({ length: count }, () => []);
+  const predecessors: number[][] = Array.from({ length: count }, () => []);
+  const seen = new Set<number>();
+  const add = (from: number, to: number) => {
+    const key = from * count + to;
+    if (seen.has(key)) return;
+    seen.add(key);
+    successors[from]?.push(to);
+    predecessors[to]?.push(from);
+  };
+
+  // 0 = not visited, 1 = on the walk, 2 = done. Iterative, so a long chain cannot overflow the call stack.
+  const state = new Uint8Array(count);
+  const cursor = new Int32Array(count);
+  for (let root = 0; root < count; root += 1) {
+    if (state[root] !== 0) continue;
+    const stack: number[] = [root];
+    state[root] = 1;
+    while (stack.length > 0) {
+      const node = stack[stack.length - 1] ?? root;
+      const targets = targetsOf[node] ?? [];
+      const next = cursor[node] ?? 0;
+      if (next >= targets.length) {
+        state[node] = 2;
+        stack.pop();
+        continue;
+      }
+      cursor[node] = next + 1;
+      const target = targets[next] ?? node;
+      if (state[target] === 1) {
+        add(target, node); // an edge that returns to the walk: reversed for the calculation
+      } else {
+        add(node, target);
+        if (state[target] === 0) {
+          state[target] = 1;
+          stack.push(target);
+        }
+      }
+    }
+  }
+  return { successors, predecessors };
+}
+
+/** Step 2: layer of each node, the longest path from a source (Kahn's order, deterministic). */
+function assignLayers(count: number, graph: Acyclic): Int32Array {
+  const layer = new Int32Array(count);
+  const missing = new Int32Array(count);
+  const queue: number[] = [];
+  for (let node = 0; node < count; node += 1) {
+    missing[node] = graph.predecessors[node]?.length ?? 0;
+    if (missing[node] === 0) queue.push(node);
+  }
+  for (let head = 0; head < queue.length; head += 1) {
+    const node = queue[head] ?? 0;
+    for (const successor of graph.successors[node] ?? []) {
+      layer[successor] = Math.max(layer[successor] ?? 0, (layer[node] ?? 0) + 1);
+      missing[successor] = (missing[successor] ?? 0) - 1;
+      if (missing[successor] === 0) queue.push(successor);
+    }
+  }
+  return layer;
+}
+
+/** Step 3: the connected pieces (ignoring direction), each as its nodes in the order of the response. */
+function connectedPieces(count: number, graph: Acyclic): number[][] {
+  const piece = new Int32Array(count).fill(-1);
+  const pieces: number[][] = [];
+  for (let start = 0; start < count; start += 1) {
+    if ((piece[start] ?? -1) !== -1) continue;
+    const members: number[] = [];
+    const stack = [start];
+    piece[start] = pieces.length;
+    while (stack.length > 0) {
+      const node = stack.pop() ?? start;
+      members.push(node);
+      for (const neighbor of [
+        ...(graph.successors[node] ?? []),
+        ...(graph.predecessors[node] ?? []),
+      ]) {
+        if ((piece[neighbor] ?? -1) === -1) {
+          piece[neighbor] = pieces.length;
+          stack.push(neighbor);
+        }
+      }
+    }
+    pieces.push(members.sort((a, b) => a - b));
+  }
+  return pieces;
+}
+
+/** Step 4: orders each layer by the barycenter of the neighbors on one side, `ORDERING_PASSES` times. */
+function orderLayers(layers: number[][], graph: Acyclic, keys: readonly string[]): void {
+  // rank[node] = where the node sits in its layer, as a fraction, so layers of different sizes can be compared.
+  const rank = new Map<number, number>();
+  const refresh = () => {
+    for (const members of layers) {
+      members.forEach((node, index) => rank.set(node, (index + 0.5) / members.length));
+    }
+  };
+  refresh();
+
+  const sweep = (layerIndexes: number[], neighborsOf: readonly number[][]) => {
+    for (const layerIndex of layerIndexes) {
+      const members = layers[layerIndex];
+      if (!members || members.length < 2) continue;
+      const score = new Map<number, number>();
+      for (const node of members) {
+        const neighbors = neighborsOf[node] ?? [];
+        let sum = 0;
+        for (const neighbor of neighbors) sum += rank.get(neighbor) ?? 0;
+        score.set(node, neighbors.length === 0 ? (rank.get(node) ?? 0) : sum / neighbors.length);
+      }
+      members.sort((a, b) => {
+        const difference = (score.get(a) ?? 0) - (score.get(b) ?? 0);
+        if (difference !== 0) return difference;
+        const keyA = keys[a] ?? '';
+        const keyB = keys[b] ?? '';
+        return keyA < keyB ? -1 : keyA > keyB ? 1 : 0;
+      });
+      members.forEach((node, index) => rank.set(node, (index + 0.5) / members.length));
+    }
+  };
+
+  const downward = layers.map((_, index) => index);
+  const upward = [...downward].reverse();
+  for (let pass = 0; pass < ORDERING_PASSES; pass += 1) {
+    sweep(downward, graph.predecessors);
+    sweep(upward, graph.successors);
+  }
+}
+
+interface PlacedPiece {
+  /** Position of each node of the piece, with the piece at the origin. */
+  positions: Map<string, Position>;
+  width: number;
+  height: number;
+  firstNode: number;
+}
+
+export interface LayoutOptions {
+  /** The piece that holds this node goes first (top left): App (OnStart) opens the Screens view. */
+  firstKey?: string;
+  /** Multiplies the gaps: 1 by default; the router asks for more when the lines did not fit. */
+  gapScale?: number;
+}
+
+export function computeLayout(
+  data: LayoutInput,
+  sizeOf: SizeOf = sizeByType,
+  options: LayoutOptions = {},
+): LayoutResult {
+  const started = performance.now();
+  const scale = options.gapScale ?? 1;
+  const pieceGap = snapUp(PIECE_GAP * scale);
+  const nodeGap = snapUp(NODE_GAP * scale);
+  const count = data.nodes.length;
+  const keys = data.nodes.map((node) => node.key);
+  const indexOf = new Map<string, number>();
+  keys.forEach((key, index) => indexOf.set(key, index));
+  const sizes = data.nodes.map((node) => sizeOf(node));
+
+  const targetsOf: number[][] = Array.from({ length: count }, () => []);
+  for (const edge of data.edges) {
+    const from = indexOf.get(edge.source);
+    const to = indexOf.get(edge.target);
+    // The API never sends an edge whose end is not in the response; a self loop cannot exist (D-74).
+    if (from === undefined || to === undefined || from === to) continue;
+    targetsOf[from]?.push(to);
+  }
+
+  const graph = breakCycles(count, targetsOf);
+  const layerOf = assignLayers(count, graph);
+
+  const pieces: PlacedPiece[] = connectedPieces(count, graph).map((members) => {
+    const layerCount = members.reduce((most, node) => Math.max(most, (layerOf[node] ?? 0) + 1), 0);
+    const layers: number[][] = Array.from({ length: layerCount }, () => []);
+    for (const node of members) layers[layerOf[node] ?? 0]?.push(node);
+    orderLayers(layers, graph, keys);
+
+    const heights = layers.map((column) =>
+      column.reduce(
+        (sum, node, index) => sum + (sizes[node]?.height ?? 0) + (index > 0 ? nodeGap : 0),
+        0,
+      ),
+    );
+    const widths = layers.map((column) =>
+      column.reduce((most, node) => Math.max(most, sizes[node]?.width ?? 0), 0),
+    );
+
+    // How many lines cross the gap after each layer: each one needs its own lane there, so the gap is that much wider.
+    const crossings = new Array<number>(layerCount).fill(0);
+    for (const node of members) {
+      for (const next of graph.successors[node] ?? []) {
+        for (let layer = layerOf[node] ?? 0; layer < (layerOf[next] ?? 0); layer += 1) {
+          crossings[layer] = (crossings[layer] ?? 0) + 1;
+        }
+      }
+    }
+    const gapAfter = (index: number) => layerGap(crossings[index] ?? 0, scale);
+
+    // Fold the layers into bands when the piece is wider than the canvas.
+    const area = layers.reduce(
+      (sum, _column, index) =>
+        sum + ((widths[index] ?? 0) + gapAfter(index)) * (heights[index] ?? 0),
+      0,
+    );
+    const wrapWidth = Math.max(
+      MIN_WRAP_WIDTH,
+      Math.max(0, ...widths),
+      Math.sqrt(area * CANVAS_ASPECT),
+    );
+    const bands: number[][] = [];
+    let band: number[] = [];
+    let used = 0;
+    layers.forEach((_column, index) => {
+      const width = widths[index] ?? 0;
+      if (band.length > 0 && used + width > wrapWidth) {
+        bands.push(band);
+        band = [];
+        used = 0;
+      }
+      band.push(index);
+      used += width + gapAfter(index);
+    });
+    bands.push(band);
+
+    const positions = new Map<string, Position>();
+    let top = 0;
+    let pieceWidth = 0;
+    for (const indexes of bands) {
+      const bandHeight = Math.max(0, ...indexes.map((index) => heights[index] ?? 0));
+      let left = 0;
+      for (const index of indexes) {
+        let y = top + snap((bandHeight - (heights[index] ?? 0)) / 2);
+        for (const node of layers[index] ?? []) {
+          positions.set(keys[node] ?? '', { x: left, y });
+          y += (sizes[node]?.height ?? 0) + nodeGap;
+        }
+        left += (widths[index] ?? 0) + gapAfter(index);
+      }
+      pieceWidth = Math.max(pieceWidth, left - gapAfter(indexes[indexes.length - 1] ?? 0));
+      top += bandHeight + pieceGap;
+    }
+    return {
+      positions,
+      width: Math.max(0, pieceWidth),
+      height: Math.max(0, top - pieceGap),
+      firstNode: members[0] ?? 0,
+    };
+  });
+
+  return {
+    positions: packPieces(pieces, options.firstKey, pieceGap),
+    durationMs: performance.now() - started,
+  };
+}
+
+/**
+ * Step 3: the pieces go in rows, biggest first (ties by their first node), and a row is closed when the next piece would pass
+ * the width that gives the whole map the proportions of the canvas. One piece stays where it is.
+ */
+function packPieces(
+  pieces: readonly PlacedPiece[],
+  firstKey: string | undefined,
+  pieceGap: number,
+): Map<string, Position> {
+  const positions = new Map<string, Position>();
+  if (pieces.length === 1) return new Map(pieces[0]?.positions);
+
+  const holdsFirst = (piece: PlacedPiece) =>
+    firstKey !== undefined && piece.positions.has(firstKey) ? 0 : 1;
+  const ordered = [...pieces].sort(
+    (a, b) =>
+      holdsFirst(a) - holdsFirst(b) ||
+      b.width * b.height - a.width * a.height ||
+      a.firstNode - b.firstNode,
+  );
+  const totalArea = ordered.reduce(
+    (sum, piece) => sum + (piece.width + pieceGap) * (piece.height + pieceGap),
+    0,
+  );
+  const widest = ordered.reduce((most, piece) => Math.max(most, piece.width), 0);
+  const rowWidth = Math.max(widest, Math.sqrt(totalArea * CANVAS_ASPECT));
+
+  let x = 0;
+  let y = 0;
+  let rowHeight = 0;
+  for (const piece of ordered) {
+    if (x > 0 && x + piece.width > rowWidth) {
+      x = 0;
+      y += rowHeight + pieceGap;
+      rowHeight = 0;
+    }
+    for (const [key, position] of piece.positions) {
+      positions.set(key, { x: x + position.x, y: y + position.y });
+    }
+    x += piece.width + pieceGap;
+    rowHeight = Math.max(rowHeight, piece.height);
+  }
+  return positions;
+}

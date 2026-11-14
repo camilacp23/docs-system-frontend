@@ -1,14 +1,19 @@
 // renderCollections: renderApp over the in-memory collections API (fakeCollectionsApi) with the sample data of the
 // frames S-14 / S-15: the collections colActivos, colClientes (4 fields, 3 assignments, derived from colUsuarios),
 // colTemporal (not linked to any screen) and colUsuarios, over the screens and variables of renderVariables.
-// Options: role, path, applications, plus `collections`, `variables`, `screens` to replace the sample data and
+// Options: role, path, applications, plus `collections`, `variables`, `screens`, `usage` to replace the sample data and
 // `prepare` to arm failures before the first read. Returns what renderApp returns plus `api`.
 import type { Application } from '../../application/ApplicationContext';
 import type { Role } from '../../app/router/routes';
 import type { Collection } from '../../modules/collections/collectionTypes';
 import type { ScreenSummary, Variable } from '../../modules/variables/variableTypes';
 
-import { makeCollection, makeCollectionsApi, makeField } from './fakeCollectionsApi';
+import {
+  makeCollection,
+  makeCollectionsApi,
+  makeField,
+  type ScreenLink,
+} from './fakeCollectionsApi';
 import { renderApp } from './renderApp';
 import { APP_SCREEN, SCREEN_DETALLE, SCREEN_INICIO, sampleVariables } from './renderVariables';
 
@@ -91,6 +96,26 @@ export function sampleCollections(): Collection[] {
   ];
 }
 
+/** The screens that use colClientes in frame S-15a: Inicio reads it, Detalle reads and writes it. */
+export function sampleUsage(): Record<number, ScreenLink[]> {
+  return {
+    11: [
+      {
+        screenId: SCREEN_INICIO.id,
+        screenName: SCREEN_INICIO.name,
+        accessMode: 'READ',
+        usedIn: 'galClientes.Items',
+      },
+      {
+        screenId: SCREEN_DETALLE.id,
+        screenName: SCREEN_DETALLE.name,
+        accessMode: 'READ_WRITE',
+        usedIn: 'btnGuardar.OnSelect',
+      },
+    ],
+  };
+}
+
 export interface RenderCollectionsOptions {
   role?: Role;
   path?: string;
@@ -98,6 +123,8 @@ export interface RenderCollectionsOptions {
   collections?: Collection[];
   variables?: Variable[];
   screens?: ScreenSummary[];
+  /** Links of each collection to screens, by collection id (default: sampleUsage, the screens of S-15a). */
+  usage?: Record<number, ScreenLink[]>;
   /** Runs on the fake API before the first render, to arm failures or holds for the first reads. */
   prepare?: (api: ReturnType<typeof makeCollectionsApi>) => void;
 }
@@ -113,6 +140,7 @@ export async function renderCollections(options: RenderCollectionsOptions = {}) 
         collections: options.collections ?? sampleCollections(),
         variables: options.variables ?? sampleVariables(),
         screens: options.screens ?? [APP_SCREEN, SCREEN_INICIO, SCREEN_DETALLE],
+        usage: options.usage ?? sampleUsage(),
       });
       options.prepare?.(api);
       return api.client;

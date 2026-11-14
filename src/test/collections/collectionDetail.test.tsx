@@ -43,11 +43,108 @@ describe('collection detail: overview', () => {
     expect(within(details).getByText('No known differences.')).toBeInTheDocument();
   });
 
-  it('does not draw the "Used by screens" card (the API gives no screens of a collection, D-79)', async () => {
+  it('draws the "Used by screens" card with one row per screen and the access of each use (D-103)', async () => {
     await open();
     await ready();
 
-    expect(screen.queryByText('Used by screens')).not.toBeInTheDocument();
+    const card = await screen.findByRole('region', { name: 'Used by screens' });
+    expect(await within(card).findByText('2 · edited in each screen')).toBeInTheDocument();
+    const table = within(card).getByRole('table', { name: 'Used by screens' });
+    const rows = within(table).getAllByRole('row').slice(1);
+    expect(rows).toHaveLength(2);
+    const inicio = rows[0] as HTMLElement;
+    const detalle = rows[1] as HTMLElement;
+    expect(within(inicio).getByRole('link', { name: 'Inicio' })).toHaveAttribute(
+      'href',
+      '/screens/11',
+    );
+    expect(within(inicio).getByText('Read')).toBeInTheDocument();
+    expect(within(inicio).getByText('galClientes.Items')).toHaveClass('font-mono');
+    expect(within(detalle).getByRole('link', { name: 'Detalle' })).toHaveAttribute(
+      'href',
+      '/screens/12',
+    );
+    expect(within(detalle).getByText('Read-write')).toBeInTheDocument();
+    expect(within(detalle).getByText('btnGuardar.OnSelect')).toBeInTheDocument();
+  });
+
+  it('groups the uses of one screen in one row and counts distinct screens', async () => {
+    await open({
+      usage: {
+        11: [
+          {
+            screenId: 10,
+            screenName: 'App (OnStart)',
+            accessMode: 'READ_WRITE',
+            usedIn: 'OnStart',
+            isAppContext: true,
+          },
+          { screenId: 11, screenName: 'Inicio', accessMode: 'READ', usedIn: 'OnVisible' },
+          { screenId: 11, screenName: 'Inicio', accessMode: 'WRITE', usedIn: 'btnA.OnSelect' },
+        ],
+      },
+    });
+    await ready();
+
+    const card = await screen.findByRole('region', { name: 'Used by screens' });
+    expect(await within(card).findByText('2 · edited in each screen')).toBeInTheDocument();
+    const rows = within(within(card).getByRole('table')).getAllByRole('row').slice(1);
+    expect(rows).toHaveLength(2);
+    const app = rows[0] as HTMLElement;
+    const inicio = rows[1] as HTMLElement;
+    expect(
+      within(inicio)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['Read', 'Write', 'OnVisible', 'btnA.OnSelect']);
+    // App (OnStart) is a screen like the others, with its Reserved tag.
+    expect(within(app).getByRole('link', { name: 'App (OnStart)' })).toHaveAttribute(
+      'href',
+      '/screens/10',
+    );
+    expect(within(app).getByText('Reserved')).toBeInTheDocument();
+  });
+
+  it('says so when no screen uses the collection', async () => {
+    await open({ path: '/collections/12' });
+
+    const card = await screen.findByRole('region', { name: 'Used by screens' });
+    expect(await within(card).findByText('No screen uses this collection yet.')).toBeVisible();
+    expect(within(card).queryByRole('table')).not.toBeInTheDocument();
+  });
+
+  it('shows its own error with a retry when the screens cannot be read, and the rest of the page keeps working', async () => {
+    const user = setupUser();
+    const { api } = await open({
+      prepare: (fake) => {
+        fake.failNext(
+          'GET /dependencies/{type}/{id}',
+          new ApiError({ status: 500, code: 'INTERNAL_ERROR' }),
+        );
+      },
+    });
+    await ready();
+
+    const card = await screen.findByRole('region', { name: 'Used by screens' });
+    expect(
+      await within(card).findByText("Couldn't load the screens that use this collection."),
+    ).toBeVisible();
+    // The rest of the overview is there.
+    expect(screen.getByRole('region', { name: 'Creation condition' })).toBeVisible();
+    expect(screen.getByRole('region', { name: 'Details' })).toBeVisible();
+    await user.click(within(card).getByRole('button', { name: 'Try again' }));
+    expect(await within(card).findByRole('link', { name: 'Inicio' })).toBeVisible();
+    expect(api.callsTo('GET /dependencies/{type}/{id}')).toHaveLength(2);
+  });
+
+  it('reads the screens of the collection with depth 1', async () => {
+    const { api } = await open();
+    await ready();
+    await screen.findByRole('link', { name: 'Inicio' });
+
+    const call = api.callsTo('GET /dependencies/{type}/{id}')[0];
+    expect(call?.options.path).toEqual({ type: 'collections', id: 11 });
+    expect(call?.options.query).toEqual({ depth: 1 });
   });
 
   it('says so when the collection is not linked to any screen, has no derivation and no texts', async () => {
@@ -421,7 +518,7 @@ describe('collection detail: states and roles', () => {
     const dialog = within(await screen.findByRole('dialog', { name: 'Delete colClientes?' }));
     expect(
       await dialog.findByText(
-        /Its 4 fields, 3 variable assignments and 1 derivation are deleted too\./,
+        /Its 4 fields, 3 variable assignments, 1 derivation and its links to 2 screens are deleted too\./,
       ),
     ).toBeInTheDocument();
     await user.click(dialog.getByRole('button', { name: 'Delete collection' }));
