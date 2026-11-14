@@ -72,20 +72,20 @@ export function fitViewport({
   }
   const { room, zoom, raw } = placed;
   const fits = raw >= READABLE_MIN_ZOOM;
-  let x: number;
-  let y: number;
-  if (fits) {
-    x = insets.left + (room.width - content.width * zoom) / 2 - content.x * zoom;
-    y = insets.top + (room.height - content.height * zoom) / 2 - content.y * zoom;
-  } else if (anchor) {
-    const cx = anchor.x + anchor.width / 2;
-    const cy = anchor.y + anchor.height / 2;
-    x = insets.left + room.width / 2 - cx * zoom;
-    y = insets.top + room.height / 2 - cy * zoom;
-  } else {
-    x = insets.left - content.x * zoom;
-    y = insets.top - content.y * zoom;
-  }
+  // Each axis is placed on its own: what fits across (or down) the free part is centered there, even when the other axis does
+  // not fit; what does not fit is centered on the anchor (the focused element) or starts at its top left corner.
+  const fitsAcross = content.width * zoom <= room.width + 0.5;
+  const fitsDown = content.height * zoom <= room.height + 0.5;
+  const x = fitsAcross
+    ? insets.left + (room.width - content.width * zoom) / 2 - content.x * zoom
+    : anchor
+      ? insets.left + room.width / 2 - (anchor.x + anchor.width / 2) * zoom
+      : insets.left - content.x * zoom;
+  const y = fitsDown
+    ? insets.top + (room.height - content.height * zoom) / 2 - content.y * zoom
+    : anchor
+      ? insets.top + room.height / 2 - (anchor.y + anchor.height / 2) * zoom
+      : insets.top - content.y * zoom;
   return { x, y, zoom, insets, fits };
 }
 

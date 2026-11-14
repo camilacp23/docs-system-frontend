@@ -249,16 +249,20 @@ export function buildFocusScene(
   }
 
   // The first view frames the focused element and its neighbors. After a column was opened or closed with "+N more" (`framedColumn`)
-  // it frames that whole column instead, with its card.
+  // it frames that whole column instead, with its card and the columns next to it: at depth 2 every line of a column goes to
+  // them, so none is cut at the edge of the canvas.
   const framedIndex =
     framedColumn === null ? -1 : COLUMN_IDS.indexOf(framedColumn as (typeof COLUMN_IDS)[number]);
+  const columnUnits = (index: number) => [
+    ...(shown[index] ?? []),
+    ...(moreOf.has(index) ? [moreKey(COLUMN_IDS[index] ?? 'center')] : []),
+  ];
   const fit =
     framedColumn !== null && framedIndex >= 0
       ? {
-          keys: [
-            ...(shown[framedIndex] ?? []),
-            ...(moreOf.has(framedIndex) ? [moreKey(framedColumn)] : []),
-          ],
+          keys: [framedIndex - 1, framedIndex, framedIndex + 1].flatMap((index) =>
+            index >= 0 && index < COLUMN_IDS.length ? columnUnits(index) : [],
+          ),
           anchorKey: null,
         }
       : {

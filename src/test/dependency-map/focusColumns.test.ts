@@ -163,6 +163,20 @@ describe('the first view of the canvas', () => {
     expect(centerX).toBeCloseTo(view.insets.left + free / 2, 5);
   });
 
+  it('centers across what fits across even when it does not fit down, and keeps the focused element in the middle down', () => {
+    const anchor = { x: 300, y: 2000, width: 200, height: 80 };
+    const content = { x: 0, y: 0, width: 700, height: 4000 }; // narrow and very tall
+    const view = fitViewport({ content, anchor, canvas });
+    const free = canvas.width - view.insets.left - view.insets.right;
+    expect(view.fits).toBe(false);
+    expect(view.x + (content.width * view.zoom) / 2).toBeCloseTo(view.insets.left + free / 2, 5);
+    const freeDown = canvas.height - view.insets.top - view.insets.bottom;
+    expect((anchor.y + anchor.height / 2) * view.zoom + view.y).toBeCloseTo(
+      view.insets.top + freeDown / 2,
+      5,
+    );
+  });
+
   it('reserves the room of the mini map only when the visitor turned it on and the map does not fit', () => {
     const big = { x: 0, y: 0, width: 6000, height: 4000 };
     expect(fitViewport({ content: big, anchor: null, canvas }).insets.right).toBe(INSETS.right);

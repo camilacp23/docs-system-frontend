@@ -19,7 +19,7 @@
 // application is read normally: the page writes nothing.
 import { Network } from 'lucide-react';
 import { useReactFlow } from '@xyflow/react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ApiError } from '../../api/ApiError';
 import { getErrorMessage } from '../../api/messages';
@@ -214,16 +214,16 @@ export function MapView({
   }, [trail, focusKey, index]);
 
   const centerOn = useCallback(
-    (key: string, zoom: number = FOCUS_ZOOM) => {
+    (key: string, zoom: number = FOCUS_ZOOM): Promise<boolean> => {
       const box = scene?.nodes.find((candidate) => candidate.key === key);
-      if (!scene || !box) return;
+      if (!scene || !box) return Promise.resolve(false);
       const parent =
         box.parentKey === null
           ? null
           : scene.nodes.find((candidate) => candidate.key === box.parentKey);
       const x = box.x + (parent?.x ?? 0);
       const y = box.y + (parent?.y ?? 0);
-      void setCenter(x + box.width / 2, y + box.height / 2, { zoom, duration: 0 });
+      return setCenter(x + box.width / 2, y + box.height / 2, { zoom, duration: 0 });
     },
     [scene, setCenter],
   );
@@ -273,13 +273,21 @@ export function MapView({
 
   const pick = (key: string) => {
     activate(key);
-    if (!focused && sceneKeys.has(key)) centerOn(key);
+    if (!focused && sceneKeys.has(key)) void centerOn(key);
   };
 
   // Development page only: center and zoom on a node once the map is placed (for the screenshots of the design).
+  // Once per focus and view: a later scene (a column opened with "+N more") frames itself, see buildFocusScene.
+  const zoomedFor = useRef<string | null>(null);
   useEffect(() => {
-    if (zoomToKey !== null && scene !== null) centerOn(zoomToKey, zoomLevel);
-  }, [zoomToKey, zoomLevel, scene, centerOn]);
+    if (zoomToKey === null || scene === null) return;
+    const id = `${focusKey ?? ''}|${params.view}|${zoomToKey}`;
+    if (zoomedFor.current === id) return;
+    // Done only when React Flow moved the view (before it is ready it does not): the effect runs again when it changes.
+    void centerOn(zoomToKey, zoomLevel).then((moved) => {
+      if (moved) zoomedFor.current = id;
+    });
+  }, [zoomToKey, zoomLevel, scene, centerOn, focusKey, params.view]);
 
   const close = () => {
     const key = selectedKey;
