@@ -8,6 +8,7 @@ import { createBrowserRouter, Navigate, type RouteObject } from 'react-router';
 import { AppShell } from '../../layout/AppShell';
 import { AuditLogPage } from '../../modules/audit/AuditLogPage';
 import { LoginPage } from '../../modules/auth/LoginPage';
+import { DashboardPage } from '../../modules/dashboard/DashboardPage';
 import { NotFoundPage, ServerErrorPage } from '../../modules/errors/ErrorPages';
 import { LazyDependencyMapPage } from '../../modules/dependency-map/LazyDependencyMapPage';
 import { ModulePlaceholder } from '../../modules/ModulePlaceholder';
@@ -31,6 +32,7 @@ import { APP_ROUTES, HOME_PATH, LOGIN_PATH } from './routes';
 
 /** The pages that already exist, by route path; every other route shows the placeholder of its module. */
 const PAGES: Record<string, ReactNode> = {
+  '/dashboard': <DashboardPage />,
   '/variables': <VariablesListPage />,
   '/variables/:id': <VariableDetailPage />,
   '/variables/:id/edit': <VariableEditPage />,
