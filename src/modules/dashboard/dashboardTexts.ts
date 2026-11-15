@@ -40,12 +40,14 @@ export const NEW_SCREEN_HREF = '/screens?new=1';
 
 /** Jira (S-31j): the saved copy of the to-dos when Jira does not answer. The figures always come from the local copy. */
 export const STALE_TAG = 'Stale';
+/** The caption of the card with Jira unavailable; the date of the copy is in the banner under the row (S-31j). */
 export const JIRA_UNAVAILABLE_CAPTION = 'Jira unavailable · last saved copy';
+export const JIRA_UNAVAILABLE_NEVER_CAPTION = 'Jira unavailable · never synced';
 export const JIRA_NOTICE_LEAD = "Jira isn't responding.";
 export const NEVER_SYNCED = 'Never synced';
-export function lastSyncedText(date: string): string {
-  return `Last synced ${date}`;
-}
+/** Said to screen readers before the date of the second line of the card ("Last synced 2026-10-05 08:40"); the line itself
+ *  shows a clock and the date, so it fits one line of the narrowest card. */
+export const LAST_SYNCED_LABEL = 'Last synced';
 /** The banner of S-31j; without a date (nothing was ever synchronized) the second sentence leaves it out. */
 export function jiraNoticeText(date: string | null): string {
   return date === null

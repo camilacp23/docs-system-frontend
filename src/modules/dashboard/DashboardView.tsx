@@ -4,14 +4,15 @@
 // timeZone, canCreateScreen (the action of the empty state: not for the Reader, not for an archived application).
 // It holds no state of its own and reads nothing: DashboardPage gives it the data, and the development page
 // (/dev/dashboard) gives it test data so the design can be photographed.
-// Layout (SDD 7.3.7): from 1440 px the frame S-31; below it the cards take half the width (see KpiCards): the status
-// card across the page and the pending to-dos next to the other card.
+// Layout (SDD 7.3.7): it answers to the width of its container: from 900 px the blocks are in two columns as in the
+// frame S-31, and the row of figures is one row from 940 px (see KpiCards).
 import { ChartPie, Database, History, ListTodo, RefreshCw } from 'lucide-react';
 import { Link } from 'react-router';
 
 import {
   Banner,
   Button,
+  cx,
   ButtonLink,
   EmptyState,
   ICON_STROKE_WIDTH,
@@ -56,8 +57,12 @@ import { StatusChart } from './StatusChart';
 import type { DashboardSource, IndicatorsRead, TopRead } from './useDashboardData';
 
 const CARD_ICON = { size: 16, strokeWidth: ICON_STROKE_WIDTH } as const;
+// The skeleton of the row of figures has the same grid as the row (see KpiCards).
 const KPI_GRID =
-  'grid grid-cols-2 gap-3.5 min-[1440px]:grid-cols-[minmax(0,1.35fr)_repeat(4,minmax(0,1fr))]';
+  'grid grid-cols-6 gap-3.5 @min-[940px]:grid-cols-[minmax(0,1.35fr)_repeat(4,minmax(0,1fr))]';
+/** From 900 px of container the blocks are in two columns as in S-31; narrower, the status card goes across the page. */
+const BLOCKS_GRID =
+  'grid grid-cols-2 gap-3.5 @min-[900px]:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]';
 
 export interface DashboardViewProps {
   name: string;
@@ -93,8 +98,9 @@ export function DashboardView({
     withActivity && (read === null || read.indicators.recentActivity !== undefined);
   const heading = firstName(name) === '' ? greeting(hour) : `${greeting(hour)}, ${firstName(name)}`;
 
+  // The wrapper is the container the layout answers to (@container): the width of the page, not of the window.
   return (
-    <>
+    <div className="@container flex flex-col gap-4">
       <PageHeader
         title={heading}
         description={`Documentation health of ${applicationName}`}
@@ -137,13 +143,20 @@ export function DashboardView({
         <BlockLoading loading={loadingIndicators} className="min-h-43.5">
           <div className={KPI_GRID}>
             {Array.from({ length: 5 }, (_, index) => (
-              <Skeleton key={index} className="h-43.5 w-full" />
+              <Skeleton
+                key={index}
+                className={cx(
+                  'h-43.5 w-full',
+                  index < 3 ? 'col-span-2' : 'col-span-3',
+                  '@min-[940px]:col-span-1',
+                )}
+              />
             ))}
           </div>
         </BlockLoading>
       )}
 
-      <div className="grid grid-cols-2 gap-3.5 min-[1440px]:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+      <div className={BLOCKS_GRID}>
         <SectionCard
           title={STATUS_TITLE}
           icon={<ChartPie {...CARD_ICON} />}
@@ -152,7 +165,7 @@ export function DashboardView({
               ? `${screensText(read.indicators.documentation.totalScreens)} · App (OnStart) included`
               : undefined
           }
-          className="col-span-2 min-[1440px]:col-span-1 min-[1440px]:row-span-2"
+          className="col-span-2 @min-[900px]:col-span-1 @min-[900px]:row-span-2"
         >
           {failedIndicators ? (
             <BlockError
@@ -237,6 +250,6 @@ export function DashboardView({
           </SectionCard>
         )}
       </div>
-    </>
+    </div>
   );
 }

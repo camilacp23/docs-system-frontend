@@ -202,7 +202,7 @@ function TopBar({
         <span className="text-label/5 text-ink-500">/</span>
         <span className="text-label/5 font-bold text-ink-900">{pageName}</span>
       </div>
-      <div className="relative flex h-10 w-140 items-center gap-2.5 overflow-hidden rounded-card border border-border bg-search-bg pr-2 pl-3.5 shadow-field-inset">
+      <div className="relative flex h-10 w-140 min-w-0 shrink items-center gap-2.5 overflow-hidden rounded-card border border-border bg-search-bg pr-2 pl-3.5 shadow-field-inset">
         <Search
           size={18}
           strokeWidth={ICON_STROKE_WIDTH}
@@ -212,16 +212,16 @@ function TopBar({
         <span className="truncate text-body-lg text-ink-500">
           Search screens, variables, collections, components…
         </span>
-        <span className="rounded-chip border border-border bg-surface px-2 py-0.75 text-small/5 font-semibold text-ink-700">
+        <span className="rounded-chip border border-border bg-surface px-2 py-0.75 text-small/5 font-semibold whitespace-nowrap text-ink-700">
           in SAR
         </span>
-        <kbd className="ml-auto rounded-keycap border border-b-2 border-border bg-surface px-1.75 py-1.25 font-mono text-micro/[11px] font-semibold text-ink-700">
+        <kbd className="ml-auto shrink-0 rounded-keycap border border-b-2 border-border bg-surface px-1.75 py-1.25 font-mono text-micro/[11px] font-semibold whitespace-nowrap text-ink-700">
           Ctrl K
         </kbd>
       </div>
       <div className="flex items-center justify-end gap-2.5">
         {jira === 'available' ? (
-          <span className="flex items-center gap-1.75 rounded-pill bg-success-pill-bg px-2.75 py-1.5 text-small/5 font-semibold text-success-pill-ink">
+          <span className="flex shrink-0 items-center gap-1.75 rounded-pill bg-success-pill-bg px-2.75 py-1.5 text-small/5 font-semibold whitespace-nowrap text-success-pill-ink">
             <span
               aria-hidden="true"
               className="size-1.75 rounded-pill bg-success shadow-success-dot"
@@ -229,7 +229,7 @@ function TopBar({
             Jira connected
           </span>
         ) : (
-          <span className="flex items-center gap-1.75 rounded-pill border border-warning-border bg-warning-bg px-2.75 py-1.5 text-small/5 font-semibold text-warning-ink">
+          <span className="flex shrink-0 items-center gap-1.75 rounded-pill border border-warning-border bg-warning-bg px-2.75 py-1.5 text-small/5 font-semibold whitespace-nowrap text-warning-ink">
             <span aria-hidden="true" className="size-1.75 rounded-pill bg-badge-warning-bg" />
             Jira unavailable
           </span>
@@ -237,7 +237,7 @@ function TopBar({
         <span className="flex size-9.5 items-center justify-center rounded-[11px] border border-border-subtle bg-surface text-ink-700">
           <CircleHelp size={18} strokeWidth={ICON_STROKE_WIDTH} aria-label="Help" />
         </span>
-        <div className="flex items-center gap-2.5 border-l border-border-subtle pl-2.5">
+        <div className="flex shrink-0 items-center gap-2.5 border-l border-border-subtle pl-2.5 whitespace-nowrap">
           <Avatar name={user.name} decorative />
           <div>
             <div className="text-label/5 font-bold text-ink-900">{user.name}</div>

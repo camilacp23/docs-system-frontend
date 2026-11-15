@@ -29,7 +29,9 @@ describe('Jira available', () => {
     const card = within(pending());
     expect(card.getByText('6')).toBeInTheDocument();
     expect(card.getByText('Subtasks not Done in Jira')).toBeInTheDocument();
-    expect(card.getByText(`Last synced ${synced()}`)).toBeInTheDocument();
+    // One short line: a clock and the date; "Last synced" is for screen readers.
+    expect(pending()).toHaveTextContent(`Last synced ${synced()}`);
+    expect(card.getByText(synced()).tagName).toBe('TIME');
     expect(card.queryByText('Stale')).not.toBeInTheDocument();
     expect(screen.queryByText("Jira isn't responding.")).not.toBeInTheDocument();
     expect(pill()).toHaveTextContent('Jira connected');
@@ -66,7 +68,8 @@ describe('Jira unavailable', () => {
     expect(card.getByText('6')).toBeInTheDocument();
     expect(card.getByText('Stale')).toBeInTheDocument();
     expect(card.getByText('Jira unavailable · last saved copy')).toBeInTheDocument();
-    expect(card.getByText(`Last synced ${synced()}`)).toBeInTheDocument();
+    // The date of the copy is in the banner, so the card keeps the height of its neighbours.
+    expect(card.queryByText(synced())).not.toBeInTheDocument();
     const banner = screen.getByRole('alert');
     expect(banner).toHaveTextContent(
       `Jira isn't responding. To-do counts come from the copy saved on ${synced()}.`,
@@ -98,7 +101,7 @@ describe('Jira unavailable', () => {
       },
     });
 
-    expect(within(pending()).getByText('Never synced')).toBeInTheDocument();
+    expect(within(pending()).getByText('Jira unavailable · never synced')).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent(
       "Jira isn't responding. To-do counts come from the saved copy.",
     );

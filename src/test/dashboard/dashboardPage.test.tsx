@@ -282,3 +282,38 @@ describe('dashboard: structure for assistive technology', () => {
     }
   });
 });
+
+describe('dashboard: layout of the row of figures', () => {
+  // jsdom applies no CSS, so this reads the classes that draw the layout. What they do was measured in Edge: from 940 px of
+  // container the five cards share one row; below it, three and two (the dark card never alone in a row).
+  it('puts the five cards in one row from 940 px of container and in three plus two below it', async () => {
+    await renderDashboard();
+
+    const row = within(screen.getByRole('main')).getByRole('region', { name: 'Indicators' });
+    expect(row).toHaveClass(
+      'grid-cols-6',
+      '@min-[940px]:grid-cols-[minmax(0,1.35fr)_repeat(4,minmax(0,1fr))]',
+    );
+    const cards = within(row).getAllByRole('article');
+    expect(cards.map((card) => card.getAttribute('aria-label'))).toEqual([
+      'Documentation approved',
+      'Screens in review',
+      'Variables without origin',
+      'Collections not linked',
+      'Pending to-dos',
+    ]);
+    // Row of three: the dark card and two more (each a third); row of two: the rest (each a half).
+    expect(cards.slice(0, 3).every((card) => card.classList.contains('col-span-2'))).toBe(true);
+    expect(cards.slice(3).every((card) => card.classList.contains('col-span-3'))).toBe(true);
+    for (const card of cards) expect(card).toHaveClass('@min-[940px]:col-span-1');
+  });
+
+  it('answers to the width of the page, not of the window, and keeps the two columns of the blocks from 900 px', async () => {
+    await renderDashboard();
+
+    const wrapper = screen.getByRole('heading', { level: 1 }).closest('[class~="@container"]');
+    expect(wrapper).not.toBeNull();
+    const blocks = screen.getByRole('region', { name: 'Documentation by status' }).parentElement;
+    expect(blocks).toHaveClass('@min-[900px]:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]');
+  });
+});
