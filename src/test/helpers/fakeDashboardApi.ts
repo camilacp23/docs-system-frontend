@@ -8,7 +8,8 @@
 //   10 most recent records for an Administrator and a Developer. `state.indicators` can be changed by a test between two
 //   reads. `/screens` goes to the screens fake, so `sort=-pendingSubtasks` (App (OnStart) first, whatever the order)
 //   behaves like the API.
-//   failNext('GET /dashboard/indicators' | 'GET /screens', error) makes the next read fail once; hold(predicate) keeps
+//   failNext('GET /dashboard/indicators' | 'GET /screens', error) makes the next read fail once (for 'GET /screens', the
+//   next read of the dashboard, the one with `sort`, not the count of the sidebar); hold(predicate) keeps
 //   the matching read of the indicators waiting until release() is called (holdScreens does the same for /screens).
 import { vi } from 'vitest';
 
@@ -107,7 +108,6 @@ export function makeDashboardApi(
   const holds: Array<{ predicate: (call: RecordedApiCall) => boolean; gate: Promise<void> }> = [];
 
   function failNext(operation: string, error: ApiError) {
-    if (operation === 'GET /screens') return screens.failNext(operation, error);
     failures.set(operation, [...(failures.get(operation) ?? []), error]);
   }
 
@@ -144,11 +144,16 @@ export function makeDashboardApi(
     };
   }
 
-  const get = vi.fn((path: string, options: RecordedApiCall['options'] = {}) =>
-    path === '/dashboard/indicators'
-      ? getIndicators(options)
-      : (screens.client.get as (p: string, o?: unknown) => Promise<unknown>)(path, options),
-  );
+  const get = vi.fn((path: string, options: RecordedApiCall['options'] = {}) => {
+    if (path === '/dashboard/indicators') return getIndicators(options);
+    // The dashboard's own read of the screens is the one ordered by `sort`; the count of the sidebar (pageSize 1) is
+    // another read of the same operation and is left alone by failNext.
+    if (path === '/screens' && options.query?.sort !== undefined) {
+      const failure = failures.get('GET /screens')?.shift();
+      if (failure) return Promise.reject(failure);
+    }
+    return (screens.client.get as (p: string, o?: unknown) => Promise<unknown>)(path, options);
+  });
   const client = { ...screens.client, get } as unknown as ApiClient;
 
   const callsTo = (operation: string) =>

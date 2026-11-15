@@ -26,6 +26,7 @@ const FORBIDDEN: Record<Role, string[]> = {
 
 /** Modules that already have their own pages: the placeholder text no longer applies to them. */
 const hasOwnPage = (path: string) =>
+  path === '/dashboard' ||
   path.startsWith('/variables') ||
   path.startsWith('/collections') ||
   path.startsWith('/screens') ||

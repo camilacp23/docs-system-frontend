@@ -9,7 +9,7 @@
 // application is read like any other. The indicators carry the time of the read for "Updated 10:24".
 import { useCallback } from 'react';
 
-import type { ApiError } from '../../api/ApiError';
+import { ApiError } from '../../api/ApiError';
 import { useApi } from '../../api/useApi';
 import { useApiResource, type ApiResource } from '../../api/useApiResource';
 
@@ -55,6 +55,10 @@ export function useDashboardData(applicationId: number | null) {
         query: { applicationId: id },
         signal,
       });
+      // An answer without the figures is not a dashboard: a block error, never a broken page.
+      if (!(body.data as Indicators | undefined)) {
+        throw new ApiError({ status: 200, code: 'UNEXPECTED_RESPONSE' });
+      }
       return {
         body: { applicationId: id, indicators: body.data, readAt: new Date().toISOString() },
         etag,
