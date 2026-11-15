@@ -1,9 +1,10 @@
-// PasswordField: TextField whose content can be revealed with an accessible Show / Hide button.
+// PasswordField: TextField whose content can be revealed with an accessible eye button.
 // Props: the same as TextField except `type`. The toggle is a real button (keyboard and screen-reader
-// friendly) wired to the input with aria-controls; its visible text is the accessible name.
+// friendly) wired to the input with aria-controls; its aria-label (Show password / Hide password) is the accessible name.
+import { Eye, EyeOff } from 'lucide-react';
 import { useId, useState } from 'react';
 
-import { cx } from './cx';
+import { cx, ICON_STROKE_WIDTH } from './cx';
 import { TextField } from './TextField';
 import type { TextFieldProps } from './TextField';
 
@@ -20,18 +21,23 @@ export function PasswordField({ id, className, ...rest }: PasswordFieldProps) {
         {...rest}
         id={inputId}
         type={visible ? 'text' : 'password'}
-        className={cx('pr-14', className)}
+        className={cx('pr-11', className)}
       />
       <button
         type="button"
         aria-controls={inputId}
+        aria-label={visible ? 'Hide password' : 'Show password'}
         disabled={rest.disabled}
         onClick={() => {
           setVisible((current) => !current);
         }}
-        className="absolute inset-y-0 right-2.5 flex items-center rounded-chip px-1 text-label font-semibold text-primary disabled:opacity-45"
+        className="absolute inset-y-0 right-2 my-auto flex size-8 items-center justify-center rounded-chip text-ink-500 hover:text-accent-ink disabled:opacity-45"
       >
-        {visible ? 'Hide' : 'Show'}
+        {visible ? (
+          <EyeOff size={18} strokeWidth={ICON_STROKE_WIDTH} aria-hidden="true" />
+        ) : (
+          <Eye size={18} strokeWidth={ICON_STROKE_WIDTH} aria-hidden="true" />
+        )}
       </button>
     </div>
   );

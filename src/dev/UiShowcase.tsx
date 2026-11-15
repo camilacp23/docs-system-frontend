@@ -2,31 +2,40 @@
 // for side-by-side visual comparison, followed by a gallery with every design-system component and state.
 // It is loaded with a dynamic import behind `import.meta.env.DEV`, so it never reaches the production build.
 import { Database, Plus } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import {
+  ActionMenu,
   Avatar,
   Banner,
   Button,
+  Checkbox,
   DOCUMENTATION_STATUSES,
   EmptyState,
   ElementTypeIcon,
   ErrorState,
   FormField,
   Modal,
+  Pagination,
   PasswordField,
+  SearchPicker,
+  SegmentedControl,
+  Select,
   Skeleton,
   SLOW_LOADING_MESSAGE,
+  SortableHeader,
   Spinner,
   StatusTag,
+  Tag,
+  Textarea,
   TextField,
   ToastCard,
   ToastProvider,
   useDelayedLoading,
   useToast,
 } from '../components/ui';
-import type { ModalSize } from '../components/ui';
+import type { ModalSize, SearchPickerOption } from '../components/ui';
 import { MockShell } from './MockShell';
 
 const CARD_CLASS = 'rounded-card border border-border-subtle bg-surface shadow-card';
@@ -227,6 +236,201 @@ function LoadingDemo() {
   );
 }
 
+const PICKER_OPTIONS: readonly SearchPickerOption[] = [
+  { value: '1', label: 'gUsuario', detail: 'Global · App (OnStart)' },
+  { value: '2', label: 'locFiltroInicio', detail: 'Context · Inicio · write only' },
+  {
+    value: '3',
+    label: 'locSinOrigen',
+    detail: 'Context · set its origin screen first',
+    disabled: true,
+  },
+];
+
+function FormControlsDemo() {
+  const [picked, setPicked] = useState('');
+  const focusRef = useRef<HTMLSelectElement>(null);
+  const [scope, setScope] = useState<'GLOBAL' | 'CONTEXT'>('GLOBAL');
+  const [checked, setChecked] = useState(true);
+  return (
+    <>
+      <div className="grid max-w-180 grid-cols-2 gap-4">
+        <FormField label="Select (normal)">
+          {(control) => (
+            <Select {...control} ref={focusRef} defaultValue="TEXT">
+              <option value="TEXT">Text</option>
+              <option value="NUMBER">Number</option>
+            </Select>
+          )}
+        </FormField>
+        <FormField
+          label="Select (error)"
+          error="Choose one of the available options for Data type."
+        >
+          {(control) => (
+            <Select {...control}>
+              <option>Text</option>
+            </Select>
+          )}
+        </FormField>
+        <FormField label="Select (disabled)">
+          {(control) => (
+            <Select {...control} disabled>
+              <option>Text</option>
+            </Select>
+          )}
+        </FormField>
+        <FormField label="Search picker">
+          {(control) => (
+            <SearchPicker
+              {...control}
+              mono
+              placeholder="Add a variable…"
+              options={PICKER_OPTIONS}
+              value={picked}
+              onChange={setPicked}
+            />
+          )}
+        </FormField>
+        <FormField label="Search picker (error)" error="Variable is required.">
+          {(control) => (
+            <SearchPicker
+              {...control}
+              mono
+              options={PICKER_OPTIONS}
+              value=""
+              onChange={setPicked}
+            />
+          )}
+        </FormField>
+        <FormField label="Search picker (disabled)">
+          {(control) => (
+            <SearchPicker
+              {...control}
+              disabled
+              options={PICKER_OPTIONS}
+              value="1"
+              onChange={setPicked}
+            />
+          )}
+        </FormField>
+        <FormField label="Textarea (error)" error="Description is too long.">
+          {(control) => <Textarea {...control} defaultValue="What the variable holds" />}
+        </FormField>
+        <FormField label="Textarea (disabled)">
+          {(control) => <Textarea {...control} disabled defaultValue="Read only" />}
+        </FormField>
+        <FormField label="Textarea (normal)">
+          {(control) => <Textarea {...control} placeholder="What the variable holds" />}
+        </FormField>
+      </div>
+      <div className="flex flex-wrap items-center gap-4">
+        <Checkbox
+          label="DEV"
+          checked={checked}
+          onChange={(event) => {
+            setChecked(event.target.checked);
+          }}
+        />
+        <Checkbox label="PROD (unchecked)" defaultChecked={false} />
+        <Checkbox label="Disabled" disabled defaultChecked />
+        <Checkbox label="Invalid" invalid />
+      </div>
+      <div className="flex flex-wrap items-center gap-4">
+        <SegmentedControl
+          name="demo-scope"
+          label="Scope"
+          value={scope}
+          onChange={setScope}
+          options={[
+            { value: 'GLOBAL', label: 'Global (Set)' },
+            { value: 'CONTEXT', label: 'Context (UpdateContext)' },
+          ]}
+        />
+        <SegmentedControl
+          name="demo-scope-disabled"
+          label="Scope (disabled)"
+          value="GLOBAL"
+          onChange={() => undefined}
+          disabled
+          options={[
+            { value: 'GLOBAL', label: 'Global (Set)' },
+            { value: 'CONTEXT', label: 'Context (UpdateContext)' },
+          ]}
+        />
+        <SegmentedControl
+          name="demo-scope-error"
+          label="Scope (error)"
+          value="GLOBAL"
+          onChange={() => undefined}
+          invalid
+          options={[
+            { value: 'GLOBAL', label: 'Global' },
+            { value: 'CONTEXT', label: 'Context' },
+          ]}
+        />
+        <Button
+          onClick={() => {
+            focusRef.current?.focus();
+          }}
+        >
+          Focus the first Select
+        </Button>
+      </div>
+    </>
+  );
+}
+
+function ListPartsDemo() {
+  const [sort, setSort] = useState('name');
+  const [page, setPage] = useState(2);
+  const [size, setSize] = useState(20);
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <Tag tone="info">Set · Global</Tag>
+        <Tag>UpdateContext · Context</Tag>
+        <Tag tone="success">PROD</Tag>
+        <Tag tone="warning">Untraced</Tag>
+        <Tag mono>OnVisible</Tag>
+        <ActionMenu
+          label="Actions for gUsuario"
+          items={[
+            { key: 'view', label: 'View', onSelect: () => undefined },
+            {
+              key: 'edit',
+              label: 'Edit',
+              onSelect: () => undefined,
+              disabled: true,
+              reason: 'Read-only: the application is archived',
+            },
+            { key: 'delete', label: 'Delete', onSelect: () => undefined, danger: true },
+          ]}
+        />
+      </div>
+      <table className="w-full max-w-150 text-left">
+        <thead>
+          <tr>
+            <SortableHeader label="Name" sortKey="name" sort={sort} onSort={setSort} />
+            <SortableHeader label="Scope" sortKey="scope" sort={sort} onSort={setSort} />
+            <SortableHeader label="Updated" sortKey="updatedAt" sort={sort} onSort={setSort} />
+          </tr>
+        </thead>
+      </table>
+      <Pagination
+        page={page}
+        pageSize={size}
+        total={230}
+        onPageChange={setPage}
+        onPageSizeChange={(next) => {
+          setSize(next);
+          setPage(1);
+        }}
+      />
+    </>
+  );
+}
+
 function Gallery() {
   const [errors, setErrors] = useState(true);
   return (
@@ -285,6 +489,12 @@ function Gallery() {
           />
           Show errors
         </label>
+      </GallerySection>
+      <GallerySection title="Select, Textarea, Checkbox, SegmentedControl">
+        <FormControlsDemo />
+      </GallerySection>
+      <GallerySection title="Tag, ActionMenu, SortableHeader, Pagination">
+        <ListPartsDemo />
       </GallerySection>
       <GallerySection title="Banner">
         <Banner tone="warning" lead="Heads up." actions={<Button size="sm">Reload</Button>}>

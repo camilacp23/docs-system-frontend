@@ -1,55 +1,23 @@
-// TopBar: the 68 px bar of the shell (S-31): breadcrumb (application chip / section title) on the left and the
-// user block (initials, name, role) on the right, which opens a menu with "Sign out".
-// Props: user (the signed-in user). The quick search, Jira status pill and help button of the frame arrive with
-// the modules they depend on.
+// TopBar: the 68 px bar of the shell (S-31): the clickable breadcrumb (Breadcrumb.tsx) on the left and on the right
+// the Jira status pill (JiraStatusPill, the last known availability) and the user block (initials, name, role), which
+// opens a menu with "Sign out".
+// Props: user (the signed-in user). The quick search and the help button of the frame arrive with the modules they
+// depend on.
 // Sign out clears the session even if the server cannot be reached; in that case a warning toast says so.
 import { useEffect, useId, useRef } from 'react';
-import { useLocation } from 'react-router';
 
 import type { components } from '../api/schema';
-import { findRoute, ROLE_LABEL } from '../app/router/routes';
-import { useApplication } from '../application/useApplication';
+import { ROLE_LABEL } from '../app/router/routes';
 import { Avatar, useToast } from '../components/ui';
 import { useSession } from '../session/useSession';
 
-import { applicationInitials } from './applicationInitials';
-import { usePopover } from './usePopover';
+import { usePopover } from '../hooks/usePopover';
+
+import { Breadcrumb } from './Breadcrumb';
+import { JiraStatusPill } from './JiraStatusPill';
 
 export const SIGN_OUT_FAILED_TEXT =
   "You're signed out on this device, but the server couldn't be reached to end the session.";
-
-function Breadcrumb() {
-  const { currentApplication } = useApplication();
-  const { pathname } = useLocation();
-  const title = findRoute(pathname)?.title;
-  return (
-    <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-2.5">
-      {currentApplication && (
-        <span className="flex min-w-0 items-center gap-2 rounded-pill bg-accent-soft py-1.25 pr-3 pl-1.5">
-          <span
-            aria-hidden="true"
-            className="flex size-5 shrink-0 items-center justify-center rounded-keycap bg-accent text-[9px] font-extrabold text-on-primary"
-          >
-            {applicationInitials(currentApplication.name)}
-          </span>
-          <span className="truncate text-[12.5px]/5 font-bold text-accent-ink">
-            {currentApplication.name}
-          </span>
-        </span>
-      )}
-      {currentApplication && title && (
-        <span aria-hidden="true" className="text-label/5 text-ink-500">
-          /
-        </span>
-      )}
-      {title && (
-        <span aria-current="page" className="truncate text-label/5 font-bold text-ink-900">
-          {title}
-        </span>
-      )}
-    </nav>
-  );
-}
 
 function UserMenu({ user }: { user: components['schemas']['User'] }) {
   const { logout } = useSession();
@@ -114,7 +82,10 @@ export function TopBar({ user }: { user: components['schemas']['User'] }) {
   return (
     <header className="col-start-2 flex items-center justify-between gap-4 border-b border-border-subtle bg-topbar px-7 backdrop-blur-xs">
       <Breadcrumb />
-      <UserMenu user={user} />
+      <div className="flex items-center gap-2.5">
+        <JiraStatusPill />
+        <UserMenu user={user} />
+      </div>
     </header>
   );
 }

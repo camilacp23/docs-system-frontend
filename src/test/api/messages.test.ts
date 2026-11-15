@@ -3,7 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import contractYaml from '../../../contract/openapi.yaml?raw';
 import { ApiError, type ErrorDetails } from '../../api/ApiError';
-import { getErrorMessage, getFieldErrors, getThrownMessage } from '../../api/messages';
+import {
+  getErrorField,
+  getErrorMessage,
+  getFieldErrors,
+  getRuleMessage,
+  getThrownMessage,
+} from '../../api/messages';
 
 function err(
   code: string,
@@ -90,9 +96,13 @@ describe('placeholders', () => {
       "You can't change the scope while collections assign this variable with UpdateContext. Update those assignments first.",
     );
     expect(getErrorMessage(err('TEMPLATE_INCOMPLETE', { fields: ['risks', 'knownIssues'] }))).toBe(
-      'Complete all seven template fields to submit for review. Missing: risks, knownIssues.',
+      'Complete all seven template fields to submit for review. Missing: Known issues, Risks.',
     );
-    expect(getErrorMessage(err('JIRA_PARTIAL_FAILURE', { key: 'TECHEA-2' }, { status: 502 }))).toBe(
+    expect(
+      getErrorMessage(
+        err('JIRA_PARTIAL_FAILURE', { key: 'TECHEA-2', storyId: 2 }, { status: 502 }),
+      ),
+    ).toBe(
       "The story TECHEA-2 was created, but the to-do wasn't. Try again to add it to that story.",
     );
     expect(getErrorMessage(err('RATE_LIMITED', { minutes: 15 }, { status: 429 }))).toBe(
@@ -197,15 +207,32 @@ describe('silent, local and unknown codes', () => {
 });
 
 describe('catalog against the contract', () => {
+  // Rows with a variant label, e.g. "FORBIDDEN (origin)": the details that select that variant.
+  const VARIANT_DETAILS: Record<string, ErrorDetails> = {
+    'FORBIDDEN (origin)': { reason: 'ORIGIN' },
+  };
+  // Rows whose text depends on what the page was doing.
+  const VARIANT_CTX: Record<string, { action: 'rename' }> = {
+    'APP_CONTEXT_PROTECTED (rename)': { action: 'rename' },
+  };
+
   it('matches every contract message that has no placeholder', () => {
-    const yaml = contractYaml;
-    const rows = [...yaml.matchAll(/^ {4}\| ([A-Z_]+) \| (\d+) \| (.+) \|$/gm)];
+    const rows = [
+      ...contractYaml.matchAll(/^ {4}\| ([A-Z_]+(?: \([a-z ]+\))?) \| (\d+) \| (.+) \|$/gm),
+    ];
     expect(rows.length).toBeGreaterThan(25);
     let compared = 0;
-    for (const [, code, status, message] of rows) {
-      if (!code || !message || message.includes('<') || message.includes('(`details`')) continue;
+    for (const [, label, status, cell] of rows) {
+      // The table cell is "<text> (`details`: ...)" or "<text> (<when it happens>)": the text alone is what the catalog must produce.
+      const message = cell?.replace(/ \((?:`details`: |Jira not configured).*\)$/, '');
+      if (!label || !message || message.includes('<')) continue;
+      const code = label.split(' ')[0] ?? label;
       if (['UNAUTHENTICATED', 'INVALID_SIGNATURE'].includes(code)) continue;
-      expect(getErrorMessage(err(code, null, { status: Number(status) })), code).toBe(message);
+      const details = VARIANT_DETAILS[label] ?? null;
+      expect(
+        getErrorMessage(err(code, details, { status: Number(status) }), VARIANT_CTX[label]),
+        label,
+      ).toBe(message);
       compared++;
     }
     expect(compared).toBeGreaterThan(20);
@@ -270,5 +297,393 @@ describe('field errors (VALIDATION_ERROR)', () => {
       [],
     );
     expect(getErrorMessage(validation([]))).toBe('Check the highlighted fields.');
+  });
+});
+
+describe('INVALID_ORIGIN_SCREEN (D-68)', () => {
+  const APP_TEXT = 'Context variables are created inside a screen, not in App (OnStart).';
+
+  it('names the screen and the application of the other-application case', () => {
+    expect(
+      getErrorMessage(
+        err('INVALID_ORIGIN_SCREEN', {
+          field: 'originScreenId',
+          screenId: 9,
+          screen: 'Pantalla ajena',
+          application: 'SAR',
+        }),
+      ),
+    ).toBe('Pantalla ajena belongs to another application. Choose a screen of SAR.');
+  });
+
+  it('uses the App (OnStart) text when screen or application is missing, or details are null', () => {
+    expect(getErrorMessage(err('INVALID_ORIGIN_SCREEN', { field: 'originScreenId' }))).toBe(
+      APP_TEXT,
+    );
+    expect(getErrorMessage(err('INVALID_ORIGIN_SCREEN', { screen: 'Pantalla ajena' }))).toBe(
+      APP_TEXT,
+    );
+    expect(getErrorMessage(err('INVALID_ORIGIN_SCREEN', { application: 'SAR' }))).toBe(APP_TEXT);
+    expect(getErrorMessage(err('INVALID_ORIGIN_SCREEN', { screen: '', application: 'SAR' }))).toBe(
+      APP_TEXT,
+    );
+    expect(getErrorMessage(err('INVALID_ORIGIN_SCREEN', null))).toBe(APP_TEXT);
+  });
+
+  it('does not warn in either case', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    getErrorMessage(err('INVALID_ORIGIN_SCREEN', null));
+    getErrorMessage(err('INVALID_ORIGIN_SCREEN', { screen: 'a', application: 'b' }));
+    expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe('FORBIDDEN (D-77)', () => {
+  it('tells the origin case from the role case by details.reason', () => {
+    const origin = "This request's origin isn't allowed.";
+    const role = "Your role doesn't allow this action.";
+    expect(getErrorMessage(err('FORBIDDEN', { reason: 'ORIGIN' }, { status: 403 }))).toBe(origin);
+    expect(getErrorMessage(err('FORBIDDEN', { requiredRoles: ['ADMIN'] }, { status: 403 }))).toBe(
+      role,
+    );
+    expect(getErrorMessage(err('FORBIDDEN', null, { status: 403 }))).toBe(role);
+    expect(getErrorMessage(err('FORBIDDEN', { reason: 'OTHER' }, { status: 403 }))).toBe(role);
+  });
+});
+
+describe('DUPLICATE_NAME scopes (D-63, D-69)', () => {
+  const dup = (details: ErrorDetails) =>
+    getErrorMessage(err('DUPLICATE_NAME', details, { status: 409 }));
+
+  it('reads type, name and scope from details for every container', () => {
+    expect(
+      dup({
+        field: 'name',
+        type: 'context variable',
+        name: 'locFiltro',
+        application: 'Solicitudes',
+        container: 'screen',
+      }),
+    ).toBe('A context variable named locFiltro already exists in Solicitudes.');
+    expect(
+      dup({
+        field: 'name',
+        type: 'context variable',
+        name: 'locFiltro',
+        application: 'SAR',
+        container: 'application',
+      }),
+    ).toBe('A context variable named locFiltro already exists in SAR.');
+    expect(
+      dup({
+        field: 'name',
+        type: 'collection',
+        name: 'colActivos',
+        application: 'SAR',
+        container: 'application',
+      }),
+    ).toBe('A collection named colActivos already exists in SAR.');
+  });
+
+  it('writes the text when container is missing and warns when name or application are', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    expect(dup({ type: 'screen', name: 'a', application: 'b' })).toBe(
+      'A screen named a already exists in b.',
+    );
+    expect(warn).not.toHaveBeenCalled();
+    expect(dup({ type: 'collection' })).toBe(
+      'A collection named this item already exists in this application.',
+    );
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('business errors with a field position (D-75, D-76)', () => {
+  it('reads details.field and the array position', () => {
+    const cases: [string, ErrorDetails, string, number | null][] = [
+      [
+        'CROSS_APPLICATION',
+        { field: 'variableAssignments[1].variableId' },
+        'variableAssignments[1].variableId',
+        1,
+      ],
+      ['CROSS_APPLICATION', { field: 'derivedFrom[0]' }, 'derivedFrom[0]', 0],
+      [
+        'SCOPE_MISMATCH',
+        { field: 'variableAssignments[12].assignmentFunction' },
+        'variableAssignments[12].assignmentFunction',
+        12,
+      ],
+      [
+        'CONTEXT_SCREEN_MISMATCH',
+        { field: 'variableAssignments[2].screenId', variable: 'v', originScreenId: null },
+        'variableAssignments[2].screenId',
+        2,
+      ],
+      ['INVALID_ORIGIN_SCREEN', { field: 'originScreenId' }, 'originScreenId', null],
+      [
+        'NOT_FOUND',
+        { element: 'collection field', id: 7, field: 'fields[2].id' },
+        'fields[2].id',
+        2,
+      ],
+    ];
+    for (const [code, details, field, index] of cases) {
+      expect(getErrorField(err(code, details)), code).toEqual({ field, index });
+    }
+  });
+
+  it('is null without details, without field or with a non-text field', () => {
+    expect(getErrorField(err('SCOPE_MISMATCH'))).toBeNull();
+    expect(getErrorField(err('SCOPE_MISMATCH', { function: 'Set' }))).toBeNull();
+    expect(getErrorField(err('SCOPE_MISMATCH', { field: 3 }))).toBeNull();
+    expect(getErrorField(err('SCOPE_MISMATCH', { field: '' }))).toBeNull();
+  });
+
+  it('keeps the texts of Table 59 and D-64 for these codes', () => {
+    expect(
+      getErrorMessage(
+        err('SCOPE_MISMATCH', { field: 'variableAssignments[0].assignmentFunction' }),
+      ),
+    ).toBe('Set applies to global variables and UpdateContext to context variables.');
+    expect(getErrorMessage(err('CROSS_APPLICATION', { field: 'derivedFrom[0]' }))).toBe(
+      'You can only link elements of the same application.',
+    );
+    expect(getErrorMessage(err('CROSS_APPLICATION', null))).toBe(
+      'You can only link elements of the same application.',
+    );
+    expect(
+      getErrorMessage(
+        err('CONTEXT_SCREEN_MISMATCH', {
+          field: 'variableAssignments[2].screenId',
+          variableId: 15,
+          variable: 'locFiltro',
+          originScreenId: 3,
+          screen: 'Solicitudes',
+          screenId: 4,
+          targetScreen: 'Detalle',
+        }),
+      ),
+    ).toBe('locFiltro belongs to Solicitudes. From here you can only write it with Navigate.');
+    expect(
+      getErrorMessage(
+        err('CONTEXT_SCREEN_MISMATCH', {
+          field: 'variableAssignments[2].screenId',
+          variable: 'locFiltro',
+          originScreenId: null,
+        }),
+      ),
+    ).toBe('locFiltro has no origin screen. Set its origin screen before linking it.');
+    expect(getErrorMessage(err('SCOPE_CONFLICT', { function: 'Set' }))).toBe(
+      "You can't change the scope while collections assign this variable with Set. Update those assignments first.",
+    );
+  });
+
+  it('writes the 404 of a nested id from details.element, and generically without it', () => {
+    expect(
+      getErrorMessage(
+        err(
+          'NOT_FOUND',
+          { element: 'collection field', id: 7, field: 'fields[2].id' },
+          { status: 404 },
+        ),
+      ),
+    ).toBe("This collection field doesn't exist. It may have been deleted.");
+    expect(
+      getErrorMessage(
+        err(
+          'NOT_FOUND',
+          { element: 'variable assignment', id: 7, field: 'variableAssignments[0].id' },
+          { status: 404 },
+        ),
+      ),
+    ).toBe("This variable assignment doesn't exist. It may have been deleted.");
+    expect(getErrorMessage(err('NOT_FOUND', { field: 'derivedFrom[1]' }, { status: 404 }))).toBe(
+      "This resource doesn't exist. It may have been deleted.",
+    );
+  });
+});
+
+describe('field errors: unique and self rules (D-74, D-65)', () => {
+  const validation = (fields: unknown[]) => err('VALIDATION_ERROR', { fields }, { status: 400 });
+
+  it('marks the exact position and keeps the unique text without the row', () => {
+    const result = getFieldErrors(
+      validation([
+        { field: 'fields[3].name', rule: 'unique', message: 'x' },
+        { field: 'environments[1].environment', rule: 'unique', message: 'x' },
+        { field: 'derivedFrom[0]', rule: 'unique', message: 'x' },
+        { field: 'name', rule: 'required', message: 'x' },
+      ]),
+      { 'fields[].name': 'Field name', 'environments[].environment': 'Environment' },
+    );
+    expect(result).toEqual([
+      {
+        field: 'fields[3].name',
+        index: 3,
+        rule: 'unique',
+        message: 'Field name has repeated values. Each one must be unique.',
+      },
+      {
+        field: 'environments[1].environment',
+        index: 1,
+        rule: 'unique',
+        message: 'Environment has repeated values. Each one must be unique.',
+      },
+      {
+        field: 'derivedFrom[0]',
+        index: 0,
+        rule: 'unique',
+        message: 'This field has repeated values. Each one must be unique.',
+      },
+      { field: 'name', index: null, rule: 'required', message: 'This field is required.' },
+    ]);
+  });
+
+  it('writes the self rule with the label of the screen', () => {
+    const fields = [{ field: 'derivedFrom[2]', rule: 'self', message: 'server text' }];
+    expect(getFieldErrors(validation(fields), { 'derivedFrom[]': 'Derived from' })).toEqual([
+      {
+        field: 'derivedFrom[2]',
+        index: 2,
+        rule: 'self',
+        message: "Derived from can't point to itself.",
+      },
+    ]);
+    expect(getFieldErrors(validation(fields))[0]?.message).toBe(
+      "This field can't point to itself.",
+    );
+  });
+});
+
+describe('screens API errors (contract 0.3.5)', () => {
+  it('tells the two APP_CONTEXT_PROTECTED texts apart by what the page was doing', () => {
+    const e = err('APP_CONTEXT_PROTECTED');
+    expect(getErrorMessage(e)).toBe("The App (OnStart) screen can't be deleted.");
+    expect(getErrorMessage(e, { action: 'delete' })).toBe(
+      "The App (OnStart) screen can't be deleted.",
+    );
+    expect(getErrorMessage(e, { action: 'rename' })).toBe(
+      "The App (OnStart) screen can't be renamed.",
+    );
+  });
+
+  it('lists the missing template fields with readable labels in template order', () => {
+    const fields = ['risks', 'onStart', 'dataModel', 'workingProcess', 'knownIssues'];
+    expect(getErrorMessage(err('TEMPLATE_INCOMPLETE', { fields }))).toBe(
+      'Complete all seven template fields to submit for review. Missing: OnStart, Working process, Data model, Known issues, Risks.',
+    );
+  });
+
+  it('keeps the plain texts of the workflow and Jira codes', () => {
+    expect(getErrorMessage(err('SCREEN_IN_REVIEW'))).toBe(
+      'This screen is in review. Edit it after the review, or withdraw it from review.',
+    );
+    expect(getErrorMessage(err('INVALID_TRANSITION', { from: 'DRAFT', to: 'DRAFT' }))).toBe(
+      'This screen changed status meanwhile. Reload to see its current status.',
+    );
+    expect(getErrorMessage(err('NOT_IN_REVIEW'))).toBe(
+      'This screen is no longer in review. Reload to see its status.',
+    );
+    expect(getErrorMessage(err('COMMENT_REQUIRED'))).toBe(
+      'Write a comment: it is required to return the documentation.',
+    );
+    expect(getErrorMessage(err('STORY_NOT_IN_SCREEN', { storyId: 4 }))).toBe(
+      "That story doesn't belong to this screen. Refresh the list and pick again.",
+    );
+    expect(getErrorMessage(err('JIRA_UNAVAILABLE', null, { status: 502 }))).toBe(
+      "Jira isn't responding. The to-do wasn't created. Try again in a few minutes.",
+    );
+  });
+
+  describe('JIRA_PARTIAL_FAILURE', () => {
+    const partial = (details: ErrorDetails | null) =>
+      err('JIRA_PARTIAL_FAILURE', details, { status: 502 });
+
+    it('writes the four cases from their details', () => {
+      expect(
+        getErrorMessage(
+          partial({
+            key: 'TECHEA-2',
+            created: { epic: 'TECHEA-1', story: 'TECHEA-2' },
+            storyId: 2,
+          }),
+        ),
+      ).toBe(
+        "The story TECHEA-2 was created, but the to-do wasn't. Try again to add it to that story.",
+      );
+      expect(getErrorMessage(partial({ key: 'TECHEA-1', created: { epic: 'TECHEA-1' } }))).toBe(
+        "The epic TECHEA-1 was created, but the story and the to-do weren't. Try again to add them to that epic.",
+      );
+      expect(
+        getErrorMessage(
+          partial({ unsaved: ['TECHEA-1', 'TECHEA-2'], reason: 'SCREEN_DELETED', created: {} }),
+        ),
+      ).toBe(
+        "The screen was deleted while the tickets were being created. These Jira issues weren't saved here: TECHEA-1, TECHEA-2. Delete them in Jira if you don't need them.",
+      );
+      expect(
+        getErrorMessage(partial({ unsaved: ['TECHEA-2'], reason: 'SAVE_FAILED', created: {} })),
+      ).toBe(
+        "These Jira issues were created but couldn't be saved here: TECHEA-2. Delete them in Jira, then try again.",
+      );
+    });
+
+    it('drops a missing key or list and warns in DEV', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      expect(getErrorMessage(partial(null))).toBe(
+        "The story was created, but the to-do wasn't. Try again to add it to that story.",
+      );
+      expect(getErrorMessage(partial({ reason: 'SAVE_FAILED' }))).toBe(
+        "These Jira issues were created but couldn't be saved here. Delete them in Jira, then try again.",
+      );
+      expect(getErrorMessage(partial({ reason: 'SCREEN_DELETED' }))).toBe(
+        "The screen was deleted while the tickets were being created. These Jira issues weren't saved here. Delete them in Jira if you don't need them.",
+      );
+      expect(warn).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  it('writes the singleLine rule of the Jira summaries', () => {
+    const e = err(
+      'VALIDATION_ERROR',
+      { fields: [{ field: 'newStory.summary', rule: 'singleLine', message: 'server text' }] },
+      { status: 400 },
+    );
+    expect(getFieldErrors(e, { 'newStory.summary': 'Summary' })[0]?.message).toBe(
+      'Summary must be a single line.',
+    );
+    expect(getRuleMessage('singleLine', 'Summary')).toBe('Summary must be a single line.');
+  });
+
+  it('writes the self rule of a navigation with the label of the screen', () => {
+    const e = err(
+      'VALIDATION_ERROR',
+      {
+        fields: [{ field: 'navigations[1].targetScreenId', rule: 'self', message: 'server text' }],
+      },
+      { status: 400 },
+    );
+    expect(getFieldErrors(e, { 'navigations[].targetScreenId': 'Navigation target' })).toEqual([
+      {
+        field: 'navigations[1].targetScreenId',
+        index: 1,
+        rule: 'self',
+        message: "Navigation target can't point to itself.",
+      },
+    ]);
+  });
+});
+
+describe('getRuleMessage', () => {
+  it('gives the text of a rule for a label, the same words as the server field errors', () => {
+    expect(getRuleMessage('required', 'Name')).toBe('Name is required.');
+    expect(getRuleMessage('maxLength', 'Name')).toBe('Name is too long.');
+    expect(getRuleMessage('pattern', 'Name')).toBe("Name isn't in a valid format.");
+  });
+
+  it('falls back to a generic label and to the unknown rule text', () => {
+    expect(getRuleMessage('required')).toBe('This field is required.');
+    expect(getRuleMessage('nope', 'Name')).toBe("This value isn't valid.");
   });
 });

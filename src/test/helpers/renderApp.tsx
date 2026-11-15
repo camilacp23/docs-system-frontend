@@ -1,8 +1,9 @@
 // renderApp: renders the real route table (appRoutes) in a memory router with a real SessionManager over the
 // fake backend, the real ApplicationProvider over a fake API client and the ToastProvider.
 // Options: role (of the signed-in user), path (initial URL), signedIn (false: no session cookie), applications
-// (what GET /applications returns), now (system time, when the test uses fake timers), sessionExpiresIn.
-// Returns { router, manager, backend, client }; `client` records the calls of the application API.
+// (what GET /applications returns), applicationsApi (replaces the applications fake), buildClient (replaces the API client of the pages, e.g. makeVariablesApi), now (system time, when the test uses fake timers), sessionExpiresIn.
+// Ends with settle() (unless `settled: false`): the page is rendered when it returns. Returns { router, manager, backend, apps, client }; `apps` records the calls of the application API and `client`
+// is the client the pages use (the applications fake unless buildClient is given).
 import { render } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { vi } from 'vitest';
@@ -19,6 +20,7 @@ import { SessionManager } from '../../session/SessionManager';
 import { SessionProvider } from '../../session/SessionProvider';
 
 import { FakeBackend, FakeLocks, TEST_USER } from './fakeBackend';
+import { settle } from './setupUser';
 
 export const PASSWORD = 'right-password';
 
@@ -75,8 +77,14 @@ export interface RenderAppOptions {
   path?: string;
   signedIn?: boolean;
   applications?: Application[];
+  /** Replaces the minimal applications fake (fakeApplicationsApi, for the tests of the applications themselves). */
+  applicationsApi?: ReturnType<typeof makeApplicationsClient>;
+  /** Builds the client the pages use (ApiContext); the applications keep their own fake. */
+  buildClient?: (apps: ReturnType<typeof makeApplicationsClient>) => ApiClient;
   sessionExpiresIn?: number;
   name?: string;
+  /** false: return before React renders what the first reads brought, to look at a state that is still in flight. */
+  settled?: boolean;
 }
 
 export async function renderApp(options: RenderAppOptions = {}) {
@@ -87,15 +95,16 @@ export async function renderApp(options: RenderAppOptions = {}) {
   backend.install();
   const manager = new SessionManager({ lock: new FakeLocks(), createChannel: () => null });
   if (signedIn) await manager.login(TEST_USER.email, PASSWORD);
-  const apps = makeApplicationsClient(
-    options.applications ?? [makeApplication(1, { name: 'SAR' })],
-  );
+  const apps =
+    options.applicationsApi ??
+    makeApplicationsClient(options.applications ?? [makeApplication(1, { name: 'SAR' })]);
+  const pageClient = options.buildClient?.(apps) ?? apps.client;
   const router = createMemoryRouter(appRoutes, { initialEntries: [path] });
 
   const view = render(
     <SessionProvider manager={manager}>
       <ApplicationProvider client={apps.client}>
-        <ApiContext value={apps.client}>
+        <ApiContext value={pageClient}>
           <ToastProvider>
             <RouterProvider router={router} />
           </ToastProvider>
@@ -103,5 +112,8 @@ export async function renderApp(options: RenderAppOptions = {}) {
       </ApplicationProvider>
     </SessionProvider>,
   );
-  return { router, manager, backend, apps, ...view };
+  // Everything the first reads brought is rendered before the test looks at the page: what it checks does not depend
+  // on when React decides to render (see setupUser.ts).
+  if (options.settled !== false) await settle();
+  return { router, manager, backend, apps, client: pageClient, ...view };
 }

@@ -7,7 +7,11 @@
 //   BroadcastChannel shares the new session, the logout and a revocation between tabs.
 // - End of session = now + sessionExpiresIn when the response arrives. phase: 'active' -> 'endingSoon' (10 min
 //   before) -> 'expired' (the end was reached or the refresh cookie was revoked).
-// Snapshot: { status, phase, user, role, endsAt, endReason, lastUser, bootstrapError }.
+// - replaceUser(user): swaps the signed-in user (same token, same end) after the user changed their own name or
+//   email, so the top bar shows it; it is shared with the other tabs.
+// - logout(notice?): `notice` says the sign-out was caused by the user's own change (role or password: the server
+//   revokes their sessions); the sign-in page shows it, and the other tabs receive it with the logout.
+// Snapshot: { status, phase, user, role, endsAt, endReason, endNotice, lastUser, bootstrapError }.
 //   status: initializing | authenticated | anonymous | unavailable (the first refresh failed for a reason other
 //   than "no session": network, 5xx, 429). After an end (expired / revoked / logout) status is anonymous;
 //   endReason says why and lastUser keeps who it was for the "sign in again" modal (not after logout).
@@ -30,6 +34,13 @@ type SessionData = components['schemas']['SessionResponse']['data'];
 export type SessionStatus = 'initializing' | 'authenticated' | 'anonymous' | 'unavailable';
 export type SessionPhase = 'active' | 'endingSoon' | 'expired';
 export type EndReason = 'logout' | 'expired' | 'revoked';
+/** Why a logout was not the user's own choice: the user changed their own role or password (D-112). */
+export type EndNotice = 'ROLE_CHANGED' | 'PASSWORD_CHANGED';
+
+const END_NOTICES: readonly string[] = ['ROLE_CHANGED', 'PASSWORD_CHANGED'];
+function readNotice(value: unknown): EndNotice | null {
+  return typeof value === 'string' && END_NOTICES.includes(value) ? (value as EndNotice) : null;
+}
 
 export interface SessionSnapshot {
   status: SessionStatus;
@@ -39,6 +50,7 @@ export interface SessionSnapshot {
   /** Epoch ms of the absolute end of the session. */
   endsAt: number | null;
   endReason: EndReason | null;
+  endNotice: EndNotice | null;
   lastUser: User | null;
   bootstrapError: ApiError | null;
 }
@@ -58,7 +70,7 @@ type ChannelMessage =
   | ({ type: 'session' } & SharedSession)
   | ({ type: 'hello-reply' } & SharedSession)
   | { type: 'hello' }
-  | { type: 'logout' }
+  | { type: 'logout'; notice: EndNotice | null }
   | { type: 'ended' };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -69,9 +81,10 @@ function parseMessage(data: unknown): ChannelMessage | null {
   if (!isRecord(data) || typeof data.type !== 'string') return null;
   switch (data.type) {
     case 'hello':
-    case 'logout':
     case 'ended':
       return { type: data.type };
+    case 'logout':
+      return { type: 'logout', notice: readNotice(data.notice) };
     case 'session':
     case 'hello-reply':
       if (
@@ -104,6 +117,7 @@ export class SessionManager implements SessionPort {
   private status: SessionStatus = 'initializing';
   private phase: SessionPhase | null = null;
   private endReason: EndReason | null = null;
+  private endNotice: EndNotice | null = null;
   private bootstrapError: ApiError | null = null;
 
   /** Bumped on every adopted session: a queued refresh is skipped if it changed while waiting. */
@@ -145,6 +159,7 @@ export class SessionManager implements SessionPort {
       role: this.user?.role ?? null,
       endsAt: this.endsAt,
       endReason: this.endReason,
+      endNotice: this.endNotice,
       lastUser: this.lastUser,
       bootstrapError: this.bootstrapError,
     };
@@ -245,7 +260,7 @@ export class SessionManager implements SessionPort {
    * POST /auth/logout, then clears the local session whatever the outcome (the call is idempotent). If the call
    * failed (network, 429) the error is rethrown AFTER clearing, so the UI can tell the cookie may still be valid.
    */
-  async logout(): Promise<void> {
+  async logout(notice: EndNotice | null = null): Promise<void> {
     this.generation++;
     let failure: unknown = null;
     try {
@@ -253,8 +268,8 @@ export class SessionManager implements SessionPort {
     } catch (error) {
       failure = error;
     }
-    this.clearSession('logout');
-    this.post({ type: 'logout' });
+    this.clearSession('logout', notice);
+    this.post({ type: 'logout', notice });
     if (failure !== null) throw failure instanceof Error ? failure : new Error('Logout failed');
   }
 
@@ -265,6 +280,14 @@ export class SessionManager implements SessionPort {
       return Promise.resolve(this.token); // someone already renewed it
     }
     return this.refreshShared();
+  }
+
+  /** The signed-in user changed their own name or email: show it, keep the token and the end of the session. */
+  replaceUser(user: User): void {
+    if (this.status !== 'authenticated' || this.token === null) return;
+    this.user = user;
+    this.emit();
+    this.post({ type: 'session', ...this.sharedSession() });
   }
 
   endSessionUnauthorized(): void {
@@ -327,6 +350,7 @@ export class SessionManager implements SessionPort {
     this.endsAt = endsAt;
     this.status = 'authenticated';
     this.endReason = null;
+    this.endNotice = null;
     this.bootstrapError = null;
     this.version++;
     this.generation++;
@@ -340,13 +364,14 @@ export class SessionManager implements SessionPort {
     return { accessToken: this.token ?? '', user: this.user as User, endsAt: this.endsAt ?? 0 };
   }
 
-  private clearSession(reason: EndReason): void {
+  private clearSession(reason: EndReason, notice: EndNotice | null = null): void {
     this.lastUser = reason === 'logout' ? null : this.user;
     this.token = null;
     this.user = null;
     this.status = 'anonymous';
     this.phase = reason === 'logout' ? null : 'expired';
     this.endReason = reason;
+    this.endNotice = notice;
     this.generation++;
     this.clearTimer();
     this.emit();
@@ -409,7 +434,7 @@ export class SessionManager implements SessionPort {
         this.applySession(message.accessToken, message.user, message.endsAt);
         break;
       case 'logout':
-        if (this.status === 'authenticated') this.clearSession('logout');
+        if (this.status === 'authenticated') this.clearSession('logout', message.notice);
         break;
       case 'ended':
         if (this.status === 'authenticated') this.clearSession('revoked');

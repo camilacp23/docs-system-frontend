@@ -2,7 +2,13 @@
 // It adds no token and never retries; src/api/client.ts (authenticated calls) and the session manager
 // (login, refresh, logout) build on it. Props of rawRequest: method, path (relative to /api/v1, with {param}
 // placeholders), pathParams, query, body, token (sent as Bearer), headers, signal.
+// GET requests use `cache: 'no-cache'`: the browser always revalidates with the server (If-None-Match from its own
+// cache; a 304 reaches JavaScript as a 200 with the cached body) and never serves a copy older than the last PUT.
+// Query parameters go through encodeQuery (RFC 3986, lists as comma-separated values).
+// Writes carry no cache option. A raw 304 (only when a caller sets If-None-Match itself) is never an error: the
+// result has notModified = true and a null body.
 import { ApiError, type ErrorDetails } from './ApiError';
+import { encodeQuery } from './encodeQuery';
 
 export const API_BASE = '/api/v1';
 
@@ -22,8 +28,11 @@ export interface RawRequest {
 export interface HttpResult<T> {
   body: T;
   status: number;
+  /** The `ETag` response header (also on 201 and on the 200 of a PUT, to send back as If-Match), or null. */
   etag: string | null;
   location: string | null;
+  /** True for a 304: the body is null and the caller keeps the copy it already has. */
+  notModified: boolean;
 }
 
 function buildUrl(
@@ -36,12 +45,7 @@ function buildUrl(
     if (value === undefined) throw new Error(`Missing path parameter "${name}" for ${path}`);
     return encodeURIComponent(String(value));
   });
-  const search = new URLSearchParams();
-  for (const [key, value] of Object.entries(query ?? {})) {
-    if (value === undefined || value === null) continue;
-    search.set(key, typeof value === 'string' ? value : JSON.stringify(value));
-  }
-  const qs = search.toString();
+  const qs = encodeQuery(query);
   return `${API_BASE}${resolved}${qs ? `?${qs}` : ''}`;
 }
 
@@ -107,11 +111,22 @@ export async function rawRequest<T = unknown>(request: RawRequest): Promise<Http
       headers,
       body,
       credentials: 'same-origin',
+      ...(request.method === 'GET' ? { cache: 'no-cache' as const } : {}),
       signal: request.signal,
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
     throw new ApiError({ status: 0, code: 'NETWORK_ERROR' });
+  }
+
+  if (response.status === 304) {
+    return {
+      body: null as T,
+      status: 304,
+      etag: response.headers.get('ETag'),
+      location: null,
+      notModified: true,
+    };
   }
 
   const parsed = await readJson(response).catch(() => ({ ok: false }) as const);
@@ -122,5 +137,6 @@ export async function rawRequest<T = unknown>(request: RawRequest): Promise<Http
     status: response.status,
     etag: response.headers.get('ETag'),
     location: response.headers.get('Location'),
+    notModified: false,
   };
 }

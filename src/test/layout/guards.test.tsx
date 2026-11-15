@@ -6,34 +6,57 @@ import { describe, expect, it } from 'vitest';
 import { readDestination } from '../../app/router/destination';
 import { APP_ROUTES, type Role } from '../../app/router/routes';
 import { renderApp } from '../helpers/renderApp';
+import { settle } from '../helpers/setupUser';
 
 const NO_ACCESS = "You don't have access to this page";
 
 const FORBIDDEN: Record<Role, string[]> = {
   ADMINISTRATOR: [],
   DEVELOPER: ['/admin/users', '/admin/applications'],
-  READER: ['/review', '/audit', '/admin/users', '/admin/applications'],
+  READER: [
+    '/review',
+    '/audit',
+    '/admin/users',
+    '/admin/applications',
+    '/variables/5/edit',
+    '/collections/5/edit',
+    '/screens/5/edit',
+  ],
 };
+
+/** Modules that already have their own pages: the placeholder text no longer applies to them. */
+const hasOwnPage = (path: string) =>
+  path.startsWith('/variables') ||
+  path.startsWith('/collections') ||
+  path.startsWith('/screens') ||
+  path === '/dependency-map' ||
+  path === '/audit' ||
+  path === '/admin/users' ||
+  path === '/admin/applications';
 
 const PROTECTED_PATHS = APP_ROUTES.map((route) => route.path.replace(':id', '5'));
 
 describe('role guard', () => {
+  // One test per role and route: each renders the whole shell, so they are kept small and independent.
   for (const role of ['ADMINISTRATOR', 'DEVELOPER', 'READER'] as const) {
-    it(`${role}: opens what its role allows and gets "No access" (S-41b) on the rest`, async () => {
-      for (const path of PROTECTED_PATHS) {
+    for (const path of PROTECTED_PATHS) {
+      it(`${role} on ${path}: opens it or gets "No access" (S-41b)`, async () => {
         const { unmount } = await renderApp({ role, path });
         if (FORBIDDEN[role].includes(path)) {
           expect(await screen.findByRole('heading', { name: NO_ACCESS })).toBeInTheDocument();
           expect(screen.getByText(/Your role \(/)).toBeInTheDocument();
           // The shell stays around the page.
           expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
+        } else if (hasOwnPage(path)) {
+          expect(await screen.findByRole('navigation', { name: 'Main' })).toBeInTheDocument();
+          expect(screen.queryByRole('heading', { name: NO_ACCESS })).not.toBeInTheDocument();
         } else {
           expect(await screen.findByText('This module is not available yet.')).toBeInTheDocument();
           expect(screen.queryByRole('heading', { name: NO_ACCESS })).not.toBeInTheDocument();
         }
         unmount();
-      }
-    });
+      });
+    }
   }
 
   it('shows the role in the S-41b text', async () => {
@@ -56,14 +79,18 @@ describe('role guard', () => {
 
 describe('authentication guard', () => {
   it('does not redirect while the session is being recovered, then goes to /login remembering the page', async () => {
-    const { router } = await renderApp({ signedIn: false, path: '/screens/9?x=1' });
-    // The refresh is still in flight: the destination must not be lost.
-    expect(router.state.location.pathname).toBe('/screens/9');
-    await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/login');
+    // Not settled: the refresh is still in flight and the destination must not be lost.
+    const { router } = await renderApp({
+      signedIn: false,
+      path: '/screens/9?x=1',
+      settled: false,
     });
+    expect(router.state.location.pathname).toBe('/screens/9');
+    // Once the refresh has answered (nothing left to render) it goes to /login remembering the page.
+    await settle();
+    expect(router.state.location.pathname).toBe('/login');
     expect(router.state.location.state).toEqual({ from: '/screens/9?x=1' });
-    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
   });
 
   it('sends /login to the dashboard when there is a session', async () => {
