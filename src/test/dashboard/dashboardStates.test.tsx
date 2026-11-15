@@ -78,6 +78,9 @@ describe('dashboard: an error in one read does not take the other', () => {
         "Couldn't load the documentation by status.",
       ),
     ).toBeInTheDocument();
+    expect(
+      within(region('Recent activity')).getByText("Couldn't load the recent activity."),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('article', { name: 'Documentation approved' })).toBeNull();
     // The other read is on screen.
     expect(

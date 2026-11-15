@@ -6,7 +6,8 @@
 // (/dev/dashboard) gives it test data so the design can be photographed.
 // Layout (SDD 7.3.7): from 1440 px the frame S-31; below it the cards take half the width (see KpiCards): the status
 // card across the page and the pending to-dos next to the other card.
-import { ChartPie, Database, ListTodo, RefreshCw } from 'lucide-react';
+import { ChartPie, Database, History, ListTodo, RefreshCw } from 'lucide-react';
+import { Link } from 'react-router';
 
 import {
   Button,
@@ -20,8 +21,18 @@ import {
 import { clockOf } from '../audit/auditDates';
 
 import { BlockError, BlockLoading } from './BlockStates';
-import { firstName, greeting, isEmptyApplication, screensText, statusRows } from './dashboardModel';
 import {
+  AUDIT_HREF,
+  firstName,
+  greeting,
+  isEmptyApplication,
+  screensText,
+  statusRows,
+} from './dashboardModel';
+import {
+  ACTIVITY_FAILED_LEAD,
+  ACTIVITY_TITLE,
+  AUDIT_LINK_TEXT,
   EMPTY_ACTION,
   EMPTY_TITLE,
   emptyText,
@@ -36,6 +47,7 @@ import {
 } from './dashboardTexts';
 import { KpiCards } from './KpiCards';
 import { PendingBars } from './PendingBars';
+import { RecentActivity } from './RecentActivity';
 import { StatusChart } from './StatusChart';
 import type { DashboardSource, IndicatorsRead, TopRead } from './useDashboardData';
 
@@ -53,6 +65,8 @@ export interface DashboardViewProps {
   onRefresh: () => void;
   timeZone: string;
   canCreateScreen: boolean;
+  /** The role of an Administrator or a Developer: they get the recent activity; the Reader never does (D-34). */
+  withActivity: boolean;
 }
 
 export function DashboardView({
@@ -65,10 +79,14 @@ export function DashboardView({
   onRefresh,
   timeZone,
   canCreateScreen,
+  withActivity,
 }: DashboardViewProps) {
   const read = indicators.data;
   const loadingIndicators = indicators.status === 'loading';
   const failedIndicators = indicators.status === 'error';
+  // The key is absent for a Reader: then there is no card at all. While nothing is read, the role decides.
+  const showActivity =
+    withActivity && (read === null || read.indicators.recentActivity !== undefined);
   const heading = firstName(name) === '' ? greeting(hour) : `${greeting(hour)}, ${firstName(name)}`;
 
   return (
@@ -174,6 +192,38 @@ export function DashboardView({
             </BlockLoading>
           )}
         </SectionCard>
+
+        {/* The key is absent for a Reader: then there is no card at all, and no link to the audit log. */}
+        {showActivity && (
+          <SectionCard
+            title={ACTIVITY_TITLE}
+            icon={<History {...CARD_ICON} />}
+            actions={
+              <Link
+                to={AUDIT_HREF}
+                className="rounded-chip text-[12.5px]/5 font-bold text-primary hover:underline"
+              >
+                {AUDIT_LINK_TEXT}
+              </Link>
+            }
+          >
+            {failedIndicators ? (
+              <BlockError
+                lead={ACTIVITY_FAILED_LEAD}
+                error={indicators.error}
+                onRetry={indicators.reload}
+              />
+            ) : read?.indicators.recentActivity ? (
+              <RecentActivity entries={read.indicators.recentActivity} timeZone={timeZone} />
+            ) : (
+              <BlockLoading loading={loadingIndicators} className="min-h-40">
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-full" />
+              </BlockLoading>
+            )}
+          </SectionCard>
+        )}
       </div>
     </>
   );

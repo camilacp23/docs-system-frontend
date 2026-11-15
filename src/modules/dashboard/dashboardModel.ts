@@ -11,7 +11,7 @@ import {
   DOCUMENTATION_STATUS_LABEL,
   type DocumentationStatus,
 } from '../../components/ui/documentationStatus';
-import { clockOf, dayOf } from '../audit/auditDates';
+import { clockOf, dayOf, formatDay } from '../audit/auditDates';
 import { toTagStatus } from '../screens/screenLabels';
 import type { ApiDocumentationStatus } from '../screens/screenTypes';
 
@@ -135,4 +135,12 @@ export function greeting(hour: number): string {
 /** The first word of the name of the user ("Camila Castillo" -> "Camila"). */
 export function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] ?? '';
+}
+
+/** "10:21" for a record of today, "Oct 4, 10:21" for another day (`today` is the local day, YYYY-MM-DD). */
+export function activityTime(iso: string, timeZone: string, today: string): string {
+  const day = dayOf(iso, timeZone);
+  return day === today
+    ? clockOf(iso, timeZone)
+    : `${formatDay(day, today)}, ${clockOf(iso, timeZone)}`;
 }

@@ -45,6 +45,7 @@ export function DashboardPage() {
       onRefresh={reload}
       timeZone={timeZone}
       canCreateScreen={user.role !== 'READER' && currentApplication.status !== 'ARCHIVED'}
+      withActivity={user.role !== 'READER'}
     />
   );
 }

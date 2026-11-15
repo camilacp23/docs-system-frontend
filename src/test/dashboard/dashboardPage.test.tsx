@@ -255,7 +255,12 @@ describe('dashboard: structure for assistive technology', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(
       screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent),
-    ).toEqual(['Indicators', 'Documentation by status', 'Pending to-dos by screen']);
+    ).toEqual([
+      'Indicators',
+      'Documentation by status',
+      'Pending to-dos by screen',
+      'Recent activity',
+    ]);
     expect(
       screen.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent),
     ).toEqual([
