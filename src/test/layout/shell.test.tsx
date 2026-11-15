@@ -183,7 +183,9 @@ describe('offline strip (S-46)', () => {
     act(() => {
       fireEvent(window, new Event('offline'));
     });
-    const strip = await screen.findByRole('alert');
+    // The page behind (the dashboard over the minimal fake) may show an alert of its own: the strip is the one that
+    // says the browser is offline.
+    const strip = (await screen.findByText(/You're offline/)).closest('[role="alert"]');
     expect(strip).toHaveTextContent(
       "You're offline. Changes can't be saved until the connection is back.",
     );

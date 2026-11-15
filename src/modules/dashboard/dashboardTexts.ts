@@ -37,3 +37,18 @@ export function emptyText(application: string): string {
 }
 export const EMPTY_ACTION = 'New screen';
 export const NEW_SCREEN_HREF = '/screens?new=1';
+
+/** Jira (S-31j): the saved copy of the to-dos when Jira does not answer. The figures always come from the local copy. */
+export const STALE_TAG = 'Stale';
+export const JIRA_UNAVAILABLE_CAPTION = 'Jira unavailable · last saved copy';
+export const JIRA_NOTICE_LEAD = "Jira isn't responding.";
+export const NEVER_SYNCED = 'Never synced';
+export function lastSyncedText(date: string): string {
+  return `Last synced ${date}`;
+}
+/** The banner of S-31j; without a date (nothing was ever synchronized) the second sentence leaves it out. */
+export function jiraNoticeText(date: string | null): string {
+  return date === null
+    ? 'To-do counts come from the saved copy.'
+    : `To-do counts come from the copy saved on ${date}.`;
+}

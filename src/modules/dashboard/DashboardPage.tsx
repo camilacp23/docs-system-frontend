@@ -4,10 +4,11 @@
 // answer of the previous application never shows. Refresh reads both again. An archived application is read like any
 // other. If the API says the application does not exist (404) the page shows S-41a and its button reads the list of
 // applications again, so the shell picks another one.
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 
 import { ErrorState } from '../../components/ui';
 import { useApplication } from '../../application/useApplication';
+import { useJiraStatus } from '../../layout/jiraStatusContext';
 import { useCurrentUser } from '../../session/useCurrentUser';
 import { browserTimeZone } from '../audit/auditDates';
 
@@ -19,6 +20,15 @@ export function DashboardPage() {
   const { currentApplication, currentApplicationId, reload: reloadApplications } = useApplication();
   const { indicators, top, reload } = useDashboardData(currentApplicationId);
   const timeZone = useMemo(() => browserTimeZone(), []);
+
+  // The indicators say whether Jira answered (from the state of its client, never by calling it): the pill of the top bar
+  // keeps the last state the session learned (D-100), whichever page learned it.
+  const { report } = useJiraStatus();
+  const jiraAvailable = indicators.data?.indicators.jira.jiraAvailable;
+  const readAt = indicators.data?.readAt;
+  useEffect(() => {
+    if (jiraAvailable !== undefined) report(jiraAvailable);
+  }, [jiraAvailable, readAt, report]);
 
   if (user === null || currentApplication === null) return null;
 

@@ -8,12 +8,19 @@ import { CircleCheck, ClipboardCheck, Database, ListTodo, Variable } from 'lucid
 import { useId, type ReactNode } from 'react';
 import { Link } from 'react-router';
 
-import { cx, ICON_STROKE_WIDTH, SECTION_TONE_TILE, type SectionTone } from '../../components/ui';
+import {
+  cx,
+  ICON_STROKE_WIDTH,
+  SECTION_TONE_TILE,
+  Tag,
+  type SectionTone,
+} from '../../components/ui';
 
 import {
   apiPercentText,
   PENDING_HREF,
   screensHref,
+  syncedText,
   UNDOCUMENTED_HREF,
   UNTRACED_HREF,
   type Indicators,
@@ -21,12 +28,16 @@ import {
 import {
   APPROVED_LABEL,
   APPROVED_LINK_TEXT,
+  JIRA_UNAVAILABLE_CAPTION,
+  lastSyncedText,
+  NEVER_SYNCED,
   PENDING_CAPTION,
   PENDING_LABEL,
   PENDING_LINK_TEXT,
   REVIEW_CAPTION,
   REVIEW_LABEL,
   REVIEW_LINK_TEXT,
+  STALE_TAG,
   UNDOCUMENTED_LABEL,
   UNDOCUMENTED_LINK_TEXT,
   UNTRACED_LABEL,
@@ -43,9 +54,11 @@ interface KpiCardProps {
   to: string;
   icon: ReactNode;
   tone: SectionTone;
+  /** A tag after the label (the "Stale" of the pending to-dos). */
+  badge?: ReactNode;
 }
 
-function KpiCard({ label, value, caption, linkText, to, icon, tone }: KpiCardProps) {
+function KpiCard({ label, value, caption, linkText, to, icon, tone, badge }: KpiCardProps) {
   return (
     <article
       aria-label={label}
@@ -62,6 +75,7 @@ function KpiCard({ label, value, caption, linkText, to, icon, tone }: KpiCardPro
           {icon}
         </span>
         <h3 className="text-small text-ink-500">{label}</h3>
+        {badge && <span className="ml-auto">{badge}</span>}
       </div>
       <p className="text-kpi font-extrabold text-ink-900">{value}</p>
       <p className="text-small text-ink-500">{caption}</p>
@@ -75,10 +89,14 @@ function KpiCard({ label, value, caption, linkText, to, icon, tone }: KpiCardPro
   );
 }
 
-export function KpiCards({ indicators }: { indicators: Indicators }) {
+export function KpiCards({ indicators, timeZone }: { indicators: Indicators; timeZone: string }) {
   const { documentation, variables, collections, jira } = indicators;
   const approved = documentation.byStatus.APPROVED;
   const headingId = useId();
+  // Jira: the figure is always the local copy; when Jira does not answer the card says so, and when it did answer it
+  // still says how old the copy is (null: it was never synchronized).
+  const synced = syncedText(jira.lastSyncedAt, timeZone);
+  const syncedLine = synced === null ? NEVER_SYNCED : lastSyncedText(synced);
   return (
     <section
       aria-labelledby={headingId}
@@ -148,7 +166,15 @@ export function KpiCards({ indicators }: { indicators: Indicators }) {
       <KpiCard
         label={PENDING_LABEL}
         value={String(jira.pendingSubtasks)}
-        caption={PENDING_CAPTION}
+        caption={
+          <>
+            <span className="block">
+              {jira.jiraAvailable ? PENDING_CAPTION : JIRA_UNAVAILABLE_CAPTION}
+            </span>
+            <span className="block">{syncedLine}</span>
+          </>
+        }
+        badge={jira.jiraAvailable ? undefined : <Tag tone="warning">{STALE_TAG}</Tag>}
         linkText={PENDING_LINK_TEXT}
         to={PENDING_HREF}
         icon={<ListTodo {...ICON} />}

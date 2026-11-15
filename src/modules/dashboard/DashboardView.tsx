@@ -10,6 +10,7 @@ import { ChartPie, Database, History, ListTodo, RefreshCw } from 'lucide-react';
 import { Link } from 'react-router';
 
 import {
+  Banner,
   Button,
   ButtonLink,
   EmptyState,
@@ -28,6 +29,7 @@ import {
   isEmptyApplication,
   screensText,
   statusRows,
+  syncedText,
 } from './dashboardModel';
 import {
   ACTIVITY_FAILED_LEAD,
@@ -37,6 +39,8 @@ import {
   EMPTY_TITLE,
   emptyText,
   INDICATORS_FAILED_LEAD,
+  JIRA_NOTICE_LEAD,
+  jiraNoticeText,
   NEW_SCREEN_HREF,
   PENDING_FAILED_LEAD,
   PENDING_SUBTITLE,
@@ -120,7 +124,15 @@ export function DashboardView({
           onRetry={indicators.reload}
         />
       ) : read ? (
-        <KpiCards indicators={read.indicators} />
+        <>
+          <KpiCards indicators={read.indicators} timeZone={timeZone} />
+          {/* Only what depends on Jira changes, and it is never a global alarm (NFR-14). */}
+          {!read.indicators.jira.jiraAvailable && (
+            <Banner tone="warning" lead={JIRA_NOTICE_LEAD}>
+              {jiraNoticeText(syncedText(read.indicators.jira.lastSyncedAt, timeZone))}
+            </Banner>
+          )}
+        </>
       ) : (
         <BlockLoading loading={loadingIndicators} className="min-h-43.5">
           <div className={KPI_GRID}>
