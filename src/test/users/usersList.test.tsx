@@ -219,6 +219,8 @@ describe('user list', () => {
     await user.click(screen.getByRole('button', { name: 'Clear filters' }));
     expect(router.state.location.search).toBe('');
     expect(screen.getByRole('rowheader', { name: 'Sample Admin' })).toBeInTheDocument();
+    // The search box follows the URL back to empty: it does not bring the old draft back.
+    expect(screen.getByRole('searchbox', { name: SEARCH_BOX })).toHaveValue('');
   });
 
   it('shows the server error state with a retry when the list cannot be read', async () => {

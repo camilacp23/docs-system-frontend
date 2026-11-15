@@ -64,6 +64,23 @@ describe('audit log, element type, element id and action', () => {
     expect(screen.getByRole('textbox', { name: 'Element id' })).toHaveValue('');
   });
 
+  it('drops an id that was typed but not yet sent when the type changes, so it never reaches the new type', async () => {
+    const view = await renderAudit({ entries: ENTRIES });
+    const user = setupUser();
+    await screen.findByText('Sample Developer A');
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Element type' }), 'Screen');
+    await user.click(screen.getByRole('textbox', { name: 'Element id' }));
+    await user.paste('12');
+    // The pause has not ended: the URL still has no id.
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Element type' }), 'Variable');
+    await endSearchPause();
+
+    expect(screen.getByRole('textbox', { name: 'Element id' })).toHaveValue('');
+    expect(search(view).has('entityId')).toBe(false);
+    expect(listCalls(view.api).at(-1)?.options.query).not.toHaveProperty('entityId');
+  });
+
   it('offers a readable name for every audited table', async () => {
     await renderAudit({ entries: ENTRIES });
     await screen.findByText('Sample Developer A');
