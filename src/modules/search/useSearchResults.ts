@@ -20,6 +20,8 @@ import type { SearchListParams } from './useSearchListParams';
 export interface SearchPage {
   rows: SearchResult[];
   total: number;
+  /** The text this page was asked with: the marks and the heading follow the rows on screen, not the field. */
+  text: string;
 }
 
 export type SearchTotals = Record<SearchElementType, ApiResource<number>>;
@@ -52,7 +54,7 @@ export function useSearchResults(applicationId: number | null, params: SearchLis
     `search:${JSON.stringify(query)}`,
     async (signal) => {
       const { body } = await client.get('/search', { query, signal });
-      return { body: { rows: body.data, total: body.total }, etag: null };
+      return { body: { rows: body.data, total: body.total, text: params.q }, etag: null };
     },
     enabled,
   );

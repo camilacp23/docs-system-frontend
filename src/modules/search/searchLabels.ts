@@ -8,7 +8,10 @@
 //   NOTE_ENVIRONMENT / NOTE_STATUS / NOTE_SCOPE   what each filter applies to, under the filter (D-48): the other
 //                              types stay in the results.
 import type { ElementType } from '../../components/ui';
+import { countText } from '../variables/variableLabels';
 
+import type { SearchTextError } from './searchQuery';
+import type { SearchPage } from './useSearchResults';
 import type { SearchElementType } from './searchTypes';
 
 export const TYPE_LABEL: Record<SearchElementType, string> = {
@@ -58,4 +61,16 @@ export const NOTE_SCOPE = 'Applies to variables; other types stay in the results
 /** "Matched in Name"; an unknown place (a newer API) is shown as the API names it. */
 export function matchedInText(matchedIn: string): string {
   return `Matched in ${MATCHED_IN_LABEL[matchedIn] ?? matchedIn}`;
+}
+
+/** The error under the text field (S-29c), by what is wrong with the trimmed text. */
+export const SEARCH_TEXT_ERROR: Record<SearchTextError, string> = {
+  tooShort: 'Type at least 2 characters, or search with filters only.',
+  tooLong: 'Use 100 characters or fewer.',
+};
+
+/** "4 results for “client”", or "4 results" when the search has no text. */
+export function resultsHeading(page: SearchPage): string {
+  const count = countText(page.total, 'result');
+  return page.text === '' ? count : `${count} for “${page.text}”`;
 }
