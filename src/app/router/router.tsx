@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import { createBrowserRouter, Navigate, type RouteObject } from 'react-router';
 
 import { AppShell } from '../../layout/AppShell';
+import { AuditLogPage } from '../../modules/audit/AuditLogPage';
 import { LoginPage } from '../../modules/auth/LoginPage';
 import { NotFoundPage, ServerErrorPage } from '../../modules/errors/ErrorPages';
 import { LazyDependencyMapPage } from '../../modules/dependency-map/LazyDependencyMapPage';
@@ -39,6 +40,7 @@ const PAGES: Record<string, ReactNode> = {
   '/screens': <ScreensListPage />,
   '/screens/:id': <ScreenDetailPage />,
   '/screens/:id/edit': <ScreenEditPage />,
+  '/audit': <AuditLogPage />,
   '/admin/users': <UsersListPage />,
   '/admin/applications': <ApplicationsListPage />,
 };

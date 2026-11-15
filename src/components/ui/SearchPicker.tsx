@@ -9,6 +9,8 @@
 // chosen. The list is drawn in a portal with fixed coordinates taken from the input, so no ancestor with `overflow`
 // (a scrolling table) clips it; it opens below the input, or above when there is no room, and closes on resize or
 // on a scroll outside the list.
+// onQueryChange(text) reports what is typed ('' when typing ends) and filterOptions={false} keeps the options as the
+// caller gave them, for a list that is searched somewhere else (the audit log's user filter asks the server).
 import { ChevronDown } from 'lucide-react';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { ComponentProps, KeyboardEvent } from 'react';
@@ -37,6 +39,10 @@ export interface SearchPickerProps extends Pick<
   mono?: boolean;
   invalid?: boolean;
   disabled?: boolean;
+  /** Called with what the user types, and with '' when the typing ends (a choice, Escape, leaving the input). */
+  onQueryChange?: (query: string) => void;
+  /** false: show `options` as they are, because the caller already searched them (for example on the server). */
+  filterOptions?: boolean;
 }
 
 const EDGE_GAP = 8;
@@ -52,6 +58,8 @@ export function SearchPicker({
   mono = false,
   invalid = false,
   disabled = false,
+  onQueryChange,
+  filterOptions = true,
   placeholder,
   ...inputProps
 }: SearchPickerProps) {
@@ -62,12 +70,17 @@ export function SearchPicker({
   // What the user typed; null while they are not searching (the input then shows the chosen label).
   const [query, setQuery] = useState<string | null>(null);
   const [active, setActive] = useState<string | null>(null);
+  // The latest onQueryChange, read by close() (which the effects below call from old renders).
+  const queryChangeRef = useRef(onQueryChange);
+  useEffect(() => {
+    queryChangeRef.current = onQueryChange;
+  });
 
   const chosen = options.find((option) => option.value === value);
   const text = query ?? chosen?.label ?? '';
   const needle = (query ?? '').trim().toLowerCase();
   const shown =
-    needle === ''
+    needle === '' || !filterOptions
       ? options
       : options.filter((option) =>
           `${option.label} ${option.detail ?? ''}`.toLowerCase().includes(needle),
@@ -78,6 +91,7 @@ export function SearchPicker({
 
   const close = () => {
     setOpen(false);
+    queryChangeRef.current?.('');
     setQuery(null);
     setActive(null);
   };
@@ -190,6 +204,7 @@ export function SearchPicker({
         value={text}
         onChange={(event) => {
           setQuery(event.target.value);
+          onQueryChange?.(event.target.value);
           setActive(null);
           setOpen(true);
         }}

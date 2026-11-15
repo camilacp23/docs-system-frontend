@@ -165,3 +165,43 @@ describe('SearchPicker', () => {
     expect(screen.getByRole('combobox', { name: 'Variable' })).toBeDisabled();
   });
 });
+
+describe('SearchPicker, options searched by the caller', () => {
+  it('reports what is typed and the end of the typing, and keeps the options it was given', async () => {
+    const user = userEvent.setup({ delay: null });
+    const onQueryChange = vi.fn();
+    render(
+      <SearchPicker
+        aria-label="User"
+        filterOptions={false}
+        options={[{ value: '9', label: 'Ana Mora', detail: 'ana@example.com' }]}
+        value=""
+        onChange={vi.fn()}
+        onQueryChange={onQueryChange}
+      />,
+    );
+
+    await user.click(screen.getByRole('combobox', { name: 'User' }));
+    await user.type(screen.getByRole('combobox', { name: 'User' }), 'zzz');
+    expect(onQueryChange).toHaveBeenLastCalledWith('zzz');
+    // 'zzz' matches neither the label nor the detail, yet the option stays: the caller searched.
+    expect(screen.getByRole('option', { name: /Ana Mora/ })).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    expect(onQueryChange).toHaveBeenLastCalledWith('');
+  });
+
+  it('still filters on its own by default', async () => {
+    const user = userEvent.setup({ delay: null });
+    render(
+      <SearchPicker
+        aria-label="User"
+        options={[{ value: '9', label: 'Ana Mora' }]}
+        value=""
+        onChange={vi.fn()}
+      />,
+    );
+    await user.type(screen.getByRole('combobox', { name: 'User' }), 'zzz');
+    expect(screen.queryByRole('option')).not.toBeInTheDocument();
+  });
+});
