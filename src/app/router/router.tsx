@@ -11,6 +11,7 @@ import { LoginPage } from '../../modules/auth/LoginPage';
 import { NotFoundPage, ServerErrorPage } from '../../modules/errors/ErrorPages';
 import { LazyDependencyMapPage } from '../../modules/dependency-map/LazyDependencyMapPage';
 import { ModulePlaceholder } from '../../modules/ModulePlaceholder';
+import { SearchPage } from '../../modules/search/SearchPage';
 import { CollectionEditPage } from '../../modules/collections/CollectionEditPage';
 import { CollectionDetailPage } from '../../modules/collections/CollectionDetailPage';
 import { CollectionsListPage } from '../../modules/collections/CollectionsListPage';
@@ -40,6 +41,7 @@ const PAGES: Record<string, ReactNode> = {
   '/screens': <ScreensListPage />,
   '/screens/:id': <ScreenDetailPage />,
   '/screens/:id/edit': <ScreenEditPage />,
+  '/search': <SearchPage />,
   '/audit': <AuditLogPage />,
   '/admin/users': <UsersListPage />,
   '/admin/applications': <ApplicationsListPage />,
