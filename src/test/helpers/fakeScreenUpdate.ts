@@ -13,6 +13,8 @@ import { ApiError } from '../../api/ApiError';
 import type { Screen, ScreenUpdate } from '../../modules/screens/screenTypes';
 import { TEMPLATE_FIELDS } from '../../modules/screens/templateFields';
 
+import { sameScreenVersion } from './fakeScreenStatus';
+
 interface Named {
   id: number;
   name: string;
@@ -331,7 +333,7 @@ export function applyScreenUpdate(
 ): { screen: Screen; changed: boolean } {
   // 422 APPLICATION_ARCHIVED -> 412 -> the business rules -> 409.
   if (env.application.archived) throw new ApiError({ status: 422, code: 'APPLICATION_ARCHIVED' });
-  if (ifMatch !== undefined && ifMatch !== env.etagOf(current.id)) {
+  if (ifMatch !== undefined && !sameScreenVersion(ifMatch, env.etagOf(current.id))) {
     throw new ApiError({
       status: 412,
       code: 'PRECONDITION_FAILED',

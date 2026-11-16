@@ -1,6 +1,6 @@
 // Screen detail (S-19, S-19r): header, the Miro link, the tabs in the URL, the template with its progress,
 // components and navigation, variables and collections with their origin rows, loading and error states, the
-// breadcrumb and the Reader view. Comments is not drawn yet; Future to do has its own file (screenJiraTab).
+// breadcrumb and the Reader view. Future to do has its own file (screenJiraTab) and Comments its own folder (src/test/comments).
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
@@ -80,11 +80,12 @@ describe('screen detail: header', () => {
     );
   });
 
-  it('draws Future to do with the pending count, and no Comments tab yet', async () => {
+  it('draws Future to do with the pending count, and Comments as the last tab with its count', async () => {
     await open();
 
     expect(screen.getByRole('tab', { name: /^Future to do\s*3$/ })).toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: /Comments/ })).not.toBeInTheDocument();
+    const tabs = screen.getAllByRole('tab');
+    expect(tabs.at(-1)).toHaveAccessibleName(/^Comments\s*2$/);
   });
 
   it('leaves the count out of the Future to do tab when nothing is pending', async () => {

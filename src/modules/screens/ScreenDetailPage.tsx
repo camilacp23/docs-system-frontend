@@ -1,9 +1,11 @@
 // ScreenDetailPage: /screens/:id (S-19, S-19r), read only. Header with the name (IBM Plex Mono), the status tag,
 // "Reserved" for App (OnStart), the author and the last update, and the link to the Miro diagram (another tab).
-// Four tabs: Template, Components & navigation, Variables & collections and Future to do (the Jira to-dos, with the
-// pending count as a badge). The tab is part of the URL (`?tab=components`, `?tab=links`, `?tab=todo`; Template is the
-// default and leaves no parameter), so a tab can be linked and the back button returns to the previous one. Comments is
-// not drawn yet. The pending to-dos shown in the badge and in the side card are the detail's `pendingSubtasks` until the
+// Five tabs: Template, Components & navigation, Variables & collections, Future to do (the Jira to-dos, with the
+// pending count as a badge) and Comments. The tab is part of the URL (`?tab=components`, `?tab=links`, `?tab=todo`; Template is the
+// default and leaves no parameter), so a tab can be linked and the back button returns to the previous one. Comments
+// (`?tab=comments`, S-35) is the fifth tab, with the comment count as a badge: the detail's `commentCount` until the
+// thread has been read, and the thread's own count after a comment is written (the ETag of the detail also moves with
+// the count, D-101; a status change sent with the old tag is not a 412 because If-Match compares only `updatedAt`). The pending to-dos shown in the badge and in the side card are the detail's `pendingSubtasks` until the
 // Future to do tab has read the tree; from then on they are the tree's count. (The ETag of the detail follows `updatedAt`,
 // which a Jira change does not move, so a read that revalidates could bring a count older than the tree.)
 // The workflow actions of the status and the role (screenWorkflow, Table 61, S-25b) are in the header: buttons next to
@@ -48,6 +50,8 @@ import { useCurrentUser } from '../../session/useCurrentUser';
 import { parseId } from '../variables/parseId';
 import { formatTimestamp } from '../variables/variableLabels';
 
+import { CommentsTab } from '../comments/CommentsTab';
+
 import { DeleteScreenModal } from './DeleteScreenModal';
 import { JiraTicketsTab } from './JiraTicketsTab';
 import { MiroLink } from './MiroLink';
@@ -63,6 +67,7 @@ import { workflowActions, workflowToast, type WorkflowAction } from './screenWor
 import { SCREEN_TAB_KEYS, type ScreenTabKey } from './screenTabs';
 import { useScreen } from './useScreen';
 import { useScreenStatusChange } from './useScreenStatusChange';
+import { COMMENTS_TAB_LABEL } from '../comments/commentTexts';
 
 const LIST_PATH = '/screens';
 const TAB_PREFIX = 'screen';
@@ -84,6 +89,13 @@ export function ScreenDetailPage() {
   const onPendingChange = useCallback((count: number) => {
     setLivePending(count);
   }, []);
+  // The comment count the thread reported, with the detail's count it was reported against: when the detail brings a
+  // different count (a review comment, a reload) the detail's number is the newer one.
+  const [liveComments, setLiveComments] = useState<{ base: number; total: number } | null>(null);
+  const detailCommentCount = useRef(0);
+  const onCommentCountChange = useCallback((total: number) => {
+    setLiveComments({ base: detailCommentCount.current, total });
+  }, []);
 
   const tab: TabKey = TAB_KEYS.find((key) => key === search.get('tab')) ?? 'template';
   const screen = useScreen(id);
@@ -98,6 +110,10 @@ export function ScreenDetailPage() {
   }, [focusTitle]);
 
   const loaded = screen.status === 'ready' ? screen.data : null;
+  const loadedCommentCount = loaded?.commentCount ?? 0;
+  useEffect(() => {
+    detailCommentCount.current = loadedCommentCount;
+  }, [loadedCommentCount]);
   useFollowElementApplication(loaded?.applicationId ?? null, LIST_PATH);
   useBreadcrumbLabel(loaded === null ? null : loaded.name);
   const { showSkeleton } = useDelayedLoading(screen.loading && id !== null);
@@ -151,6 +167,10 @@ export function ScreenDetailPage() {
   }
 
   const pendingSubtasks = livePending ?? loaded.pendingSubtasks;
+  const commentCount =
+    liveComments !== null && liveComments.base === loaded.commentCount
+      ? liveComments.total
+      : loaded.commentCount;
   const blockReason = deleteBlockReason(loaded, writeReason);
   const editReason = editBlockReason(loaded, writeReason);
   const actions = workflowActions(loaded.documentationStatus, user?.role);
@@ -280,17 +300,29 @@ export function ScreenDetailPage() {
             label: FUTURE_TODO_LABEL,
             count: pendingSubtasks > 0 ? pendingSubtasks : undefined,
           },
+          {
+            key: 'comments',
+            label: COMMENTS_TAB_LABEL,
+            count: commentCount > 0 ? commentCount : undefined,
+          },
         ]}
       />
 
       <div {...tabPanelProps(TAB_PREFIX, tab)}>
         {tab === 'template' && (
-          <ScreenTemplateTab screen={loaded} pendingSubtasks={pendingSubtasks} />
+          <ScreenTemplateTab
+            screen={loaded}
+            pendingSubtasks={pendingSubtasks}
+            commentCount={commentCount}
+          />
         )}
         {tab === 'components' && <ScreenComponentsTab screen={loaded} />}
         {tab === 'links' && <ScreenLinksTab screen={loaded} />}
         {tab === 'todo' && (
           <JiraTicketsTab screen={loaded} canWrite={canWrite} onPendingChange={onPendingChange} />
+        )}
+        {tab === 'comments' && (
+          <CommentsTab screen={{ ...loaded, commentCount }} onCountChange={onCommentCountChange} />
         )}
       </div>
 

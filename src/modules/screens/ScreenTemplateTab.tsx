@@ -3,8 +3,8 @@
 // their text (OnStart in IBM Plex Mono, "Not documented yet." when a field has no content) and the side card with
 // the progress "n of 7", the status, the author, the Miro link and the elements the screen is linked to. A field
 // has content when it is not null and not empty after trimming (D-81, the rule of the server).
-// The side card has the "Pending to-dos" row of the frame ("3 in Jira", "—" when none); the comments row belongs to the
-// Comments tab, which is not drawn yet.
+// The side card has the "Pending to-dos" row of the frame ("3 in Jira", "—" when none) and the "Comments" row of P-01
+// (the comment count, which follows the Comments tab).
 // Props: screen, pendingSubtasks (the count to show: the detail's `pendingSubtasks`, or the one the Future to do tab computed
 // from the tree once it has been read).
 import { Check, Circle, FileText, Layers, Link2 } from 'lucide-react';
@@ -45,9 +45,11 @@ function unique(names: readonly string[]): string[] {
 export function ScreenTemplateTab({
   screen,
   pendingSubtasks,
+  commentCount,
 }: {
   screen: Screen;
   pendingSubtasks: number;
+  commentCount: number;
 }) {
   const done = templateProgress(screen.template);
   const total = TEMPLATE_FIELDS.length;
@@ -187,6 +189,7 @@ export function ScreenTemplateTab({
             <Row label="Pending to-dos">
               {pendingSubtasks > 0 ? `${pendingSubtasks} in Jira` : '—'}
             </Row>
+            <Row label="Comments">{commentCount}</Row>
           </dl>
           <section aria-label="Linked elements" className="flex flex-col gap-2">
             <h3 className="text-micro font-bold tracking-wider text-ink-500 uppercase">
