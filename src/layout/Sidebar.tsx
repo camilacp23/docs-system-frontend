@@ -3,16 +3,21 @@
 // then only the icons remain (each item keeps its accessible name and shows a tooltip on hover / focus). The
 // collapse button is a small round chevron on the right edge of the column.
 // Props: role (decides the items, SDD Table 56), collapsed, onToggle (collapse / expand button), onExpand.
+// The Review item carries the number of screens In review of the selected application (useReviewCount) in an amber badge
+// (S-36); it is left out when the count is 0, unknown or could not be read. The number is never the only signal: the
+// accessible name says "<n> screens in review" (also when collapsed, where only the icon and a small badge are drawn).
 import { ChevronLeft } from 'lucide-react';
 import { useState } from 'react';
 import { NavLink } from 'react-router';
 
 import pkg from '../../package.json';
 import type { Role } from '../app/router/routes';
+import { useApplication } from '../application/useApplication';
+import { useReviewCount } from '../application/useReviewCount';
 import { cx } from '../components/ui';
 
 import { ApplicationCard } from './ApplicationCard';
-import { getNavGroups, type NavItem } from './navConfig';
+import { getNavGroups, REVIEW_PATH, type NavItem } from './navConfig';
 
 export const SIDEBAR_ID = 'app-sidebar';
 
@@ -21,7 +26,22 @@ interface TooltipPosition {
   left: number;
 }
 
-function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
+function reviewCountText(count: number): string {
+  return `${count} ${count === 1 ? 'screen' : 'screens'} in review`;
+}
+
+function SidebarItem({
+  item,
+  collapsed,
+  count = null,
+}: {
+  item: NavItem;
+  collapsed: boolean;
+  /** The number to show on the item (Review only); null or 0 shows none. */
+  count?: number | null;
+}) {
+  const shown = count !== null && count > 0 ? count : null;
+  const countLabel = shown === null ? null : reviewCountText(shown);
   const [tooltip, setTooltip] = useState<TooltipPosition | null>(null);
   const showTooltip = (element: HTMLElement) => {
     if (!collapsed) return;
@@ -35,7 +55,9 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
   return (
     <NavLink
       to={item.to}
-      aria-label={collapsed ? item.label : undefined}
+      aria-label={
+        collapsed ? (countLabel === null ? item.label : `${item.label}, ${countLabel}`) : undefined
+      }
       onMouseEnter={(event) => {
         showTooltip(event.currentTarget);
       }}
@@ -74,6 +96,14 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
           >
             {item.icon}
           </span>
+          {collapsed && shown !== null && (
+            <span
+              aria-hidden="true"
+              className="absolute top-0.5 right-1.5 flex h-4 min-w-4 items-center justify-center rounded-pill bg-badge-warning-bg px-1 text-micro font-bold text-badge-warning-ink"
+            >
+              {shown > 99 ? '99+' : shown}
+            </span>
+          )}
           {!collapsed && (
             <span
               className={cx(
@@ -83,6 +113,17 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
             >
               {item.label}
             </span>
+          )}
+          {!collapsed && shown !== null && (
+            <>
+              <span
+                aria-hidden="true"
+                className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-pill bg-badge-warning-bg px-1.5 text-tag font-bold text-badge-warning-ink"
+              >
+                {shown > 99 ? '99+' : shown}
+              </span>
+              <span className="sr-only">, {countLabel}</span>
+            </>
           )}
           {tooltip && (
             <span
@@ -108,6 +149,9 @@ export interface SidebarProps {
 
 export function Sidebar({ role, collapsed, onToggle, onExpand }: SidebarProps) {
   const groups = getNavGroups(role);
+  const { currentApplicationId } = useApplication();
+  const hasReview = groups.some((group) => group.items.some((item) => item.to === REVIEW_PATH));
+  const reviewCount = useReviewCount(currentApplicationId, hasReview);
   const toggleLabel = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
 
   return (
@@ -137,7 +181,12 @@ export function Sidebar({ role, collapsed, onToggle, onExpand }: SidebarProps) {
                   </div>
                 ))}
               {group.items.map((item) => (
-                <SidebarItem key={item.to} item={item} collapsed={collapsed} />
+                <SidebarItem
+                  key={item.to}
+                  item={item}
+                  collapsed={collapsed}
+                  count={item.to === REVIEW_PATH ? reviewCount : null}
+                />
               ))}
             </div>
           ))}

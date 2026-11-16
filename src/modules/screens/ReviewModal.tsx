@@ -1,7 +1,9 @@
 // ReviewModal: the Administrator's decision on a screen in review, Approve or Return (S-37c, S-37b).
 // Props: screen ({ id, name }), decision ('APPROVE' | 'RETURN'), onClose, onReviewed(screen, etag) (the decision was
 // applied: the detail takes the screen and its new ETag), onRefused(error) (the screen is no longer in review or no
-// longer exists: the detail reads it again and shows the message).
+// longer exists: the detail reads it again and shows the message), onFailure?(error) (any other API refusal, already shown
+// in the modal: the review queue reads itself again on APPLICATION_ARCHIVED). The modal is shared by the screen detail
+// and the review queue (D-142); a decision also tells the menu to read its Review counter again.
 // POST /screens/{id}/review, without If-Match (the contract declares none).
 //  - Return needs a comment: the client checks it after trimming (an empty or spaces-only comment is not sent and the
 //    field says why); the API stays the authority (COMMENT_REQUIRED and a 400 on `comment` also land on the field).
@@ -10,6 +12,7 @@
 //  - The refusals that need the page (NOT_IN_REVIEW, NOT_FOUND) go to onRefused; any other (APPLICATION_ARCHIVED ...)
 //    is shown in the modal with its catalog text. The decision is disabled with the reason when the application is
 //    archived or the browser is offline (useWriteBlock).
+// The modal is 560 px wide, as S-37b and S-37c draw it (the title of a Return fits on one line).
 // Focus is trapped, Esc and Cancel close it (not while sending) and the focus returns to the button that opened it.
 import { Check, CornerUpLeft } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
@@ -18,6 +21,7 @@ import type { FormEvent } from 'react';
 import { ApiError, isApiError } from '../../api/ApiError';
 import { getErrorMessage, getFieldErrors, getThrownMessage } from '../../api/messages';
 import { useApi } from '../../api/useApi';
+import { notifyReviewChanged } from '../../application/useReviewCount';
 import { Banner, Button, FormField, ICON_STROKE_WIDTH, Modal, Textarea } from '../../components/ui';
 import { useWriteBlock } from '../../hooks/useWriteBlock';
 
@@ -33,6 +37,7 @@ interface ReviewModalProps {
   onClose: () => void;
   onReviewed: (screen: Screen, etag: string | null) => void;
   onRefused: (error: ApiError) => void;
+  onFailure?: (error: ApiError) => void;
 }
 
 function commentRequiredText(): string {
@@ -45,6 +50,7 @@ export function ReviewModal({
   onClose,
   onReviewed,
   onRefused,
+  onFailure,
 }: ReviewModalProps) {
   const client = useApi();
   const { blocked, reason } = useWriteBlock();
@@ -82,6 +88,7 @@ export function ReviewModal({
             ? { decision: 'APPROVE', comment }
             : { decision: 'APPROVE' },
       });
+      notifyReviewChanged();
       onReviewed(result.body.data, result.etag);
     } catch (thrown) {
       setSending(false);
@@ -104,6 +111,7 @@ export function ReviewModal({
         }
       } else {
         setFailure(getThrownMessage(thrown, { element: 'screen' }));
+        onFailure?.(thrown);
       }
     }
   };
@@ -111,6 +119,7 @@ export function ReviewModal({
   return (
     <Modal
       open
+      size="md"
       initialFocusRef={commentRef}
       icon={
         isReturn ? (
