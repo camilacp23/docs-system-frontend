@@ -16,6 +16,7 @@ import {
   variableElement,
   type SimElement,
 } from '../helpers/fakeSearchApi';
+import { expectConsoleError } from '../helpers/expectConsoleError';
 import { renderSearch, type RenderSearchOptions } from '../helpers/renderSearch';
 import { controlSearchTimers, endSearchPause } from '../helpers/searchPause';
 import { setupUser, settle } from '../helpers/setupUser';
@@ -25,9 +26,15 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The pages a result leads to are not served by this fake: only the route is checked, and their render errors are not the subject. */
+/**
+ * The pages a result leads to are not served by this fake, so the screen page fails to draw (a screen without a status).
+ * Only that error is accepted; any other console.error fails the test.
+ */
 function quietDestination() {
-  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  expectConsoleError(
+    /Cannot read properties of undefined \(reading 'toLowerCase'\)/,
+    /The above error occurred in the <ScreenDetailPage> component/,
+  );
 }
 
 // Ten elements match "client": four screens, one collection, one component, four variables (one only in its description).
@@ -272,20 +279,17 @@ describe('the keyboard', () => {
     );
   });
 
-  it('Enter opens the active row: a screen, a variable and a collection lead to their page', async () => {
+  // One destination per test: a destination page that is still reading when the next search starts would update outside act.
+  it.each([
+    ['a screen', '{ArrowDown}', '/screens/1'],
+    ['a collection', '{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}', '/collections/21'],
+    ['a variable', '{ArrowUp}{ArrowUp}', '/variables/8'],
+  ])('Enter opens the active row of %s at its page', async (_what, keys, path) => {
     quietDestination();
     const view = await open();
     await type(view, 'client');
-    await view.user.keyboard('{ArrowDown}{Enter}');
-    expect(view.router.state.location.pathname).toBe('/screens/1');
-
-    await type(view, 'client');
-    await view.user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{Enter}');
-    expect(view.router.state.location.pathname).toBe('/collections/21');
-
-    await type(view, 'client');
-    await view.user.keyboard('{ArrowUp}{ArrowUp}{Enter}');
-    expect(view.router.state.location.pathname).toBe('/variables/8');
+    await view.user.keyboard(`${keys}{Enter}`);
+    expect(view.router.state.location.pathname).toBe(path);
   });
 
   it('opens a component in the Components & navigation tab of its screen (D-102)', async () => {

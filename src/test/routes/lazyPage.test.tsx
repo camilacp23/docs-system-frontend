@@ -3,13 +3,13 @@
 // server-error page with "Try again", never a blank screen), the retry (a NEW import(), because React.lazy keeps a
 // rejected promise, and no reload of the document), an error of the page itself (not caught here) and preload().
 // The loader is a promise the test settles: nothing here waits for the clock.
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChunkLoadError, lazyPage } from '../../app/router/lazyPage';
 import { SKELETON_DELAY_MS, SLOW_LOADING_DELAY_MS } from '../../components/ui/useDelayedLoading';
-import { setupUser } from '../helpers/setupUser';
+import { expectConsoleError } from '../helpers/expectConsoleError';
 
 function Hello() {
   return <p>Hello page</p>;
@@ -39,6 +39,12 @@ function deferred(): Deferred {
 
 const skeletons = () => document.querySelectorAll('.rounded-skeleton');
 const networkError = () => new TypeError('Failed to fetch dynamically imported module');
+
+/** What React logs for the error boundary of a failed load: the error and the component it happened in, nothing else. */
+const LOAD_FAILED_LOGS = [
+  /ChunkLoadError: The code of the page could not be loaded\./,
+  /The above error occurred in the <\w+> component/,
+];
 
 afterEach(() => {
   vi.useRealTimers();
@@ -101,18 +107,20 @@ describe('while the code arrives', () => {
 
 describe('a load that fails', () => {
   it('shows the server-error page with a way to try again, not a blank screen', async () => {
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const logged = expectConsoleError(...LOAD_FAILED_LOGS);
     const Page = lazyPage(() => Promise.reject(networkError()), 'Page');
     render(<Page />);
     expect(await screen.findByText('Something went wrong on our side')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
     expect(skeletons()).toHaveLength(0);
-    consoleError.mockRestore();
+    // No request id, so no reference is mentioned or shown (the text of INTERNAL_ERROR without it).
+    expect(screen.getByText('Try again in a moment.')).toBeInTheDocument();
+    expect(screen.queryByText(/reference/i)).not.toBeInTheDocument();
+    expect(logged.matched.length).toBeGreaterThan(0);
   });
 
   it('retries with a NEW import and shows the page, without reloading the document', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const user = setupUser();
+    expectConsoleError(...LOAD_FAILED_LOGS);
     const load = vi
       .fn<() => Promise<Record<'Page', React.ComponentType>>>()
       .mockRejectedValueOnce(networkError())
@@ -123,7 +131,7 @@ describe('a load that fails', () => {
     outside.dataset.marker = 'kept';
     document.body.append(outside);
     render(<Page />);
-    await user.click(await screen.findByRole('button', { name: 'Try again' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
 
     expect(await screen.findByText('Hello page')).toBeInTheDocument();
     expect(load).toHaveBeenCalledTimes(2);
@@ -133,8 +141,7 @@ describe('a load that fails', () => {
   });
 
   it('shows the error again when the retry fails too, and the next retry can still load it', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const user = setupUser();
+    expectConsoleError(...LOAD_FAILED_LOGS);
     const load = vi
       .fn<() => Promise<Record<'Page', React.ComponentType>>>()
       .mockRejectedValueOnce(networkError())
@@ -142,22 +149,21 @@ describe('a load that fails', () => {
       .mockResolvedValue({ Page: Hello });
     const Page = lazyPage(load, 'Page');
     render(<Page />);
-    await user.click(await screen.findByRole('button', { name: 'Try again' }));
-    await user.click(await screen.findByRole('button', { name: 'Try again' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
     expect(await screen.findByText('Hello page')).toBeInTheDocument();
     expect(load).toHaveBeenCalledTimes(3);
   });
 
   it('keeps the new component for the next time the route is opened', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const user = setupUser();
+    expectConsoleError(...LOAD_FAILED_LOGS);
     const load = vi
       .fn<() => Promise<Record<'Page', React.ComponentType>>>()
       .mockRejectedValueOnce(networkError())
       .mockResolvedValue({ Page: Hello });
     const Page = lazyPage(load, 'Page');
     const first = render(<Page />);
-    await user.click(await screen.findByRole('button', { name: 'Try again' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
     await screen.findByText('Hello page');
     first.unmount();
     render(<Page />);
@@ -175,7 +181,10 @@ describe('a load that fails', () => {
 
 describe('an error of the page itself', () => {
   it('is not caught by the loader: it goes on to the error element of the route', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const logged = expectConsoleError(
+      /page bug/,
+      /The above error occurred in the <Broken> component/,
+    );
     const Page = lazyPage(() => Promise.resolve({ Page: Broken }), 'Page');
     const router = createMemoryRouter(
       [{ path: '/', element: <Page />, errorElement: <p>Route error element</p> }],
@@ -184,6 +193,7 @@ describe('an error of the page itself', () => {
     render(<RouterProvider router={router} />);
     expect(await screen.findByText('Route error element')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+    expect(logged.matched.length).toBeGreaterThan(0);
   });
 });
 

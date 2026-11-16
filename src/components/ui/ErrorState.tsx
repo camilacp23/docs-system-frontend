@@ -3,6 +3,7 @@
 //   'not-found'    element ("variable"), listLabel ("Variables")  -> "This variable doesn't exist"
 //   'no-access'    roleName ("Reader")                            -> "You don't have access to this page"
 //   'server-error' requestId (shown as "Reference: <id>")         -> "Something went wrong on our side"
+//                  Without a requestId the text is "Try again in a moment." and no reference is mentioned or shown.
 // onAction runs when the single primary button is pressed (navigate back / go to Dashboard / retry).
 import { CircleAlert, Lock, Search } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -46,8 +47,10 @@ export function ErrorState(props: ErrorStateProps) {
     case 'server-error':
       icon = <CircleAlert {...iconProps} />;
       title = 'Something went wrong on our side';
-      description =
-        'Try again in a moment. If it keeps happening, share the reference below with the team.';
+      // The reference sentence only when there is a reference to share (the text of INTERNAL_ERROR without it otherwise).
+      description = props.requestId
+        ? 'Try again in a moment. If it keeps happening, share the reference below with the team.'
+        : 'Try again in a moment.';
       actionLabel = 'Try again';
       break;
   }

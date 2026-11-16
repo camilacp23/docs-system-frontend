@@ -145,8 +145,6 @@ describe('Toast', () => {
   });
 
   it('throws when useToast is used outside the provider', () => {
-    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     expect(() => render(<Trigger options={{ message: 'x' }} />)).toThrow(/ToastProvider/);
-    error.mockRestore();
   });
 });

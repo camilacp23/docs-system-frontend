@@ -119,10 +119,27 @@ describe('ErrorState', () => {
     expect(screen.getByText('7f3c2a')).toHaveClass('font-mono');
   });
 
-  it('server-error without a reference omits the line', () => {
+  it('server-error with a reference asks to share it, below the button', () => {
+    render(<ErrorState variant="server-error" requestId="7f3c2a" />);
+
+    expect(
+      screen.getByText(
+        'Try again in a moment. If it keeps happening, share the reference below with the team.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Reference:/)).toHaveTextContent('Reference: 7f3c2a');
+  });
+
+  it('server-error without a reference omits the line and the sentence that mentions it', () => {
     render(<ErrorState variant="server-error" />);
 
     expect(screen.queryByText(/Reference:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/reference/i)).not.toBeInTheDocument();
+    // Title and text together are the INTERNAL_ERROR message without its reference.
+    expect(
+      screen.getByRole('heading', { name: 'Something went wrong on our side' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Try again in a moment.')).toBeInTheDocument();
   });
 });
 
