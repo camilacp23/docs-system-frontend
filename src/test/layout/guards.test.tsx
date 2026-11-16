@@ -33,6 +33,7 @@ const hasOwnPage = (path: string) =>
   path === '/dependency-map' ||
   path === '/search' ||
   path === '/audit' ||
+  path === '/reports' ||
   path === '/admin/users' ||
   path === '/admin/applications';
 

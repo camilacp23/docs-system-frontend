@@ -73,3 +73,5 @@ export {
   useDelayedLoading,
 } from './useDelayedLoading';
 export type { DelayedLoadingOptions, DelayedLoadingState } from './useDelayedLoading';
+export { Switch } from './Switch';
+export type { SwitchProps } from './Switch';
