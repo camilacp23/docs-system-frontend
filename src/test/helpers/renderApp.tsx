@@ -9,6 +9,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { vi } from 'vitest';
 
 import { appRoutes } from '../../app/router/router';
+import { preloadPage } from '../../app/router/preloadPage';
 import type { Role } from '../../app/router/routes';
 import type { ApiError } from '../../api/ApiError';
 import type { ApiClient } from '../../api/client';
@@ -99,6 +100,12 @@ export async function renderApp(options: RenderAppOptions = {}) {
     options.applicationsApi ??
     makeApplicationsClient(options.applications ?? [makeApplication(1, { name: 'SAR' })]);
   const pageClient = options.buildClient?.(apps) ?? apps.client;
+  // The routes of /audit, /search and /dependency-map load their code when opened. The first import in a cold worker
+  // can take longer than the 1 s of findBy, so the page of `path` (and the two light ones a test reaches by a link,
+  // which used to be in the main bundle) are loaded first: the wait is for the work, not for the clock.
+  await Promise.all(
+    [path.split(/[?#]/)[0] ?? path, '/search', '/audit'].map((pathname) => preloadPage(pathname)),
+  );
   const router = createMemoryRouter(appRoutes, { initialEntries: [path] });
 
   const view = render(
