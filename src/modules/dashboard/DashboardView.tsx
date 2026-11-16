@@ -1,12 +1,15 @@
 // DashboardView: the indicator dashboard (FR-19, S-31) of the selected application, drawn from the two reads it is given.
 // Props: firstName, hour (local hour, for the greeting), applicationName, indicators and top (DashboardSource of the
 // two reads: each has its own status, so one can fail while the other stays on screen), refreshing, onRefresh,
-// timeZone, canCreateScreen (the action of the empty state: not for the Reader, not for an archived application).
+// timeZone, canCreateScreen (the action of the empty state: not for the Reader, not for an archived application),
+// onGenerateReport (the "Generate report" button of the header, S-31: present for the Administrator and the Developer,
+// archived application included, D-47; the page opens the dialog and, after the 202, goes to /reports, flow 5) and
+// generateDisabledReason (why it is off, offline).
 // It holds no state of its own and reads nothing: DashboardPage gives it the data, and the development page
 // (/dev/dashboard) gives it test data so the design can be photographed.
 // Layout (SDD 7.3.7): it answers to the width of its container: from 900 px the blocks are in two columns as in the
 // frame S-31, and the row of figures is one row from 940 px (see KpiCards).
-import { ChartPie, Database, History, ListTodo, RefreshCw } from 'lucide-react';
+import { ChartPie, Database, FileText, History, ListTodo, RefreshCw } from 'lucide-react';
 import { Link } from 'react-router';
 
 import {
@@ -39,6 +42,7 @@ import {
   EMPTY_ACTION,
   EMPTY_TITLE,
   emptyText,
+  GENERATE_REPORT_LABEL,
   INDICATORS_FAILED_LEAD,
   JIRA_NOTICE_LEAD,
   jiraNoticeText,
@@ -76,6 +80,10 @@ export interface DashboardViewProps {
   canCreateScreen: boolean;
   /** The role of an Administrator or a Developer: they get the recent activity; the Reader never does (D-34). */
   withActivity: boolean;
+  /** Opens the generate-report dialog (S-34, flow 5). Absent for the Reader: then there is no button. */
+  onGenerateReport?: () => void;
+  /** Why the button is off now (offline), or null. An archived application is not a reason (D-47). */
+  generateDisabledReason?: string | null;
 }
 
 export function DashboardView({
@@ -89,6 +97,8 @@ export function DashboardView({
   timeZone,
   canCreateScreen,
   withActivity,
+  onGenerateReport,
+  generateDisabledReason = null,
 }: DashboardViewProps) {
   const read = indicators.data;
   const loadingIndicators = indicators.status === 'loading';
@@ -119,6 +129,17 @@ export function DashboardView({
             >
               {REFRESH_LABEL}
             </Button>
+            {onGenerateReport && (
+              <Button
+                size="sm"
+                disabled={generateDisabledReason !== null}
+                title={generateDisabledReason ?? undefined}
+                iconLeft={<FileText aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+                onClick={onGenerateReport}
+              >
+                {GENERATE_REPORT_LABEL}
+              </Button>
+            )}
           </>
         }
       />

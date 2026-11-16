@@ -54,3 +54,56 @@ export const EMPTY_READER_TEXT = 'Reports published by the team will appear here
 export const EMPTY_PUBLISHED_TITLE = 'No published reports';
 export const EMPTY_PUBLISHED_TEXT = 'Publish a ready report to make it visible to Readers.';
 export const SHOW_ALL_LABEL = 'Show all reports';
+
+// ---- The generate dialog (S-34) --------------------------------------------------------------------------------------
+export const DIALOG_TITLE = 'Generate report';
+export const dialogDescription = (applicationName: string) =>
+  `${applicationName} · PDF or Excel of the application's documentation`;
+export const TITLE_LABEL = 'Title';
+export const FORMAT_FIELD_LABEL = 'Format';
+export const INCLUDE_LABEL = 'Include';
+export const STATUS_FIELD_LABEL = 'Documentation status';
+export const SCREENS_LABEL = 'Screens';
+export const STATUS_HELP = 'None selected = all statuses';
+export const STATUS_DISABLED_HELP = 'Applies when Screens or Components is included.';
+export const FORMAT_DESCRIPTION: Record<ReportFormat, string> = {
+  PDF: 'Formatted document to read and share',
+  XLSX: 'Spreadsheet, one sheet per section',
+};
+export const DEPENDENCIES_LABEL = 'Include dependencies';
+export const DEPENDENCIES_HELP = 'What each screen reads, writes and opens';
+export const STATUS_SUMMARY_LABEL = 'Include status summary';
+export const STATUS_SUMMARY_HELP = 'Overall documentation status of the application';
+export const PUBLISH_LABEL = 'Publish when ready';
+export const PUBLISH_HELP = 'Readers can see and download it';
+export const FOOTER_NOTE = 'Built in the background — you can keep working.';
+export const CANCEL_LABEL = 'Cancel';
+export const SUBMIT_LABEL = 'Generate';
+
+export const TITLE_REQUIRED_TEXT = 'Title is required.';
+export const INCLUDE_REQUIRED_TEXT = 'Choose at least one element, or include the status summary.';
+export const NOT_APPLICABLE_TEXT = (label: string) =>
+  `${label} only applies when Screens or Components is included.`;
+export const fieldsNeedAttention = (count: number) =>
+  `${count} field${count === 1 ? '' : 's'} need${count === 1 ? 's' : ''} attention.`;
+
+export const SUMMARY_NOTHING = 'Nothing selected yet';
+export const SUMMARY_STATUS_SUMMARY = 'Status summary';
+export const SUMMARY_ALL_STATUSES = 'all statuses';
+export const SUMMARY_WITH_DEPENDENCIES = 'with dependencies';
+export const SUMMARY_WILL_PUBLISH = 'published when ready';
+export const screensSummary = (count: number) => `${count} screen${count === 1 ? '' : 's'}`;
+
+// The screen selector
+export const SCREENS_PLACEHOLDER = 'All screens';
+export const SCREENS_HELP = 'Leave empty to include every screen.';
+export const screensSelected = (count: number) => `${screensSummary(count)} selected`;
+export const SCREEN_SEARCH_LABEL = 'Search screens';
+export const SCREEN_LIST_LABEL = 'Screens to include';
+export const SCREEN_LIMIT_TEXT = 'You can select up to 500 screens.';
+export const SCREEN_NONE_TEXT = 'No screens match.';
+export const SCREEN_LOADING_TEXT = 'Loading screens…';
+export const LOAD_MORE_LABEL = 'Load more';
+export const REMOVE_SCREEN = (name: string) => `Remove ${name}`;
+export const CLEAR_SCREENS_LABEL = 'Clear selection';
+export const SCREEN_PANEL_LABEL = 'Choose screens';

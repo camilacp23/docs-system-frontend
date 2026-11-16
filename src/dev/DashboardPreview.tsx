@@ -151,6 +151,7 @@ export function DashboardPreview() {
         timeZone={browserTimeZone()}
         canCreateScreen={role !== 'READER'}
         withActivity={role !== 'READER'}
+        onGenerateReport={role === 'READER' ? undefined : NO_OP}
       />
     </MockShell>
   );

@@ -1,4 +1,4 @@
-// ReportsPage: /reports, "Reports" (S-33 for the Administrator and the Developer, S-33r for the Reader; FR-22, NFR-12).
+// ReportsPage: /reports (the view is ReportsView), "Reports" (S-33 for the Administrator and the Developer, S-33r for the Reader; FR-22, NFR-12).
 // The saved reports of the selected application as cards, newest first as the API orders them, 12 per page. The
 // Administrator and the Developer can filter ("All · N" / "Published · M", D-136), publish and unpublish a READY report
 // (If-Match, D-138), generate again a FAILED one (D-55) and download; the Reader gets only the published reports
@@ -8,54 +8,23 @@
 // read of the list starts from the server's copy. A failed call shows a banner; a 412 is the S-44 pattern ("Reload", D-137).
 // An archived application does not block anything here: generating and publishing stay allowed (D-47, D-121); only being
 // offline disables the writes.
-// The generate dialog (S-34) is part of the next change: `afterCreated` is what it calls with the new PENDING report.
-import { FileText } from 'lucide-react';
+// "Generate report" opens the dialog of S-34 (GenerateReportModal, the same one the dashboard uses); after the 202 the page
+// goes back to All, page 1 and reads the list, so the new PENDING report is on screen and the polling follows it (D-141).
 import { useEffect, useRef, useState } from 'react';
 
-import { getErrorMessage } from '../../api/messages';
 import { useApi } from '../../api/useApi';
 import { useApiResource } from '../../api/useApiResource';
 import { useApplication } from '../../application/useApplication';
-import {
-  Banner,
-  Button,
-  EmptyState,
-  ErrorState,
-  ICON_STROKE_WIDTH,
-  PageHeader,
-  Pagination,
-  SegmentedControl,
-  Skeleton,
-  SLOW_LOADING_MESSAGE,
-  useDelayedLoading,
-  useToast,
-} from '../../components/ui';
+import { useDelayedLoading, useToast } from '../../components/ui';
 import { useOfflineBlock } from '../../hooks/useOfflineBlock';
 import { useCurrentUser } from '../../session/useCurrentUser';
 import { browserTimeZone } from '../audit/auditDates';
 
-import { ReportCard } from './ReportCard';
-import { etagOf, isPending, PAGE_SIZES, type Report } from './reportModel';
+import { GenerateReportModal } from './GenerateReportModal';
+import { etagOf, isPending, type Report } from './reportModel';
 import type { ReportProblem } from './reportProblem';
-import {
-  DOWNLOAD_LABEL,
-  EMPTY_PUBLISHED_TEXT,
-  EMPTY_PUBLISHED_TITLE,
-  EMPTY_READER_TEXT,
-  EMPTY_READER_TITLE,
-  EMPTY_TITLE,
-  emptyText,
-  FILTER_ALL,
-  FILTER_LABEL,
-  FILTER_PUBLISHED,
-  LIST_LABEL,
-  pageDescription,
-  READY_TOAST_SUFFIX,
-  REGENERATING_TOAST_SUFFIX,
-  RELOAD_LABEL,
-  REPORTS_TITLE,
-  SHOW_ALL_LABEL,
-} from './reportTexts';
+import { DOWNLOAD_LABEL, READY_TOAST_SUFFIX, REGENERATING_TOAST_SUFFIX } from './reportTexts';
+import { ReportsView } from './ReportsView';
 import { useGenerateAgain } from './useGenerateAgain';
 import { useReportCounts } from './useReportCounts';
 import { useReportDownload } from './useReportDownload';
@@ -72,9 +41,6 @@ interface ListRead {
   rows: Report[];
   total: number;
 }
-
-const ICON = { size: 20, strokeWidth: ICON_STROKE_WIDTH } as const;
-const GRID = 'grid grid-cols-1 gap-4 @min-[700px]:grid-cols-2 @min-[1000px]:grid-cols-3';
 
 export function ReportsPage() {
   const client = useApi();
@@ -135,6 +101,7 @@ export function ReportsPage() {
   const etagFor = (report: Report) => patches[report.id]?.etag ?? etagOf(report);
 
   const [notice, setNotice] = useState<ReportProblem | null>(null);
+  const [generating, setGenerating] = useState(false);
   const readAgain = () => {
     list.reload();
     counts.reload();
@@ -207,171 +174,66 @@ export function ReportsPage() {
   });
 
   if (currentApplication === null) return null;
-  const reader = !canWrite;
-  const total = list.data?.total ?? 0;
-  const withCount = (label: string, count: number | null | undefined) =>
-    typeof count === 'number' ? `${label} · ${count}` : label;
-  const filterOptions = [
-    { value: 'all', label: withCount(FILTER_ALL, counts.data?.all) },
-    { value: 'published', label: withCount(FILTER_PUBLISHED, counts.data?.published) },
-  ];
-
-  let body;
-  if (list.status === 'error' && list.data === null) {
-    body = (
-      <ErrorState
-        variant="server-error"
-        requestId={list.error?.requestId ?? undefined}
-        onAction={list.reload}
-      />
-    );
-  } else if (list.data === null) {
-    body = showSkeleton ? (
-      <ul aria-hidden="true" className={GRID}>
-        {[0, 1, 2].map((key) => (
-          <li
-            key={key}
-            className="flex flex-col gap-3 rounded-card border border-border-subtle bg-surface p-4"
-          >
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-3 w-2/3" />
-            <Skeleton className="h-8 w-full" />
-          </li>
-        ))}
-      </ul>
-    ) : null;
-  } else if (rows.length === 0) {
-    body = (
-      <div className="rounded-card border border-border-subtle bg-surface shadow-card">
-        {reader ? (
-          <EmptyState
-            icon={<FileText />}
-            title={EMPTY_READER_TITLE}
-            description={EMPTY_READER_TEXT}
-          />
-        ) : params.publishedOnly ? (
-          <EmptyState
-            icon={<FileText />}
-            title={EMPTY_PUBLISHED_TITLE}
-            description={EMPTY_PUBLISHED_TEXT}
-            action={
-              <Button
-                onClick={() => {
-                  setPublishedOnly(false);
-                }}
-              >
-                {SHOW_ALL_LABEL}
-              </Button>
-            }
-          />
-        ) : (
-          <EmptyState
-            icon={<FileText />}
-            title={EMPTY_TITLE}
-            description={emptyText(currentApplication.name)}
-          />
-        )}
-      </div>
-    );
-  } else {
-    body = (
-      <>
-        <ul aria-label={LIST_LABEL} className={GRID}>
-          {rows.map((report) => (
-            <ReportCard
-              key={report.id}
-              report={report}
-              canWrite={canWrite}
-              timeZone={timeZone}
-              timedOut={timedOut.has(report.id)}
-              publishing={changing.has(report.id)}
-              downloading={downloading.has(report.id)}
-              regenerating={regenerating.has(report.id)}
-              writeBlockReason={offline.reason}
-              onDownload={() => {
-                void download(report);
-              }}
-              onPublishedChange={(next) => {
-                void setPublished(report, next);
-              }}
-              onGenerateAgain={() => {
-                void generateAgain(report);
-              }}
-              onCheckAgain={() => {
-                checkAgain(report.id);
-              }}
-            />
-          ))}
-        </ul>
-        <Pagination
-          page={params.page}
-          pageSize={params.pageSize}
-          total={total}
-          pageSizes={PAGE_SIZES}
-          onPageChange={setPage}
-          onPageSizeChange={setPageSize}
-          disabled={list.loading}
-        />
-      </>
-    );
-  }
 
   return (
-    <div className="@container flex flex-col gap-4">
-      <PageHeader
-        icon={<FileText {...ICON} />}
-        title={REPORTS_TITLE}
-        description={pageDescription(currentApplication.name, reader)}
-        actions={
-          canWrite ? (
-            <SegmentedControl
-              name="report-filter"
-              label={FILTER_LABEL}
-              options={filterOptions}
-              value={params.publishedOnly ? 'published' : 'all'}
-              onChange={(value) => {
-                setPublishedOnly(value === 'published');
-              }}
-            />
-          ) : undefined
-        }
-      />
-      {notice !== null && (
-        <Banner
-          tone={notice.kind === 'conflict' ? 'warning' : 'danger'}
-          actions={
-            notice.kind === 'conflict' ? (
-              <Button
-                size="sm"
-                onClick={() => {
-                  setNotice(null);
-                  readAgain();
-                }}
-              >
-                {RELOAD_LABEL}
-              </Button>
-            ) : undefined
-          }
-          onDismiss={
-            notice.kind === 'message'
-              ? () => {
-                  setNotice(null);
-                }
-              : undefined
-          }
-        >
-          {notice.text}
-        </Banner>
+    <ReportsView
+      applicationName={currentApplication.name}
+      reader={!canWrite}
+      rows={list.data === null ? null : rows}
+      total={list.data?.total ?? 0}
+      loading={list.loading}
+      error={list.error}
+      showSkeleton={showSkeleton}
+      isSlow={isSlow}
+      publishedOnly={params.publishedOnly}
+      counts={counts.data}
+      page={params.page}
+      pageSize={params.pageSize}
+      timeZone={timeZone}
+      timedOut={timedOut}
+      publishing={changing}
+      downloading={downloading}
+      regenerating={regenerating}
+      writeBlockReason={offline.reason}
+      notice={notice}
+      onPublishedOnlyChange={setPublishedOnly}
+      onPageChange={setPage}
+      onPageSizeChange={setPageSize}
+      onGenerate={() => {
+        setGenerating(true);
+      }}
+      onDownload={(report) => {
+        void download(report);
+      }}
+      onPublishedChange={(report, next) => {
+        void setPublished(report, next);
+      }}
+      onGenerateAgain={(report) => {
+        void generateAgain(report);
+      }}
+      onCheckAgain={checkAgain}
+      onRetry={list.reload}
+      onReloadNotice={() => {
+        setNotice(null);
+        readAgain();
+      }}
+      onDismissNotice={() => {
+        setNotice(null);
+      }}
+    >
+      {generating && (
+        <GenerateReportModal
+          applicationId={currentApplication.id}
+          applicationName={currentApplication.name}
+          onClose={() => {
+            setGenerating(false);
+          }}
+          onCreated={() => {
+            setGenerating(false);
+            afterCreated();
+          }}
+        />
       )}
-      {list.error !== null && list.data !== null && (
-        <Banner tone="danger">{getErrorMessage(list.error) ?? ''}</Banner>
-      )}
-      {isSlow && list.data === null && (
-        <p role="status" className="text-small text-ink-500">
-          {SLOW_LOADING_MESSAGE}
-        </p>
-      )}
-      {body}
-    </div>
+    </ReportsView>
   );
 }

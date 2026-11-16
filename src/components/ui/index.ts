@@ -75,3 +75,7 @@ export {
 export type { DelayedLoadingOptions, DelayedLoadingState } from './useDelayedLoading';
 export { Switch } from './Switch';
 export type { SwitchProps } from './Switch';
+export { ChoiceCard } from './ChoiceCard';
+export type { ChoiceCardProps } from './ChoiceCard';
+export { ToggleChip } from './ToggleChip';
+export type { ToggleChipProps } from './ToggleChip';
