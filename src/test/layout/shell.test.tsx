@@ -92,7 +92,8 @@ describe('sidebar', () => {
   it('does not render the items that depend on modules that do not exist yet', async () => {
     await renderApp();
     await navLinks();
-    for (const text of ['Jira connected', 'Collapse', /Search screens/, 'Ctrl K']) {
+    // The quick search (S-30) has its module now: its tests are in quickSearch.test.tsx.
+    for (const text of ['Jira connected', 'Collapse']) {
       expect(screen.queryByText(text)).not.toBeInTheDocument();
     }
     expect(screen.queryByRole('button', { name: 'Help' })).not.toBeInTheDocument();

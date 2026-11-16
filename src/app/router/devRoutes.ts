@@ -2,6 +2,7 @@
 // folds to an empty list and the dynamic imports below are dropped, so /dev/* code never ships in dist/.
 // /dev/ui: the design-system showcase. /dev/map: the dependency map over test data (see src/dev/MapPreview.tsx).
 // /dev/dashboard: the dashboard over the figures of the frame S-31 (see src/dev/DashboardPreview.tsx).
+// /dev/quick-search: the quick search panel in every state (see src/dev/QuickSearchPreview.tsx).
 import type { RouteObject } from 'react-router';
 
 export const devRoutes: RouteObject[] = import.meta.env.DEV
@@ -18,6 +19,13 @@ export const devRoutes: RouteObject[] = import.meta.env.DEV
         lazy: async () => {
           const { DashboardPreview } = await import('../../dev/DashboardPreview');
           return { Component: DashboardPreview };
+        },
+      },
+      {
+        path: '/dev/quick-search',
+        lazy: async () => {
+          const { QuickSearchPreview } = await import('../../dev/QuickSearchPreview');
+          return { Component: QuickSearchPreview };
         },
       },
       {
