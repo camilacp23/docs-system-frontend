@@ -1,6 +1,6 @@
 // messages: the user-facing text of every API error (SDD Table 59, with DUPLICATE_NAME per D-63, the two
-// CONTEXT_SCREEN_MISMATCH cases per D-64, the two INVALID_ORIGIN_SCREEN cases per D-68 and the two FORBIDDEN
-// cases per D-77). The server `message` is never shown.
+// CONTEXT_SCREEN_MISMATCH cases per D-64, the two INVALID_ORIGIN_SCREEN cases per D-68 and the FORBIDDEN
+// cases per D-77 and the contract 0.3.8). The server `message` is never shown.
 // getErrorMessage(error, ctx?) -> string | null (null: the code is handled silently, e.g. TOKEN_EXPIRED).
 //   ctx.element / ctx.type: page-provided values for the <element> and <type> placeholders.
 //   ctx.action: 'delete' (default) or 'rename', for the two texts of APP_CONTEXT_PROTECTED (both have no details).
@@ -69,6 +69,7 @@ const STATIC_MESSAGES: Record<string, string> = {
 
 const FORBIDDEN_ROLE_TEXT = "Your role doesn't allow this action.";
 const FORBIDDEN_ORIGIN_TEXT = "This request's origin isn't allowed.";
+const FORBIDDEN_AUTHOR_ONLY_TEXT = 'You can only edit your own comments.';
 const ORIGIN_APP_TEXT = 'Context variables are created inside a screen, not in App (OnStart).';
 
 const INTERNAL_ERROR_TEXT = 'Something went wrong on our side. Try again in a moment.';
@@ -189,10 +190,13 @@ function dynamicMessage(error: ApiError, ctx: MessageContext): string | undefine
       const application = required(error, 'application', 'this application');
       return `${article(type)} ${type} named ${name} already exists in ${application}.`;
     }
-    case 'FORBIDDEN':
-      return str(error.details, 'reason') === 'ORIGIN'
-        ? FORBIDDEN_ORIGIN_TEXT
-        : FORBIDDEN_ROLE_TEXT;
+    case 'FORBIDDEN': {
+      // The reason tells the cases apart (never the server text): ORIGIN (D-77), AUTHOR_ONLY (contract 0.3.8).
+      const reason = str(error.details, 'reason');
+      if (reason === 'ORIGIN') return FORBIDDEN_ORIGIN_TEXT;
+      if (reason === 'AUTHOR_ONLY') return FORBIDDEN_AUTHOR_ONLY_TEXT;
+      return FORBIDDEN_ROLE_TEXT;
+    }
     case 'INVALID_ORIGIN_SCREEN': {
       // D-68: the other-application case is told apart by its details, never by the server text.
       const screen = str(error.details, 'screen');

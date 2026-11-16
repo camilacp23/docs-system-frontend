@@ -185,10 +185,12 @@ function TopBar({
   pageName,
   user,
   jira,
+  searchText,
 }: {
   pageName: string;
   user: MockUser;
   jira: 'available' | 'unavailable';
+  searchText?: string;
 }) {
   return (
     <header className="flex items-center justify-between gap-4 border-b border-border-subtle bg-topbar px-7 backdrop-blur-xs">
@@ -202,15 +204,27 @@ function TopBar({
         <span className="text-label/5 text-ink-500">/</span>
         <span className="text-label/5 font-bold text-ink-900">{pageName}</span>
       </div>
-      <div className="relative flex h-10 w-140 min-w-0 shrink items-center gap-2.5 overflow-hidden rounded-card border border-border bg-search-bg pr-2 pl-3.5 shadow-field-inset">
+      <div
+        className={cx(
+          'relative flex h-10 w-140 min-w-0 shrink items-center gap-2.5 overflow-hidden rounded-card border bg-search-bg pr-2 pl-3.5 shadow-field-inset',
+          searchText === undefined ? 'border-border' : 'border-accent ring-2 ring-focus-ring',
+        )}
+      >
         <Search
           size={18}
           strokeWidth={ICON_STROKE_WIDTH}
           aria-hidden="true"
           className="shrink-0 text-ink-500"
         />
-        <span className="truncate text-body-lg text-ink-500">
-          Search screens, variables, collections, components…
+        <span
+          className={cx(
+            'truncate text-body-lg',
+            searchText === undefined || searchText === '' ? 'text-ink-500' : 'text-ink-900',
+          )}
+        >
+          {searchText === undefined || searchText === ''
+            ? 'Search screens, variables, collections, components…'
+            : searchText}
         </span>
         <span className="rounded-chip border border-border bg-surface px-2 py-0.75 text-small/5 font-semibold whitespace-nowrap text-ink-700">
           in SAR
@@ -255,6 +269,7 @@ export function MockShell({
   role = 'ADMINISTRATOR',
   user = { name: 'Camila Castillo', roleLabel: 'Administrator' },
   jira = 'available',
+  searchText,
   children,
 }: {
   activeLabel: string;
@@ -264,12 +279,14 @@ export function MockShell({
   user?: MockUser;
   /** The state of the Jira pill (default: connected, as in the frames). */
   jira?: 'available' | 'unavailable';
+  /** The quick search field drawn focused with this text (S-30); omitted: the field at rest. */
+  searchText?: string;
   children: ReactNode;
 }) {
   return (
     <div className="grid h-screen grid-cols-[268px_minmax(0,1fr)] grid-rows-[68px_minmax(0,1fr)] bg-canvas">
       <Sidebar activeLabel={activeLabel} role={role} />
-      <TopBar pageName={pageName} user={user} jira={jira} />
+      <TopBar pageName={pageName} user={user} jira={jira} searchText={searchText} />
       <main className="flex flex-col gap-4 overflow-y-auto px-6 py-5">{children}</main>
     </div>
   );

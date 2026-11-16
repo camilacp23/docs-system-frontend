@@ -210,6 +210,7 @@ describe('catalog against the contract', () => {
   // Rows with a variant label, e.g. "FORBIDDEN (origin)": the details that select that variant.
   const VARIANT_DETAILS: Record<string, ErrorDetails> = {
     'FORBIDDEN (origin)': { reason: 'ORIGIN' },
+    'FORBIDDEN (author only)': { reason: 'AUTHOR_ONLY' },
   };
   // Rows whose text depends on what the page was doing.
   const VARIANT_CTX: Record<string, { action: 'rename' }> = {
@@ -348,6 +349,9 @@ describe('FORBIDDEN (D-77)', () => {
     );
     expect(getErrorMessage(err('FORBIDDEN', null, { status: 403 }))).toBe(role);
     expect(getErrorMessage(err('FORBIDDEN', { reason: 'OTHER' }, { status: 403 }))).toBe(role);
+    expect(getErrorMessage(err('FORBIDDEN', { reason: 'AUTHOR_ONLY' }, { status: 403 }))).toBe(
+      'You can only edit your own comments.',
+    );
   });
 });
 

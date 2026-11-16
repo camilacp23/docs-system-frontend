@@ -1,13 +1,13 @@
-// TopBar: the 68 px bar of the shell (S-31): the clickable breadcrumb (Breadcrumb.tsx) on the left and on the right
-// the Jira status pill (JiraStatusPill, the last known availability) and the user block (initials, name, role), which
-// opens a menu with "Sign out".
-// Props: user (the signed-in user). The quick search and the help button of the frame arrive with the modules they
-// depend on.
+// TopBar: the 68 px bar of the shell (S-31): the clickable breadcrumb (Breadcrumb.tsx) on the left, the quick search
+// (QuickSearch.tsx, S-30) next to it and on the right the Jira status pill (JiraStatusPill, the last known availability)
+// and the user block (initials, name, role), which opens a menu with "Sign out".
+// Props: user (the signed-in user). The help button of the frame arrives with the module it depends on.
 // Sign out clears the session even if the server cannot be reached; in that case a warning toast says so.
 import { useEffect, useId, useRef } from 'react';
 
 import type { components } from '../api/schema';
 import { ROLE_LABEL } from '../app/router/routes';
+import { useApplication } from '../application/useApplication';
 import { Avatar, useToast } from '../components/ui';
 import { useSession } from '../session/useSession';
 
@@ -15,6 +15,7 @@ import { usePopover } from '../hooks/usePopover';
 
 import { Breadcrumb } from './Breadcrumb';
 import { JiraStatusPill } from './JiraStatusPill';
+import { QuickSearch } from './QuickSearch';
 
 export const SIGN_OUT_FAILED_TEXT =
   "You're signed out on this device, but the server couldn't be reached to end the session.";
@@ -79,9 +80,14 @@ function UserMenu({ user }: { user: components['schemas']['User'] }) {
 }
 
 export function TopBar({ user }: { user: components['schemas']['User'] }) {
+  const { currentApplicationId } = useApplication();
   return (
     <header className="col-start-2 flex items-center justify-between gap-4 border-b border-border-subtle bg-topbar px-7 backdrop-blur-xs">
       <Breadcrumb />
+      <div className="flex min-w-0 flex-1 items-center">
+        {/* Another application starts a new search: the text and the rows of the old one are not kept. */}
+        <QuickSearch key={currentApplicationId ?? 'none'} />
+      </div>
       <div className="flex items-center gap-2.5">
         <JiraStatusPill />
         <UserMenu user={user} />

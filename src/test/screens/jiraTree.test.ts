@@ -147,6 +147,7 @@ describe('jiraTree helpers', () => {
     expect(safeJiraUrl('javascript:alert(1)')).toBeNull();
     expect(safeJiraUrl('//jira.example.test/browse/A-1')).toBeNull();
     expect(safeJiraUrl('')).toBeNull();
+    expect(safeJiraUrl(null)).toBeNull();
   });
 
   it('gives the write block first and Jira not responding second as the reason for Add to-do', () => {

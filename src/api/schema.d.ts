@@ -212,7 +212,7 @@ export interface paths {
          *     `status: ARCHIVED` makes the application's documentation read-only for every
          *     role (CP-01): writes on its variables, collections, screens, status, Jira
          *     tickets, review and comments return 422 APPLICATION_ARCHIVED. Reports can
-         *     still be generated and downloaded. `status: ACTIVE` restores editing; this
+         *     still be generated, published and downloaded. `status: ACTIVE` restores editing; this
          *     operation is the only write accepted on an archived application.
          */
         put: operations["updateApplication"];
@@ -800,14 +800,26 @@ export interface paths {
         };
         /**
          * Comments of a screen, oldest first (FR-23)
-         * @description Roles: all.
+         * @description Roles: all. Oldest first: `createdAt` ascending and then `id` ascending, so the page
+         *     is stable. The review comments (`reviewDecision` not null) are in the same thread.
+         *     The `ETag` of the list is a weak hash of the body (D-72); the tag of one comment is
+         *     described in `Comment`.
          */
         get: operations["listComments"];
         put?: never;
         /**
          * Comment on a screen (FR-23)
-         * @description Roles: all. When the application is archived it is read-only (CP-01): this
-         *     operation returns 422 APPLICATION_ARCHIVED for every role.
+         * @description Roles: all. The author is the caller. A comment can be written on a screen in any
+         *     status; only an archived application blocks it: when the application is archived it is
+         *     read-only (CP-01) and this operation returns 422 APPLICATION_ARCHIVED for every role.
+         *     The errors are checked in this order: 400, 404, 422 APPLICATION_ARCHIVED.
+         *
+         *     The text is stored as it arrives, without trimming; it must have at least one
+         *     character that is not whitespace (400 with rule `pattern` otherwise).
+         *
+         *     The 201 has no `Location` header, an exception to the convention of the API: a comment
+         *     has no address of its own (there is no `GET /comments/{id}`; the comments are read
+         *     in the list of their screen). It carries the `ETag` of the comment.
          */
         post: operations["createComment"];
         delete?: never;
@@ -828,11 +840,26 @@ export interface paths {
         get?: never;
         /**
          * Edit a comment
-         * @description Roles: the comment's author only. The previous text remains in the audit log.
-         *     When the application is archived it is read-only (CP-01): this operation
-         *     returns 422 APPLICATION_ARCHIVED for every role.
-         *     Review comments (reviewDecision not null, CP-11) are the record of the
-         *     decision and cannot be edited: 422 REVIEW_COMMENT_LOCKED.
+         * @description Roles: the comment's author only (`AUTHOR_ONLY`). The three roles may write comments,
+         *     so the role gate lets them through and the service compares the author. The previous
+         *     text remains in the audit log.
+         *
+         *     The errors are checked in this order: 400, 404, 403 (the caller is not the author:
+         *     FORBIDDEN with the message "You can only edit your own comments." and
+         *     `details.reason = "AUTHOR_ONLY"`), 422 APPLICATION_ARCHIVED (when the application is
+         *     archived it is read-only, CP-01, for every role), 412 and 422 REVIEW_COMMENT_LOCKED.
+         *     Review comments (`reviewDecision` not null, CP-11) are the record of the decision and
+         *     cannot be edited.
+         *
+         *     `If-Match` is optional. The tag of a comment is `W/"<epoch ms of updatedAt, or of
+         *     createdAt if updatedAt is null>"`, so a client can build `If-Match` from an item of
+         *     the list; it is compared inside the transaction and a mismatch is a 412 with
+         *     `details.currentETag`. `If-Match` is checked even when the text does not change. A
+         *     text equal to the stored one (compared exactly, spaces included) writes nothing: 200
+         *     with the same `ETag` and `updatedAt` unchanged.
+         *
+         *     The text is stored as it arrives, without trimming, and must have at least one
+         *     character that is not whitespace (400 with rule `pattern`).
          */
         put: operations["updateComment"];
         post?: never;
@@ -978,9 +1005,11 @@ export interface paths {
          *     `applicationId` is required, and one that does not exist (or is outside the
          *     `integer` range) is a 404.
          *
-         *     Text. `q` is optional (CP-03). It is trimmed before it is measured and must have
-         *     2 to 100 characters: one that is shorter once trimmed (for example only spaces) is a
-         *     400 with rule `minLength` on `q`. The search ignores case and accents: á, é, í, ó,
+         *     Text. `q` is optional (CP-03). As sent it has at most 100 characters (the validator
+         *     measures it before trimming, so a longer text is a 400 with rule `maxLength` even
+         *     when the excess is spaces); once trimmed it must have at least 2 (the service measures
+         *     it after trimming, so one that is shorter, for example only spaces, is a 400 with
+         *     rule `minLength` on `q`). The search ignores case and accents: á, é, í, ó,
          *     ú and ü match the vowel without the accent, in lower and upper case; ñ is not n.
          *     `%` and `_` are ordinary characters.
          *
@@ -1121,9 +1150,20 @@ export interface paths {
         put?: never;
         /**
          * Request a PDF report (FR-22)
-         * @description Roles: Administrator, Developer. Generation is asynchronous (NFR-12): the
-         *     report is saved with status PENDING and the client polls
-         *     `GET /reports/{id}` until READY or FAILED.
+         * @description Roles: Administrator, Developer. Generation is asynchronous (NFR-12): the request
+         *     only saves the report with status PENDING and answers 202, and the client polls
+         *     `GET /reports/{id}` at an interval of its own (the answer carries no `Retry-After`)
+         *     until the status is READY or FAILED. What the report contains, in which order, and
+         *     the rules of `scope` are described in `ReportRequest`. Every request creates a new
+         *     report: a failed one stays in the history and "generate again" is a new request with
+         *     the same parameters (D-55).
+         *
+         *     A report of an archived application can be requested (D-47). The errors are checked
+         *     in this order: 400, 404. The 400 comes from the validator or from the rules of
+         *     `scope` that the service applies (see `ReportRequest`). The 404 is for an application
+         *     that does not exist (also outside the `integer` range) or for a screen of
+         *     `scope.screenIds` that does not exist or belongs to another application
+         *     (`details.field` is its position).
          */
         post: operations["generatePdfReport"];
         delete?: never;
@@ -1143,7 +1183,14 @@ export interface paths {
         put?: never;
         /**
          * Request an Excel (.xlsx) report (FR-22)
-         * @description Roles: Administrator, Developer. Same behavior as the PDF report.
+         * @description Roles: Administrator, Developer. Same behavior, errors and order of errors as the
+         *     PDF report (`POST /reports/pdf`); the file is an Excel workbook (`.xlsx`) with one
+         *     sheet per part of the report.
+         *
+         *     Text in the workbook: every text value from the documentation is written as a
+         *     literal string cell, never as a formula; a value that begins with =, +, -, @, tab or
+         *     carriage return is forced to text. Numbers and dates are written as numbers and
+         *     dates.
          */
         post: operations["generateExcelReport"];
         delete?: never;
@@ -1161,7 +1208,14 @@ export interface paths {
         };
         /**
          * Saved reports
-         * @description Roles: Administrator, Developer (all); Reader (published only, enforced by the server).
+         * @description Roles: Administrator, Developer (all); Reader (published only, enforced by the
+         *     server: without `published` a Reader gets only the published reports, and
+         *     `published=false` gives a Reader an empty page, not an error, D-32). Newest first:
+         *     `createdAt` descending and then `id` descending, so the page is stable. Each item is
+         *     a `Report` without `parameters` (the detail has them, D-55). `published=false` for
+         *     an Administrator or a Developer lists the reports that are not published, whatever
+         *     their status. An `applicationId` that does not exist (or is outside the `integer`
+         *     range) is a 404. The `ETag` is a weak hash of the body.
          */
         get: operations["listReports"];
         put?: never;
@@ -1183,10 +1237,24 @@ export interface paths {
         };
         /**
          * Report status, metadata and generation parameters
-         * @description Roles: Administrator, Developer; Reader only if published (otherwise 404).
-         *     The detail includes `parameters` (format, scope, publish), stored in
-         *     `report.parameters` (CP-10), so "Generate again" can request a new report
-         *     with the same configuration. The list (`GET /reports`) does not include them.
+         * @description Roles: Administrator, Developer; Reader only if published. For a Reader, a report
+         *     that is not published answers exactly the same 404 as one that does not exist, so
+         *     its existence is not disclosed (D-32).
+         *
+         *     The detail includes `parameters` (`format`, `scope`, `publish`), stored in
+         *     `report.parameters` (CP-10), for every role that can read the report, so "generate
+         *     again" can request a new report with the same configuration. The list
+         *     (`GET /reports`) does not include them.
+         *
+         *     Polling. While the status is PENDING, `fileName`, `fileSize`, `completedAt`,
+         *     `publishedAt` and `errorMessage` are null and `isPublished` is false; `parameters.publish`
+         *     tells whether the report will be published when it is ready. When it is READY the file
+         *     data and `completedAt` are set and, if `parameters.publish` is true, `isPublished` is
+         *     true and `publishedAt` is set in the same update. When it is FAILED, `errorMessage` says
+         *     why (one of the texts listed in `Report`), the report is never published, and it stays in
+         *     the history.
+         *
+         *     The `ETag` is `W/"<epoch ms of updatedAt>"`.
          */
         get: operations["getReport"];
         put?: never;
@@ -1208,7 +1276,22 @@ export interface paths {
         };
         /**
          * Download the generated file
-         * @description Roles: as GET /reports/{id}. 409 REPORT_NOT_READY while PENDING or FAILED.
+         * @description Roles: as `GET /reports/{id}`. The errors are checked in this order: 400 (the `id`),
+         *     404 (the report does not exist, or the caller is a Reader and it is not published:
+         *     the same answer in both cases, D-32), 409 `REPORT_NOT_READY` (the report is PENDING or
+         *     FAILED, `details.status`), and then 304 or 200.
+         *
+         *     The content type follows the `format` of the report: `PDF` is sent as
+         *     `application/pdf` and `XLSX` as
+         *     `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`; the other type
+         *     is never sent for a report. `Content-Disposition` is `attachment; filename="<name>"`
+         *     with the `fileName` of the report as `<name>`, which is built when the report is
+         *     ready: the title in lowercase ASCII (accents removed, every run of characters other
+         *     than letters and digits replaced by one `-`, no `-` at the ends, at most 80
+         *     characters, `report` when nothing is left), then `-YYYY-MM-DD` (UTC date of
+         *     `completedAt`) and `.pdf` or `.xlsx`. It only has the characters `a-z`, `0-9`, `-` and
+         *     `.`, so it needs no quoting, no path separators and no `filename*` form. The `ETag` is
+         *     the one of the report, `W/"<epoch ms of updatedAt>"`.
          */
         get: operations["downloadReport"];
         put?: never;
@@ -1231,7 +1314,20 @@ export interface paths {
         get?: never;
         /**
          * Publish or unpublish a saved report
-         * @description Roles: Administrator, Developer. Only READY reports can be published.
+         * @description Roles: Administrator, Developer (a Reader gets 403 before anything else). Publishing
+         *     and unpublishing are allowed on a report of an archived application: a report is not
+         *     documentation (D-47).
+         *
+         *     The errors are checked in this order: 400, 404 (the report does not exist), 412
+         *     (`If-Match` is optional; when sent it is compared inside the transaction with the
+         *     `ETag` of the report and a mismatch is a 412 with `details.currentETag`), and 409
+         *     `REPORT_NOT_READY`: any PUT on a report that is PENDING or FAILED, also
+         *     `isPublished: false`, is a 409 with `details.status`.
+         *
+         *     Publishing sets `isPublished` to true and `publishedAt` to the current instant;
+         *     unpublishing sets `isPublished` to false and `publishedAt` to null (the audit log
+         *     keeps the history). A PUT with the value the report already has writes nothing: it
+         *     answers 200 with the same `ETag` and `updatedAt` (`If-Match` is still checked).
          */
         put: operations["setReportPublication"];
         post?: never;
@@ -1250,7 +1346,36 @@ export interface paths {
         };
         /**
          * Guided overview of an application for new developers (FR-25)
-         * @description Roles: all.
+         * @description Roles: all. Everything is read in one read-only snapshot and every list has a
+         *     deterministic order, so the `ETag` (a weak hash of the body) and the 304 are stable.
+         *     An `applicationId` that does not exist (or is outside the `integer` range) is a 404.
+         *     An archived application can be read.
+         *
+         *     - `counts`: screens (App (OnStart) included, as in the dashboard), variables (any
+         *       scope), collections and components of the application.
+         *     - `approvedPercent`: screens APPROVED over `counts.screens`, with one decimal, rounded
+         *       half up (as `documentation.approvedPercent` of the dashboard); 0 when there are no
+         *       screens.
+         *     - `appContextScreen`: the App (OnStart) screen with its status, Miro link and the seven
+         *       template fields. FR-25 takes the integration flow from its documentation.
+         *     - `keyScreens`: the main screens in suggested reading order, without App (OnStart).
+         *       `connections` of a screen is the number of different screens, variables and
+         *       collections that are its neighbors in the dependency graph through `ACCESSES`,
+         *       `CREATES` and `NAVIGATES_TO` edges (in either direction); `CONTAINS` edges are not
+         *       counted, and a neighbor linked several times counts once. The 10 screens with the
+         *       most connections are chosen (ties: name, then `id`). They are listed by `depth`
+         *       ascending, where `depth` is the least number of `NAVIGATES_TO` steps from App
+         *       (OnStart) (1 = reached directly from App (OnStart)); then by `connections`
+         *       descending, name and `id`. A screen that App (OnStart) does not reach has
+         *       `depth: null` and goes last.
+         *     - `globalVariables`: the 10 `GLOBAL` variables used by the most screens
+         *       (`usedByScreens` = different screens that read or write them, without the origin
+         *       row); ties: name, then `id`.
+         *     - `topComponents`: the 10 components that use the most variables and collections
+         *       (`uses` = number of `USES` dependencies whose source is the component, D-50), only
+         *       those with at least one; ties: component name, screen name, then `id`.
+         *
+         *     Names are compared by code point (collation "C"), as in the search.
          */
         get: operations["getOnboardingSummary"];
         put?: never;
@@ -1766,9 +1891,9 @@ export interface components {
             statusCategory: components["schemas"]["JiraStatusCategory"];
             /**
              * Format: uri
-             * @description Link to the issue in Jira Cloud: the base URL of Jira followed by /browse/<key>
+             * @description Link to the issue in Jira Cloud: the base URL of Jira followed by /browse/<key>. null when Jira has no base URL configured (the tree is then served from the local copy; a created ticket always has a link)
              */
-            url: string;
+            url: string | null;
             /** Format: date-time */
             lastSyncedAt: string;
         };
@@ -1837,14 +1962,22 @@ export interface components {
             };
         };
         CommentWrite: {
+            /** @description Stored as it arrives, without trimming. It needs at least one character that is not whitespace. */
             text: string;
         };
+        /**
+         * @description A comment of a screen. A review comment is a comment with a `reviewDecision`.
+         *
+         *     Its tag, in the `ETag` header of the 201 and of the edit, is `W/"<epoch ms of updatedAt,
+         *     or of createdAt if updatedAt is null>"`, so a client can build `If-Match` from an item of
+         *     the list. The list keeps its own tag, a weak hash of its body.
+         */
         Comment: {
             id: number;
             screenId: number;
             author: components["schemas"]["Ref"];
             text: string;
-            /** @description null = ordinary comment; APPROVE/RETURN = written by POST /screens/{id}/review (CP-11). Not accepted in CommentWrite. */
+            /** @description null = ordinary comment; APPROVE or RETURN = the comment of a review decision, written by POST /screens/{id}/review (CP-11) and never editable (422 REVIEW_COMMENT_LOCKED). Not accepted in CommentWrite. */
             readonly reviewDecision: components["schemas"]["ReviewDecision"] | null;
             /** Format: date-time */
             createdAt: string;
@@ -2089,11 +2222,13 @@ export interface components {
                     approvedPercent: number;
                 };
                 variables: {
+                    /** @description All the variables of the application, of any scope */
                     total: number;
                     /** @description Without origin screen */
                     untraced: number;
                 };
                 collections: {
+                    /** @description All the collections of the application */
                     total: number;
                     /** @description Not linked to any screen */
                     undocumented: number;
@@ -2175,49 +2310,131 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
+        /**
+         * @description What the report contains (FR-22). Besides the shape, the service applies these rules
+         *     and answers 400 `VALIDATION_ERROR` with the position of the item in `details.fields`:
+         *     - A repeated value in `elementTypes`, `screenIds` or `documentationStatus` is `unique`
+         *       on `scope.elementTypes[i]`, `scope.screenIds[i]` or `scope.documentationStatus[i]`
+         *       (`uniqueItems` is not used, so the position is reported).
+         *     - An empty `elementTypes` is valid only when `includeStatusSummary` is true; otherwise
+         *       it is `required` on `scope.elementTypes`.
+         *     - `screenIds` and `documentationStatus` apply to `SCREEN` and `COMPONENT` (a component
+         *       is listed with its screen). When `elementTypes` has neither, they are `notApplicable`
+         *       on `scope.screenIds` or `scope.documentationStatus`, with the message "<field> only
+         *       applies when SCREEN or COMPONENT is selected.". Variables and collections are not
+         *       filtered by them.
+         */
         ReportScope: {
+            /** @description Kinds of element to include. May be empty only together with `includeStatusSummary` true. */
             elementTypes: components["schemas"]["ElementType"][];
-            /** @description Empty = all screens */
+            /**
+             * @description Add the "Summary" part, the overall documentation status of the application (FR-22).
+             * @default false
+             */
+            includeStatusSummary: boolean;
+            /** @description Only these screens (and their components). Omitted = all screens. An empty list is a 400. */
             screenIds?: number[];
+            /** @description Only screens (and their components) in these statuses. Omitted = all statuses. An empty list is a 400. */
             documentationStatus?: components["schemas"]["DocumentationStatus"][];
-            /** @default false */
+            /**
+             * @description Add the "Dependencies" part with the edges of the dependency graph whose two ends are in the report.
+             * @default false
+             */
             includeDependencies: boolean;
         };
+        /**
+         * @description Request of a PDF or Excel report. `scope` is stored with the request and returned as
+         *     sent in `parameters`.
+         *
+         *     Contents. The same for both formats: in Excel each part is a sheet and in PDF a section,
+         *     in the order below and only the ones requested. The report is a snapshot of the
+         *     documentation taken when generation starts (one read-only transaction). Rows are ordered
+         *     by name compared by code point (collation "C", as in the search) and then by `id`,
+         *     unless a part says otherwise; environments are listed as `DEV, PROD`.
+         *     - Summary (`includeStatusSummary`): application, title, who generated it, when (UTC),
+         *       screens in total and in each of the five statuses (UNDOCUMENTED, DRAFT, IN_PROGRESS,
+         *       IN_REVIEW, APPROVED), the approved percentage (one decimal, rounded half up, App
+         *       (OnStart) included, as in the dashboard), variables (total, without origin screen)
+         *       and collections (total, not documented).
+         *     - Screens (`SCREEN`): name, status, author, last updated, Miro link and the seven
+         *       template fields.
+         *     - Components (`COMPONENT`): screen, name, control type, description and on-select
+         *       formula; ordered by screen name, component name and `id`.
+         *     - Variables (`VARIABLE`): name, data type, scope, origin screen, description and
+         *       environments.
+         *     - Collections (`COLLECTION`): name, creation condition, description, environments and
+         *       whether it is linked to a screen. Its fields follow as the "Collection fields" part:
+         *       collection, position, name, data type and description; ordered by collection name,
+         *       collection `id`, `position` and field `id`.
+         *     - Dependencies (`includeDependencies`): relation, source type and name, target type and
+         *       name, access mode, where it is used and assignment function; ordered by relation in
+         *       the order of the dependency graph (CONTAINS, CREATES, ACCESSES, FEEDS, USES,
+         *       DERIVES_FROM, NAVIGATES_TO) and then by the identifier of the edge, as
+         *       `GET /dependencies/graph` orders them.
+         *
+         *     Text in Excel: every text value from the documentation is written as a literal string
+         *     cell, never as a formula; a value that begins with =, +, -, @, tab or carriage return is
+         *     forced to text. Numbers and dates are written as numbers and dates.
+         */
         ReportRequest: {
             applicationId: number;
+            /** @description Stored as sent; it needs at least one character that is not whitespace */
             title: string;
             scope: components["schemas"]["ReportScope"];
-            /** @description Publish automatically when READY */
+            /** @description Publish automatically when the report is READY (it is never published if it fails) */
             publish: boolean;
         };
-        Report: {
+        /** @description The fields of a saved report. `Report` and `ReportDetail` close it. */
+        ReportCore: {
             id: number;
             applicationId: number;
             title: string;
             format: components["schemas"]["ReportFormat"];
             status: components["schemas"]["ReportStatus"];
+            /** @description Readers see only the published reports (D-32). true only when the status is READY */
             isPublished: boolean;
-            fileName?: string | null;
-            fileSize?: number | null;
-            errorMessage?: string | null;
+            /** @description Name of the file (see `GET /reports/{id}/file`); null until the report is READY. */
+            fileName: string | null;
+            /** @description Size of the file in bytes; null until the report is READY */
+            fileSize: number | null;
+            /**
+             * @description Why the report is FAILED, one of these four texts (never the text of an exception,
+             *     SQL or a trace; the detail is only in the server log). null in any other status.
+             * @enum {string|null}
+             */
+            errorMessage: "The report took too long to generate. Try again with a smaller selection." | "The report is too large. Select fewer elements and try again." | "A selected screen no longer exists. Select the screens again and try once more." | "The report couldn't be generated. Try again in a few minutes." | null;
             generatedBy: components["schemas"]["Ref"];
             /** Format: date-time */
             createdAt: string;
-            /** Format: date-time */
-            completedAt?: string | null;
-            /** Format: date-time */
-            publishedAt?: string | null;
+            /**
+             * Format: date-time
+             * @description Last change of the report; its epoch milliseconds are the ETag (`W/"<ms>"`)
+             */
+            updatedAt: string;
+            /**
+             * Format: date-time
+             * @description When the report became READY; null while PENDING and when FAILED
+             */
+            completedAt: string | null;
+            /**
+             * Format: date-time
+             * @description Set while the report is published; null when it is not
+             */
+            publishedAt: string | null;
         };
+        /** @description A saved report, as the list and the publication return it (without `parameters`). */
+        Report: components["schemas"]["ReportCore"];
         ReportEnvelope: {
             data: components["schemas"]["Report"];
         };
-        /** @description Generation parameters stored in report.parameters (CP-10) */
+        /** @description Generation parameters stored in report.parameters (CP-10), as requested */
         ReportParameters: {
             format: components["schemas"]["ReportFormat"];
             scope: components["schemas"]["ReportScope"];
             publish: boolean;
         };
-        ReportDetail: components["schemas"]["Report"] & {
+        /** @description A saved report with the parameters it was requested with (`GET /reports/{id}`). */
+        ReportDetail: components["schemas"]["ReportCore"] & {
             parameters: components["schemas"]["ReportParameters"];
         };
         ReportDetailEnvelope: {
@@ -2232,24 +2449,39 @@ export interface components {
                     collections: number;
                     components: number;
                 };
+                /** @description APPROVED over `counts.screens`, with one decimal (rounded half up); 0 without screens */
                 approvedPercent: number;
-                appContextScreen: components["schemas"]["Ref"];
-                /** @description Screens with most connections, approved first (suggested reading order) */
+                /** @description The App (OnStart) screen; its documentation is the integration flow (FR-25). */
+                appContextScreen: {
+                    id: number;
+                    name: string;
+                    documentationStatus: components["schemas"]["DocumentationStatus"];
+                    miroLink: string | null;
+                    template: components["schemas"]["ScreenTemplate"];
+                };
+                /** @description The main screens (most connections) in suggested reading order, without App (OnStart); see the operation. */
                 keyScreens: {
                     screen: components["schemas"]["Ref"];
                     documentationStatus: components["schemas"]["DocumentationStatus"];
+                    /** @description Different neighbors through ACCESSES, CREATES and NAVIGATES_TO edges */
                     connections: number;
-                    miroLink?: string | null;
+                    /** @description Least NAVIGATES_TO steps from App (OnStart); null when it does not reach the screen */
+                    depth: number | null;
+                    miroLink: string | null;
                 }[];
+                /** @description The GLOBAL variables used by the most screens. */
                 globalVariables: {
                     variable: components["schemas"]["Ref"];
                     dataType: components["schemas"]["DataType"];
                     originScreen: components["schemas"]["Ref"] | null;
+                    /** @description Different screens that read or write the variable, without the origin row */
+                    usedByScreens: number;
                 }[];
                 /**
                  * @description CP-05: components that use the most variables and collections, by `uses`
                  *     descending. `uses` = number of USES rows of `dependency` whose source is
-                 *     the component (component -> variable / collection).
+                 *     the component (component -> variable / collection). Components that use
+                 *     nothing are not listed.
                  */
                 topComponents: {
                     component: components["schemas"]["Ref"];
@@ -2398,16 +2630,6 @@ export interface components {
                 [name: string]: unknown;
             };
             content: {
-                /**
-                 * @example {
-                 *       "code": "PRECONDITION_FAILED",
-                 *       "message": "Someone else saved changes to this screen after you opened it. Reload to see their version.",
-                 *       "details": {
-                 *         "element": "screen",
-                 *         "currentETag": "W/\"1727548900456\""
-                 *       }
-                 *     }
-                 */
                 "application/json": components["schemas"]["Error"];
             };
         };
@@ -2470,15 +2692,49 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Report accepted and queued (NFR-12) */
+        /** @description Report accepted and queued (NFR-12). It is PENDING; `Location` is `GET /reports/{id}` and the `ETag` is the one of the report. There is no `Retry-After`. */
         ReportAccepted: {
             headers: {
                 Location: components["headers"]["Location"];
+                ETag: components["headers"]["ETag"];
                 "X-Request-Id": components["headers"]["XRequestId"];
                 [name: string]: unknown;
             };
             content: {
+                /**
+                 * @example {
+                 *       "data": {
+                 *         "id": 14,
+                 *         "applicationId": 1,
+                 *         "title": "Variables y colecciones de SAR",
+                 *         "format": "XLSX",
+                 *         "status": "PENDING",
+                 *         "isPublished": false,
+                 *         "fileName": null,
+                 *         "fileSize": null,
+                 *         "errorMessage": null,
+                 *         "generatedBy": {
+                 *           "id": 2,
+                 *           "name": "Camila Castillo"
+                 *         },
+                 *         "createdAt": "2026-11-14T16:20:00.000Z",
+                 *         "updatedAt": "2026-11-14T16:20:00.000Z",
+                 *         "completedAt": null,
+                 *         "publishedAt": null
+                 *       }
+                 *     }
+                 */
                 "application/json": components["schemas"]["ReportEnvelope"];
+            };
+        };
+        /** @description The report is not READY (it is PENDING or FAILED), so it can be neither downloaded nor published or unpublished */
+        ReportNotReady: {
+            headers: {
+                "X-Request-Id": components["headers"]["XRequestId"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
             };
         };
         /** @description Request body larger than allowed */
@@ -2525,6 +2781,7 @@ export interface components {
         /**
          * @description Weak validator. A single resource with `updatedAt` sends one derived from it (`W/"<updatedAt ms>"`);
          *     a screen also appends its `pendingSubtasks` and `commentCount` (`W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"`);
+         *     a saved report sends `W/"<updatedAt ms>"` and a comment `W/"<ms of updatedAt, or of createdAt if updatedAt is null>"`;
          *     listings and other responses send a weak hash of the body.
          */
         ETag: string;
@@ -3843,6 +4100,7 @@ export interface operations {
                 };
             };
             304: components["responses"]["NotModified"];
+            400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
         };
@@ -3867,14 +4125,30 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Created */
+            /** @description Created (no `Location`, because a comment has no address of its own) */
             201: {
                 headers: {
-                    Location: components["headers"]["Location"];
+                    ETag: components["headers"]["ETag"];
                     "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "id": 31,
+                     *         "screenId": 7,
+                     *         "author": {
+                     *           "id": 3,
+                     *           "name": "Ana Torres"
+                     *         },
+                     *         "text": "El filtro por estado no considera las solicitudes anuladas.",
+                     *         "reviewDecision": null,
+                     *         "createdAt": "2026-11-12T09:00:00.000Z",
+                     *         "updatedAt": null
+                     *       }
+                     *     }
+                     */
                     "application/json": components["schemas"]["CommentEnvelope"];
                 };
             };
@@ -3887,7 +4161,14 @@ export interface operations {
     updateComment: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
+                 *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
+                 *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+                 */
+                "If-Match"?: components["parameters"]["IfMatch"];
+            };
             path: {
                 id: components["parameters"]["Id"];
             };
@@ -3895,17 +4176,39 @@ export interface operations {
         };
         requestBody: {
             content: {
+                /**
+                 * @example {
+                 *       "text": "El filtro por estado no considera las solicitudes anuladas ni las vencidas."
+                 *     }
+                 */
                 "application/json": components["schemas"]["CommentWrite"];
             };
         };
         responses: {
-            /** @description Updated */
+            /** @description Updated (the `ETag` is that of the comment after the change) */
             200: {
                 headers: {
+                    ETag: components["headers"]["ETag"];
                     "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "id": 31,
+                     *         "screenId": 7,
+                     *         "author": {
+                     *           "id": 3,
+                     *           "name": "Ana Torres"
+                     *         },
+                     *         "text": "El filtro por estado no considera las solicitudes anuladas ni las vencidas.",
+                     *         "reviewDecision": null,
+                     *         "createdAt": "2026-11-12T09:00:00.000Z",
+                     *         "updatedAt": "2026-11-12T09:20:00.000Z"
+                     *       }
+                     *     }
+                     */
                     "application/json": components["schemas"]["CommentEnvelope"];
                 };
             };
@@ -3913,6 +4216,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            412: components["responses"]["PreconditionFailed"];
             422: components["responses"]["RuleViolation"];
         };
     };
@@ -4038,7 +4342,7 @@ export interface operations {
             query: {
                 /** @description Application whose elements are listed (NFR-16). */
                 applicationId: components["parameters"]["ApplicationId"];
-                /** @description Text to search (2 to 100 characters once trimmed). Optional when at least one filter is sent. */
+                /** @description Text to search: at most 100 characters as sent (measured before trimming) and at least 2 once trimmed. Optional when at least one filter is sent. */
                 q?: string;
                 /** @description Element types to search (comma-separated). Omitted = all four. */
                 types?: components["schemas"]["ElementType"][];
@@ -4114,6 +4418,13 @@ export interface operations {
     listAuditLog: {
         parameters: {
             query?: {
+                /**
+                 * @description Only the records of this application. It is a filter, not a parent: one that does not exist
+                 *     gives an empty page. Limitation: a row deleted in cascade along with its element (for
+                 *     example the comments, links and tickets of a deleted screen) can be recorded without an
+                 *     application, so this filter does not return it; it is found by `entityType` and
+                 *     `entityId` or by date, and the record of the deleted element itself does appear.
+                 */
                 applicationId?: number;
                 entityType?: components["schemas"]["AuditEntityType"];
                 /** @description Identifier of the element, as text (it can be composite, such as `12:DEV`). Requires `entityType`. */
@@ -4164,24 +4475,6 @@ export interface operations {
         };
         requestBody: {
             content: {
-                /**
-                 * @example {
-                 *       "applicationId": 1,
-                 *       "title": "Documentación de SAR - octubre 2026",
-                 *       "scope": {
-                 *         "elementTypes": [
-                 *           "SCREEN",
-                 *           "VARIABLE",
-                 *           "COLLECTION"
-                 *         ],
-                 *         "documentationStatus": [
-                 *           "APPROVED"
-                 *         ],
-                 *         "includeDependencies": true
-                 *       },
-                 *       "publish": true
-                 *     }
-                 */
                 "application/json": components["schemas"]["ReportRequest"];
             };
         };
@@ -4190,6 +4483,7 @@ export interface operations {
             400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     generateExcelReport: {
@@ -4201,6 +4495,19 @@ export interface operations {
         };
         requestBody: {
             content: {
+                /**
+                 * @example {
+                 *       "applicationId": 1,
+                 *       "title": "Variables y colecciones de SAR",
+                 *       "scope": {
+                 *         "elementTypes": [
+                 *           "VARIABLE",
+                 *           "COLLECTION"
+                 *         ]
+                 *       },
+                 *       "publish": false
+                 *     }
+                 */
                 "application/json": components["schemas"]["ReportRequest"];
             };
         };
@@ -4209,6 +4516,7 @@ export interface operations {
             400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     listReports: {
@@ -4216,6 +4524,7 @@ export interface operations {
             query: {
                 /** @description Application whose elements are listed (NFR-16). */
                 applicationId: components["parameters"]["ApplicationId"];
+                /** @description true = only published reports; false = only reports that are not published. Omitted = both (Readers still get only the published ones). */
                 published?: boolean;
                 page?: components["parameters"]["Page"];
                 pageSize?: components["parameters"]["PageSize"];
@@ -4245,6 +4554,7 @@ export interface operations {
             304: components["responses"]["NotModified"];
             400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
         };
     };
     getReport: {
@@ -4291,9 +4601,10 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description File */
+            /** @description The file; its content type is the one of the `format` of the report */
             200: {
                 headers: {
+                    /** @description attachment; filename="<fileName of the report>" */
                     "Content-Disposition"?: string;
                     ETag: components["headers"]["ETag"];
                     "X-Request-Id": components["headers"]["XRequestId"];
@@ -4305,15 +4616,23 @@ export interface operations {
                 };
             };
             304: components["responses"]["NotModified"];
+            400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            409: components["responses"]["ReportNotReady"];
         };
     };
     setReportPublication: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
+                 *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
+                 *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+                 */
+                "If-Match"?: components["parameters"]["IfMatch"];
+            };
             path: {
                 id: components["parameters"]["Id"];
             };
@@ -4332,13 +4651,37 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Updated */
+            /** @description Updated (the `ETag` is that of the report after the change) */
             200: {
                 headers: {
+                    ETag: components["headers"]["ETag"];
                     "X-Request-Id": components["headers"]["XRequestId"];
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "id": 12,
+                     *         "applicationId": 1,
+                     *         "title": "Documentación de SAR - octubre 2026",
+                     *         "format": "PDF",
+                     *         "status": "READY",
+                     *         "isPublished": true,
+                     *         "fileName": "documentacion-de-sar-octubre-2026-2026-11-14.pdf",
+                     *         "fileSize": 482113,
+                     *         "errorMessage": null,
+                     *         "generatedBy": {
+                     *           "id": 2,
+                     *           "name": "Camila Castillo"
+                     *         },
+                     *         "createdAt": "2026-11-14T15:30:00.000Z",
+                     *         "updatedAt": "2026-11-14T17:00:00.000Z",
+                     *         "completedAt": "2026-11-14T15:31:00.000Z",
+                     *         "publishedAt": "2026-11-14T17:00:00.000Z"
+                     *       }
+                     *     }
+                     */
                     "application/json": components["schemas"]["ReportEnvelope"];
                 };
             };
@@ -4346,25 +4689,8 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description The report is not READY */
-            409: {
-                headers: {
-                    "X-Request-Id": components["headers"]["XRequestId"];
-                    [name: string]: unknown;
-                };
-                content: {
-                    /**
-                     * @example {
-                     *       "code": "REPORT_NOT_READY",
-                     *       "message": "Only ready reports can be published or downloaded.",
-                     *       "details": {
-                     *         "status": "PENDING"
-                     *       }
-                     *     }
-                     */
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
+            409: components["responses"]["ReportNotReady"];
+            412: components["responses"]["PreconditionFailed"];
         };
     };
     getOnboardingSummary: {
@@ -4390,12 +4716,101 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "application": {
+                     *           "id": 1,
+                     *           "name": "SAR"
+                     *         },
+                     *         "counts": {
+                     *           "screens": 24,
+                     *           "variables": 40,
+                     *           "collections": 9,
+                     *           "components": 130
+                     *         },
+                     *         "approvedPercent": 41.7,
+                     *         "appContextScreen": {
+                     *           "id": 1,
+                     *           "name": "App (OnStart)",
+                     *           "documentationStatus": "APPROVED",
+                     *           "miroLink": "https://miro.com/app/board/uXjVSAR=/",
+                     *           "template": {
+                     *             "onStart": "Carga el usuario actual y las colecciones de catálogo.",
+                     *             "workingProcess": null,
+                     *             "architecture": null,
+                     *             "dataModel": null,
+                     *             "requirements": null,
+                     *             "knownIssues": null,
+                     *             "risks": null
+                     *           }
+                     *         },
+                     *         "keyScreens": [
+                     *           {
+                     *             "screen": {
+                     *               "id": 3,
+                     *               "name": "Inicio"
+                     *             },
+                     *             "documentationStatus": "APPROVED",
+                     *             "connections": 14,
+                     *             "depth": 1,
+                     *             "miroLink": null
+                     *           },
+                     *           {
+                     *             "screen": {
+                     *               "id": 7,
+                     *               "name": "Solicitudes"
+                     *             },
+                     *             "documentationStatus": "IN_REVIEW",
+                     *             "connections": 21,
+                     *             "depth": 2,
+                     *             "miroLink": "https://miro.com/app/board/uXjVSAR=/?moveToWidget=7"
+                     *           },
+                     *           {
+                     *             "screen": {
+                     *               "id": 19,
+                     *               "name": "Administración"
+                     *             },
+                     *             "documentationStatus": "DRAFT",
+                     *             "connections": 6,
+                     *             "depth": null,
+                     *             "miroLink": null
+                     *           }
+                     *         ],
+                     *         "globalVariables": [
+                     *           {
+                     *             "variable": {
+                     *               "id": 11,
+                     *               "name": "gUsuarioActual"
+                     *             },
+                     *             "dataType": "RECORD",
+                     *             "originScreen": null,
+                     *             "usedByScreens": 18
+                     *           }
+                     *         ],
+                     *         "topComponents": [
+                     *           {
+                     *             "component": {
+                     *               "id": 88,
+                     *               "name": "galSolicitudes"
+                     *             },
+                     *             "screen": {
+                     *               "id": 7,
+                     *               "name": "Solicitudes"
+                     *             },
+                     *             "uses": 5
+                     *           }
+                     *         ]
+                     *       }
+                     *     }
+                     */
                     "application/json": components["schemas"]["OnboardingEnvelope"];
                 };
             };
             304: components["responses"]["NotModified"];
             400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
         };
     };
     receiveJiraWebhook: {
