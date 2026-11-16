@@ -6,7 +6,8 @@
 // (a read is in flight), error (the failed read), showSkeleton / isSlow (Table 58), publishedOnly + counts (the filter and its
 // numbers, null when unknown), page, pageSize, timeZone, timedOut / publishing / downloading / regenerating (ids), writeBlockReason
 // (offline), notice (the banner: a 412 offers "Reload", the rest can be dismissed), the handlers, and children (the dialog).
-// Layout (SDD 7.3.7): the cards are in one, two or three columns by the width of the page (container query).
+// Layout (SDD 7.3.7): the cards are in one, two or three columns by the width of the page (container query). The title has no
+// icon tile and a list of 12 or fewer has no pagination row, as in S-33.
 import { FileText, Plus } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -26,7 +27,7 @@ import {
 } from '../../components/ui';
 
 import { ReportCard } from './ReportCard';
-import { PAGE_SIZES, type Report } from './reportModel';
+import { PAGE_SIZE, PAGE_SIZES, type Report } from './reportModel';
 import type { ReportProblem } from './reportProblem';
 import {
   EMPTY_PUBLISHED_TEXT,
@@ -80,7 +81,6 @@ export interface ReportsViewProps {
   children?: ReactNode;
 }
 
-const ICON = { size: 20, strokeWidth: ICON_STROKE_WIDTH } as const;
 const GRID = 'grid grid-cols-1 gap-4 @min-[700px]:grid-cols-2 @min-[1000px]:grid-cols-3';
 
 const withCount = (label: string, count: number | null | undefined) =>
@@ -176,15 +176,18 @@ export function ReportsView(props: ReportsViewProps) {
             />
           ))}
         </ul>
-        <Pagination
-          page={props.page}
-          pageSize={props.pageSize}
-          total={props.total}
-          pageSizes={PAGE_SIZES}
-          onPageChange={props.onPageChange}
-          onPageSizeChange={props.onPageSizeChange}
-          disabled={props.loading}
-        />
+        {/* As in the frames, a list that fits in one page of the smallest size has no pagination row. */}
+        {props.total > PAGE_SIZE && (
+          <Pagination
+            page={props.page}
+            pageSize={props.pageSize}
+            total={props.total}
+            pageSizes={PAGE_SIZES}
+            onPageChange={props.onPageChange}
+            onPageSizeChange={props.onPageSizeChange}
+            disabled={props.loading}
+          />
+        )}
       </>
     );
   }
@@ -197,7 +200,6 @@ export function ReportsView(props: ReportsViewProps) {
   return (
     <div className="@container flex flex-col gap-4">
       <PageHeader
-        icon={<FileText {...ICON} />}
         title={REPORTS_TITLE}
         description={pageDescription(applicationName, reader)}
         actions={

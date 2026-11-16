@@ -184,6 +184,14 @@ describe('reports: the list as an Administrator', () => {
     ]);
   });
 
+  it('has no pagination row when the whole list fits in one page, as in the frames', async () => {
+    await renderReports({ reports: sample() });
+
+    expect(await screen.findAllByRole('heading', { level: 3 })).toHaveLength(5);
+    expect(screen.queryByText(/Showing/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Rows per page')).not.toBeInTheDocument();
+  });
+
   it('shows the server error state with a retry when the list cannot be read', async () => {
     const user = setupUser();
     await renderReports({

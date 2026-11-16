@@ -120,6 +120,7 @@ export function ReportsPreview() {
   });
   const [generating, setGenerating] = useState(params.get('dialog') === '1');
   const nextId = useRef(100);
+  const toastShown = useRef(false);
 
   const client = {
     get: (_path: string, options?: { query?: { q?: string } }) => {
@@ -148,6 +149,9 @@ export function ReportsPreview() {
 
   // The toasts of the frames, kept on screen so they can be photographed.
   useEffect(() => {
+    // The development server runs every effect twice: the toast is shown once.
+    if (toastShown.current) return;
+    toastShown.current = true;
     const kind = params.get('toast');
     if (kind === 'ready') {
       toast.show({
