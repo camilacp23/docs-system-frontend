@@ -5,6 +5,8 @@
 //   running   the key of the action in flight (every action is disabled meanwhile, so two cannot overlap)
 //   problem   what the page shows when the change did not happen: { kind: 'conflict' | 'message', text }, the text from
 //             the catalog by `code` (never the server message)
+// Submitting and withdrawing move a screen into or out of review, so they also tell the menu to read its Review counter
+// again (notifyReviewChanged).
 // On success the detail takes the answer and its new ETag (`apply`, no second read), a toast tells what happened
 // ("<name> submitted for review.") and `onDone` runs (the page moves the focus: the button that was pressed may be gone).
 // Errors, by code:
@@ -18,6 +20,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { isApiError, type ApiError } from '../../api/ApiError';
 import { getErrorMessage, getThrownMessage } from '../../api/messages';
 import { useApi } from '../../api/useApi';
+import { notifyReviewChanged } from '../../application/useReviewCount';
 import { useToast } from '../../components/ui';
 
 import type { Screen } from './screenTypes';
@@ -63,6 +66,7 @@ export function useScreenStatusChange(options: Options) {
           ifMatch: etag ?? undefined,
         });
         apply(result.body.data, result.etag);
+        if (action.key === 'submit' || action.key === 'withdraw') notifyReviewChanged();
         toast.show({ message: workflowToast(action.key, screen.name) });
         onDone?.();
       } catch (thrown) {

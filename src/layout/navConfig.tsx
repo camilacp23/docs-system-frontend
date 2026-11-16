@@ -21,6 +21,9 @@ import type { ReactNode } from 'react';
 import { canAccessPath, type Role } from '../app/router/routes';
 import { ICON_STROKE_WIDTH } from '../components/ui';
 
+/** The route of the Review item: the sidebar draws the number of screens in review on it. */
+export const REVIEW_PATH = '/review';
+
 export interface NavItem {
   to: string;
   label: string;
@@ -57,7 +60,7 @@ const NAV_GROUPS: readonly NavGroup[] = [
   {
     section: 'Control',
     items: [
-      { to: '/review', label: 'Review', icon: <ClipboardCheck {...iconProps} /> },
+      { to: REVIEW_PATH, label: 'Review', icon: <ClipboardCheck {...iconProps} /> },
       { to: '/audit', label: 'Audit log', icon: <History {...iconProps} /> },
     ],
   },

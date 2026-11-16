@@ -93,15 +93,16 @@ describe('screen list', () => {
     await table();
 
     expect(await screen.findByText(/5 screens · 1 approved/)).toBeInTheDocument();
-    // The two counts of the subtitle (the application card reads its own total, D-98).
-    expect(
-      api
-        .callsTo('GET /screens')
-        .filter((c) => c.options.query?.pageSize === 1 && c.options.query.documentationStatus),
-    ).toHaveLength(1);
-    expect(api.callsTo('GET /screens').filter((c) => c.options.query?.pageSize === 1)).toHaveLength(
-      3,
+    // The two counts of the subtitle (the application card reads its own total, D-98, and the Review item of the menu
+    // reads the screens In review).
+    const light = api.callsTo('GET /screens').filter((c) => c.options.query?.pageSize === 1);
+    expect(light.filter((c) => c.options.query?.documentationStatus === 'APPROVED')).toHaveLength(
+      1,
     );
+    expect(light.filter((c) => c.options.query?.documentationStatus === 'IN_REVIEW')).toHaveLength(
+      1,
+    );
+    expect(light).toHaveLength(4);
   });
 
   it('keeps the counts when the application is archived and adds the reason after them', async () => {
