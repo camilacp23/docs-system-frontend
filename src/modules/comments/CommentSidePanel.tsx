@@ -75,7 +75,9 @@ export function CommentSidePanel({
               className="flex items-center gap-2.5 border-t border-divider py-2 first:border-t-0"
             >
               <Avatar name={person.name} decorative className="size-7" />
-              <span className="min-w-0 flex-1 truncate text-label text-ink-900">{person.name}</span>
+              <span className="min-w-0 flex-1 text-label break-words text-ink-900">
+                {person.name}
+              </span>
               {person.tag !== null && <Tag>{person.tag}</Tag>}
             </li>
           ))}

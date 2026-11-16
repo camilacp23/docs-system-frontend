@@ -201,6 +201,18 @@ describe('the side panel "About this discussion"', () => {
     ).toBeVisible();
   });
 
+  it('lets a long name wrap next to its tag instead of cutting it with an ellipsis', async () => {
+    const long = 'Maria del Carmen Perez Rodriguez de la Vega';
+    await openComments({
+      comments: [makeComment(1, { author: { id: 9, name: long }, reviewDecision: 'RETURN' })],
+    });
+
+    const panel = await screen.findByRole('complementary', { name: 'About this discussion' });
+    const name = within(panel).getByText(long, { selector: 'span' });
+    expect(name).not.toHaveClass('truncate');
+    expect(name).toHaveClass('break-words');
+  });
+
   it('counts the screen author as a participant even before anyone has commented', async () => {
     await openComments({ comments: [] });
 

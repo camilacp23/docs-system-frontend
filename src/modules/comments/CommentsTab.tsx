@@ -70,7 +70,7 @@ export function CommentsTab({ screen, onCountChange }: CommentsTabProps) {
   const ready = thread.status === 'ready';
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,20rem)] items-start gap-4">
+    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,20rem)] items-stretch gap-4">
       <section
         aria-label="Discussion"
         className="flex min-h-96 flex-col gap-4 rounded-card border border-border-subtle bg-surface p-5 shadow-card"
