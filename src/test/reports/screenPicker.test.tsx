@@ -227,6 +227,28 @@ describe('screen selector', () => {
     expect(outer).not.toHaveBeenCalled();
   });
 
+  it('keeps the list at 80 px with its own scroll, and the keyboard reaches and toggles its checkboxes', async () => {
+    const user = setupUser();
+    const { onChange } = setup();
+    await user.click(screen.getByRole('button', { name: /All screens/ }));
+    await screen.findByRole('checkbox', { name: 'Screen 01' });
+
+    const list = screen.getByRole('list', { name: 'Screens to include' });
+    expect(list).toHaveClass('max-h-20', 'overflow-y-auto');
+    // From the search box Tab goes into the list, and Space chooses.
+    screen.getByRole('textbox', { name: 'Search screens' }).focus();
+    await user.tab();
+    expect(screen.getByRole('checkbox', { name: 'Screen 01' })).toHaveFocus();
+    await user.keyboard(' ');
+    await user.tab();
+    await user.keyboard(' ');
+
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 100, name: 'Screen 01' },
+      { id: 101, name: 'Screen 02' },
+    ]);
+  });
+
   it('shows a refused read with its catalog text', async () => {
     const user = setupUser();
     const { api } = setup(names(3));

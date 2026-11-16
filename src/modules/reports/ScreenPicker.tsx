@@ -5,7 +5,8 @@
 // describedBy (id of the error / help text), labelledBy (id of the label of the field; the button is named by it and by
 // its own text), id (of the button that opens the list).
 // Closed it looks like the select of the frame ("All screens", or "3 screens selected") and the chosen screens are chips
-// under it, kept while the search changes. Open, it shows a search box and the matches as checkboxes. Up to 500 screens
+// under it, kept while the search changes. Open, it shows a search box and the matches as checkboxes in a list of at most 80 px
+// that scrolls inside itself (the dialog never grows past the window); the keyboard moves through the checkboxes with Tab. Up to 500 screens
 // (the contract's limit): a 501st is refused with a message. Escape closes the list and returns to the button, without
 // closing the dialog. Nothing is read from the API until the list is opened.
 import { ChevronDown, X } from 'lucide-react';
@@ -154,7 +155,7 @@ export function ScreenPicker({
               setTyped(event.target.value);
             }}
           />
-          <ul aria-label={SCREEN_LIST_LABEL} className="flex max-h-56 flex-col overflow-y-auto">
+          <ul aria-label={SCREEN_LIST_LABEL} className="flex max-h-20 flex-col overflow-y-auto">
             {results.items.map((screen) => (
               <li key={screen.id} className="px-1 py-1">
                 <Checkbox
@@ -167,7 +168,7 @@ export function ScreenPicker({
               </li>
             ))}
           </ul>
-          <div role="status" className="px-1 text-small text-ink-500">
+          <div role="status" className="px-1 text-small text-ink-500 empty:hidden">
             {results.status === 'loading' && SCREEN_LOADING_TEXT}
             {results.status === 'error' && results.error && (getErrorMessage(results.error) ?? '')}
             {results.status === 'ready' && results.items.length === 0 && SCREEN_NONE_TEXT}
