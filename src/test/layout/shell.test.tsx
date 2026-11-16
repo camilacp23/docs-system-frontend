@@ -92,7 +92,8 @@ describe('sidebar', () => {
   it('does not render the items that depend on modules that do not exist yet', async () => {
     await renderApp();
     await navLinks();
-    for (const text of ['Jira connected', 'Collapse', /Search screens/, 'Ctrl K']) {
+    // The quick search (S-30) has its module now: its tests are in quickSearch.test.tsx.
+    for (const text of ['Jira connected', 'Collapse']) {
       expect(screen.queryByText(text)).not.toBeInTheDocument();
     }
     expect(screen.queryByRole('button', { name: 'Help' })).not.toBeInTheDocument();
@@ -183,7 +184,9 @@ describe('offline strip (S-46)', () => {
     act(() => {
       fireEvent(window, new Event('offline'));
     });
-    const strip = await screen.findByRole('alert');
+    // The page behind (the dashboard over the minimal fake) may show an alert of its own: the strip is the one that
+    // says the browser is offline.
+    const strip = (await screen.findByText(/You're offline/)).closest('[role="alert"]');
     expect(strip).toHaveTextContent(
       "You're offline. Changes can't be saved until the connection is back.",
     );

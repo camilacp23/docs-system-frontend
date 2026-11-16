@@ -69,6 +69,15 @@ export function checkReviewBody(body: unknown): ReviewBody {
   return { decision: 'APPROVE', comment: comment };
 }
 
+/**
+ * D-101: If-Match compares only the `updatedAt` part of the screen's tag. The fake tags a screen W/"<version>" and, once a
+ * comment has been written, W/"<version>-<comments written>"; the counter is not part of what an edit compares.
+ */
+export function sameScreenVersion(sent: string, current: string): boolean {
+  const base = (tag: string) => tag.replace(/-\d+"$/, '"');
+  return base(sent) === base(current);
+}
+
 function archived(env: ScreenStatusEnv): void {
   if (env.application.archived) throw new ApiError({ status: 422, code: 'APPLICATION_ARCHIVED' });
 }
@@ -81,7 +90,7 @@ export function applyStatusChange(
   ifMatch: string | undefined,
 ): Screen {
   archived(env);
-  if (ifMatch !== undefined && ifMatch !== env.etagOf(current.id)) {
+  if (ifMatch !== undefined && !sameScreenVersion(ifMatch, env.etagOf(current.id))) {
     throw new ApiError({
       status: 412,
       code: 'PRECONDITION_FAILED',

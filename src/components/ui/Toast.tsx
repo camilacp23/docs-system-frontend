@@ -1,4 +1,4 @@
-// Toast: ToastProvider renders the toast stack (top-right) and exposes useToast() (see toastContext.ts);
+// Toast: ToastProvider renders the toast stack (bottom-right, as in S-33, P-04, P-06 and S-43a) and exposes useToast() (see toastContext.ts);
 // ToastCard is the presentational card (also used statically in /dev/ui).
 // ToastProvider props: children. Toasts auto-close (default tone: 5 s), pause while hovered or focused, and may
 // carry one action (link or button). The warning tone is persistent and dismissible (S-43a, session ending).
@@ -178,7 +178,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <section
         aria-label="Notifications"
-        className="pointer-events-none fixed top-6 right-6 z-50 flex max-w-[calc(100vw-3rem)] flex-col items-end gap-3"
+        className="pointer-events-none fixed right-6 bottom-6 z-50 flex max-w-[calc(100vw-3rem)] flex-col items-end gap-3"
       >
         {toasts.map((toast) => (
           <ToastView key={toast.id} toast={toast} onDismiss={dismiss} />

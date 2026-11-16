@@ -37,6 +37,13 @@ describe('Toast', () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
+
+  it('is placed at the bottom right of the window, as in the frames (S-33, P-04, P-06, S-43a)', () => {
+    setup({ message: 'Variable saved.' }).show();
+    const stack = screen.getByRole('region', { name: 'Notifications' });
+    expect(stack).toHaveClass('fixed', 'right-6', 'bottom-6');
+    expect(stack).not.toHaveClass('top-6');
+  });
   afterEach(() => {
     vi.useRealTimers();
   });
@@ -145,8 +152,6 @@ describe('Toast', () => {
   });
 
   it('throws when useToast is used outside the provider', () => {
-    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     expect(() => render(<Trigger options={{ message: 'x' }} />)).toThrow(/ToastProvider/);
-    error.mockRestore();
   });
 });

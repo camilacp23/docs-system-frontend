@@ -1,5 +1,6 @@
 // nodeLinks: where a node of the map leads (FR-16).
-// nodeHref(node) -> the route of the page of the element:
+// elementHref(target) -> the route of the page of an element; the map and the advanced search both use it, so where
+// each type leads is written once. nodeHref(node) -> the same for a node of the map:
 //   variable   /variables/:id        collection /collections/:id       screen /screens/:id
 //   component  /screens/:screenId?tab=<COMPONENTS_TAB>  (D-102): a component has no page of its own, so it leads to
 //              the "Components & navigation" tab of its screen, using the `screenId` of the node itself, which is there
@@ -12,17 +13,29 @@ import { isHttpsUrl } from '../screens/httpsUrl';
 
 import type { GraphNode } from './graphTypes';
 
-export function nodeHref(node: GraphNode): string {
-  switch (node.type) {
+/** The element a link leads to: a component has no page of its own, so it is identified by its screen. */
+export type ElementTarget =
+  | { type: 'SCREEN' | 'VARIABLE' | 'COLLECTION'; id: number }
+  | { type: 'COMPONENT'; screenId: number };
+
+/** The route of the page of an element; the one place that knows where each type leads (the map and the search use it). */
+export function elementHref(target: ElementTarget): string {
+  switch (target.type) {
     case 'SCREEN':
-      return `/screens/${node.id}`;
+      return `/screens/${target.id}`;
     case 'VARIABLE':
-      return `/variables/${node.id}`;
+      return `/variables/${target.id}`;
     case 'COLLECTION':
-      return `/collections/${node.id}`;
+      return `/collections/${target.id}`;
     case 'COMPONENT':
-      return `/screens/${node.screenId}?tab=${COMPONENTS_TAB}`;
+      return `/screens/${target.screenId}?tab=${COMPONENTS_TAB}`;
   }
+}
+
+export function nodeHref(node: GraphNode): string {
+  return node.type === 'COMPONENT'
+    ? elementHref({ type: 'COMPONENT', screenId: node.screenId })
+    : elementHref({ type: node.type, id: node.id });
 }
 
 export function nodeOpenLabel(node: GraphNode): string {

@@ -105,6 +105,25 @@ describe('Future to do: the tree', () => {
     expect(screen.queryByRole('link', { name: /TECHEA-101/ })).not.toBeInTheDocument();
   });
 
+  it('hides the link to Jira when the API sends url: null (Jira without a base URL) and logs nothing', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await open({
+      prepare: (api) => {
+        api.jira.tickets = sampleJiraTickets(12).map((ticket) => ({ ...ticket, url: null }));
+      },
+    });
+    const tree = await table();
+
+    // The tree is complete: only the links are gone.
+    expect(within(tree).getByText('TECHEA-103')).toBeInTheDocument();
+    expect(screen.getByText('TECHEA-101')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Open in Jira/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Open in Jira')).not.toBeInTheDocument();
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(consoleWarn).not.toHaveBeenCalled();
+  });
+
   it('shows the pending to-dos and the date of the last synchronization', async () => {
     await open();
     await table();

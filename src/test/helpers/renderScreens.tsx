@@ -2,10 +2,11 @@
 // S-18 / S-19: the screens App (OnStart) (Reserved, In progress), Detalle (In review), Inicio (Approved), Busqueda
 // (Draft) and Reportes (Undocumented), over the variables and collections of renderVariables / renderCollections.
 // Detalle has a full detail (template 5 of 7, components, links with an origin row, a navigation).
-// Options: role, path, applications, plus `screens` (full screens) and `variables` to replace the sample data and `prepare` to arm
+// Options: role, path, applications, `comments`, plus `screens` (full screens) and `variables` to replace the sample data and `prepare` to arm
 // failures or holds before the first read. Returns what renderApp returns plus `api`.
 import type { Application } from '../../application/ApplicationContext';
 import type { Role } from '../../app/router/routes';
+import type { ScreenComment } from '../../modules/comments/commentTypes';
 import type { Screen } from '../../modules/screens/screenTypes';
 import type { Variable } from '../../modules/variables/variableTypes';
 
@@ -146,6 +147,8 @@ export interface RenderScreensOptions {
   path?: string;
   applications?: Application[];
   screens?: Screen[];
+  /** The comments the API serves (default: none). */
+  comments?: ScreenComment[];
   /** Replaces the sample variables (their origin screens decide what a deletion leaves without origin). */
   variables?: Variable[];
   /** Runs on the fake API before the first render, to arm failures or holds for the first reads. */
@@ -164,6 +167,7 @@ export async function renderScreens(options: RenderScreensOptions = {}) {
         screenDetails: screens,
         collections: sampleCollections(),
         variables: options.variables ?? sampleVariables(),
+        comments: options.comments,
       });
       options.prepare?.(api);
       return api.client;

@@ -7,7 +7,12 @@ import {
   nodeAriaLabel,
   truncateName,
 } from '../../modules/dependency-map/nodeLabels';
-import { miroHrefOf, nodeHref, nodeOpenLabel } from '../../modules/dependency-map/nodeLinks';
+import {
+  elementHref,
+  miroHrefOf,
+  nodeHref,
+  nodeOpenLabel,
+} from '../../modules/dependency-map/nodeLinks';
 import { isHttpsUrl } from '../../modules/screens/httpsUrl';
 import { COMPONENTS_TAB, SCREEN_TAB_KEYS } from '../../modules/screens/screenTabs';
 import {
@@ -17,6 +22,20 @@ import {
   screenNode,
   variableNode,
 } from '../helpers/graphFixtures';
+
+describe('elementHref', () => {
+  it('is the one place that says where each type leads, and nodeHref gives the same answer', () => {
+    expect(elementHref({ type: 'SCREEN', id: 12 })).toBe('/screens/12');
+    expect(elementHref({ type: 'VARIABLE', id: 7 })).toBe('/variables/7');
+    expect(elementHref({ type: 'COLLECTION', id: 21 })).toBe('/collections/21');
+    expect(elementHref({ type: 'COMPONENT', screenId: 12 })).toBe(
+      `/screens/12?tab=${COMPONENTS_TAB}`,
+    );
+    expect(nodeHref(componentNode(31, 'btnGuardar', 12))).toBe(
+      elementHref({ type: 'COMPONENT', screenId: 12 }),
+    );
+  });
+});
 
 describe('nodeHref', () => {
   it('leads each element to its own page', () => {

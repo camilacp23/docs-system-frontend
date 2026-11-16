@@ -4,7 +4,8 @@
 //   pendingSubtasks, page, pageSize; App (OnStart) is always first; an unknown applicationId is 404, D-70),
 //   GET /screens/{id} (with a weak ETag that moves when a write changes something), POST /screens,
 //   PUT /screens/{id} (fakeScreenUpdate: the rules of the real server in its order), DELETE /screens/{id},
-//   PUT /screens/{id}/status and POST /screens/{id}/review (fakeScreenStatus), GET /screens/{id}/jira-tickets and
+//   PUT /screens/{id}/status and POST /screens/{id}/review (fakeScreenStatus), GET and POST /screens/{id}/comments and
+//   PUT /comments/{id} (fakeScreenComments; a review adds its comment to the thread), GET /screens/{id}/jira-tickets and
 //   POST /screens/{id}/jira-ticket (fakeScreenJira; Jira is the state `jira`). Everything else (variables, collections, applications) goes to the collections fake.
 //   Writes check in the order of the real server (contract 0.3.5):
 //     POST    400 (name, Miro link) -> 404 (application) -> 422 APPLICATION_ARCHIVED -> 409 DUPLICATE_NAME
@@ -16,10 +17,13 @@
 //             502 JIRA_PARTIAL_FAILURE (D-92, D-94); the screen's `pendingSubtasks` follows the Subtasks not done
 //   POST starts the screen as UNDOCUMENTED, or DRAFT when a template field has content (D-81). DELETE leaves the
 //   variables created in the screen without an origin.
+//   Tag of a screen: W/"<version>", and W/"<version>-<comments written>" once a comment was written (D-101: the counter moves
+//   the tag of a GET, and If-Match compares only the version part, so a comment is never a 412 for an edit).
 import { vi } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';
 import type { ApiClient } from '../../api/client';
+import type { ScreenComment } from '../../modules/comments/commentTypes';
 import type {
   Screen,
   ScreenCreate,
@@ -34,6 +38,15 @@ import {
   checkScreenUpdateRequest,
   type ScreenUpdateEnv,
 } from './fakeScreenUpdate';
+import {
+  checkCommentBody,
+  checkPaging,
+  createComment,
+  commentEtagOf,
+  editComment,
+  listComments,
+  CURRENT_USER,
+} from './fakeScreenComments';
 import {
   applyReview,
   applyStatusChange,
@@ -94,6 +107,8 @@ export interface ScreensApiInit extends CollectionsApiInit {
   screenDetails?: Screen[];
   /** The state of Jira and of the local tickets (defaults: available, no tickets). */
   jira?: Partial<FakeJira>;
+  /** The comments of the screens (oldest first by createdAt, then id). Default: none. */
+  comments?: ScreenComment[];
 }
 
 const SORT_KEYS = ['name', 'documentationStatus', 'updatedAt', 'pendingSubtasks'] as const;
@@ -143,13 +158,20 @@ export function makeScreensApi(
     versions: new Map<number, number>(),
     nextId: 2000,
     nextNestedId: 5000,
+    comments: init.comments ?? ([] as ScreenComment[]),
+    nextCommentId: 9000,
+    commentsWritten: new Map<number, number>(),
   };
   const jira = makeFakeJira(init.jira);
   const calls: RecordedApiCall[] = [];
   const failures = new Map<string, ApiError[]>();
   const holds: Array<{ predicate: (call: RecordedApiCall) => boolean; gate: Promise<void> }> = [];
 
-  const etagOf = (id: number) => `W/"${state.versions.get(id) ?? 1}"`;
+  const etagOf = (id: number) => {
+    const written = state.commentsWritten.get(id) ?? 0;
+    const version = state.versions.get(id) ?? 1;
+    return written > 0 ? `W/"${version}-${written}"` : `W/"${version}"`;
+  };
 
   function failNext(operation: string, error: ApiError) {
     failures.set(operation, [...(failures.get(operation) ?? []), error]);
@@ -235,6 +257,8 @@ export function makeScreensApi(
       '/screens/{id}',
       '/screens/{id}/status',
       '/screens/{id}/review',
+      '/screens/{id}/comments',
+      '/comments/{id}',
       '/screens/{id}/jira-tickets',
       '/screens/{id}/jira-ticket',
     ];
@@ -354,9 +378,64 @@ export function makeScreensApi(
         parsedStatus !== null
           ? applyStatusChange(env, current, parsedStatus.status, options.ifMatch)
           : applyReview(env, current, parsedReview as NonNullable<typeof parsedReview>);
+      if (parsedReview !== null && screen.commentCount > current.commentCount) {
+        // A review that left a comment adds it to the thread, as a review comment (D-56, D-88).
+        state.comments = [
+          ...state.comments,
+          {
+            id: state.nextCommentId++,
+            screenId: screen.id,
+            author: { ...CURRENT_USER },
+            text: parsedReview.comment as string,
+            reviewDecision: parsedReview.decision,
+            createdAt: new Date().toISOString(),
+            updatedAt: null,
+          },
+        ];
+        state.commentsWritten.set(screen.id, (state.commentsWritten.get(screen.id) ?? 0) + 1);
+      }
       state.screens = state.screens.map((s) => (s.id === screen.id ? screen : s));
       state.versions.set(screen.id, (state.versions.get(screen.id) ?? 1) + 1);
       return response({ data: screen }, etagOf(screen.id));
+    }
+    if (path === '/screens/{id}/comments') {
+      const writeEnv = (screenId: number) => ({
+        application: { archived: checkApplication(find(screenId).applicationId).archived },
+        now: () => new Date().toISOString(),
+      });
+      if (method === 'GET') {
+        const paging = checkPaging(query);
+        const screen = find(options.path?.id);
+        return response(listComments(state.comments, screen.id, paging));
+      }
+      // POST: 400 -> 404 -> 422 APPLICATION_ARCHIVED.
+      const { text } = checkCommentBody(options.body);
+      const screen = find(options.path?.id);
+      const created = createComment(writeEnv(screen.id), state.nextCommentId++, screen.id, text);
+      state.comments = [...state.comments, created];
+      state.screens = state.screens.map((s) =>
+        s.id === screen.id ? { ...s, commentCount: s.commentCount + 1 } : s,
+      );
+      state.commentsWritten.set(screen.id, (state.commentsWritten.get(screen.id) ?? 0) + 1);
+      return response({ data: created }, commentEtagOf(created), 201);
+    }
+    if (method === 'PUT' && path === '/comments/{id}') {
+      // 400 -> 404 -> 403 -> 422 APPLICATION_ARCHIVED -> 412 -> 422 REVIEW_COMMENT_LOCKED.
+      const { text } = checkCommentBody(options.body);
+      const current = state.comments.find((c) => c.id === options.path?.id);
+      if (!current) throw notFound('comment', options.path?.id);
+      const screen = find(current.screenId);
+      const edited = editComment(
+        {
+          application: { archived: checkApplication(screen.applicationId).archived },
+          now: () => new Date().toISOString(),
+        },
+        current,
+        text,
+        options.ifMatch,
+      );
+      state.comments = state.comments.map((c) => (c.id === edited.id ? edited : c));
+      return response({ data: edited }, commentEtagOf(edited));
     }
     if (path === '/screens/{id}/jira-tickets' || path === '/screens/{id}/jira-ticket') {
       const isCreate = method === 'POST';
