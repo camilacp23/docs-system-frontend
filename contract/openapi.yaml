@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Technical Documentation System API
-  version: 0.3.7
+  version: 0.3.8
   summary: REST API contracts — SDD Interface Viewpoint (Bitácora 3, Activities 5 and 6)
   description: |
     Contracts of the eleven modules (41 operations of SRS Table 25), the
@@ -159,6 +159,25 @@ info:
     search, the audit dates and the 403. No operation was added or removed (50);
     no `x-roles` or `x-rule` changed.
 
+    Changes in 0.3.8 (reports, comments and onboarding, and open items): the ten operations
+    of Modules 9 to 11 are described before they are built. Reports: the scope
+    (`elementTypes`, `includeStatusSummary`, `screenIds`, `documentationStatus`,
+    `includeDependencies`) and the rules the service applies to it, what each report contains
+    and in which order, the 404 for an application or a screen that does not exist, `Report`
+    with `updatedAt` and its `ETag`, the states seen while polling, the closed list of
+    `errorMessage` texts, the content types, file name and order of errors of the download,
+    and the rules of the publication (`If-Match`, 412, 409, the same value, `publishedAt`,
+    archived applications). Text written in Excel is always literal text, never a formula.
+    Comments: `text` must have a character that is not whitespace and is stored as it arrives,
+    the tag of a comment (`ETag`, `If-Match`, 412), the order of errors of the edit, the 403
+    `AUTHOR_ONLY`, and no `Location` on the 201. Onboarding: the App (OnStart) screen with its
+    template, `connections`, `depth` and the reading order, the order and limit (10) of each
+    list, and the 404. Other changes: `JiraTicket.url` is null when Jira has no base URL; the
+    `total` of variables and collections in the dashboard; the measure of `q` in the search;
+    `applicationId` in the audit log; the 400 of the comments list. `ReportScope.elementTypes`
+    no longer uses `uniqueItems`, so a repeated value is reported with its position. No
+    operation was added or removed (50); no `x-roles` or `x-rule` changed.
+
     Error catalog (`code` -> HTTP status: `message`):
 
     | Code | HTTP | Message |
@@ -171,6 +190,7 @@ info:
     | FORBIDDEN | 403 | Your role doesn't allow this action. (`details`: requiredRoles) |
     | FORBIDDEN (origin) | 403 | This request's origin isn't allowed. (`details`: reason = ORIGIN; refresh and logout only) |
     | FORBIDDEN (own actions) | 403 | Your role doesn't allow this action. (`details`: reason = OWN_ACTIONS; `GET /audit-log` asked by a Developer for another user) |
+    | FORBIDDEN (author only) | 403 | You can only edit your own comments. (`details`: reason = AUTHOR_ONLY; `PUT /comments/{id}` by a user who is not the author) |
     | NOT_FOUND | 404 | This <element> doesn't exist. It may have been deleted. |
     | DUPLICATE_NAME | 409 | A <type> named <name> already exists in <application>. (`details`: field, type, name, application, container) |
     | EMAIL_TAKEN | 409 | A user with this email already exists. |
@@ -637,7 +657,7 @@ paths:
         `status: ARCHIVED` makes the application's documentation read-only for every
         role (CP-01): writes on its variables, collections, screens, status, Jira
         tickets, review and comments return 422 APPLICATION_ARCHIVED. Reports can
-        still be generated and downloaded. `status: ACTIVE` restores editing; this
+        still be generated, published and downloaded. `status: ACTIVE` restores editing; this
         operation is the only write accepted on an archived application.
       parameters:
         - $ref: '#/components/parameters/IfMatch'
@@ -1626,7 +1646,11 @@ paths:
       x-capability: 'Comment on screens'
       x-roles: [ADMINISTRATOR, DEVELOPER, READER]
       summary: Comments of a screen, oldest first (FR-23)
-      description: 'Roles: all.'
+      description: |
+        Roles: all. Oldest first: `createdAt` ascending and then `id` ascending, so the page
+        is stable. The review comments (`reviewDecision` not null) are in the same thread.
+        The `ETag` of the list is a weak hash of the body (D-72); the tag of one comment is
+        described in `Comment`.
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
@@ -1646,7 +1670,18 @@ paths:
                     required: [data]
                     properties:
                       data: { type: array, items: { $ref: '#/components/schemas/Comment' } }
+              examples:
+                thread:
+                  summary: An ordinary comment followed by the review comment that returned the screen
+                  value:
+                    data:
+                      - { id: 31, screenId: 7, author: { id: 3, name: Ana Torres }, text: El filtro por estado no considera las solicitudes anuladas., reviewDecision: null, createdAt: '2026-11-12T09:00:00.000Z', updatedAt: null }
+                      - { id: 32, screenId: 7, author: { id: 1, name: Camila Castillo }, text: Falta documentar los riesgos de la galería., reviewDecision: RETURN, createdAt: '2026-11-13T10:30:00.000Z', updatedAt: null }
+                    page: 1
+                    pageSize: 20
+                    total: 2
         '304': { $ref: '#/components/responses/NotModified' }
+        '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
     post:
@@ -1657,8 +1692,17 @@ paths:
       summary: Comment on a screen (FR-23)
       x-error-codes: [APPLICATION_ARCHIVED]
       description: |
-        Roles: all. When the application is archived it is read-only (CP-01): this
-        operation returns 422 APPLICATION_ARCHIVED for every role.
+        Roles: all. The author is the caller. A comment can be written on a screen in any
+        status; only an archived application blocks it: when the application is archived it is
+        read-only (CP-01) and this operation returns 422 APPLICATION_ARCHIVED for every role.
+        The errors are checked in this order: 400, 404, 422 APPLICATION_ARCHIVED.
+
+        The text is stored as it arrives, without trimming; it must have at least one
+        character that is not whitespace (400 with rule `pattern` otherwise).
+
+        The 201 has no `Location` header, an exception to the convention of the API: a comment
+        has no address of its own (there is no `GET /comments/{id}`; the comments are read
+        in the list of their screen). It carries the `ETag` of the comment.
       requestBody:
         required: true
         content:
@@ -1667,13 +1711,14 @@ paths:
             example: { text: El filtro por estado no considera las solicitudes anuladas. }
       responses:
         '201':
-          description: Created
+          description: Created (no `Location`, because a comment has no address of its own)
           headers:
-            Location: { $ref: '#/components/headers/Location' }
+            ETag: { $ref: '#/components/headers/ETag' }
             X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CommentEnvelope' }
+              example: { data: { id: 31, screenId: 7, author: { id: 3, name: Ana Torres }, text: El filtro por estado no considera las solicitudes anuladas., reviewDecision: null, createdAt: '2026-11-12T09:00:00.000Z', updatedAt: null } }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1690,28 +1735,49 @@ paths:
       summary: Edit a comment
       x-error-codes: [APPLICATION_ARCHIVED, REVIEW_COMMENT_LOCKED]
       description: |
-        Roles: the comment's author only. The previous text remains in the audit log.
-        When the application is archived it is read-only (CP-01): this operation
-        returns 422 APPLICATION_ARCHIVED for every role.
-        Review comments (reviewDecision not null, CP-11) are the record of the
-        decision and cannot be edited: 422 REVIEW_COMMENT_LOCKED.
+        Roles: the comment's author only (`AUTHOR_ONLY`). The three roles may write comments,
+        so the role gate lets them through and the service compares the author. The previous
+        text remains in the audit log.
+
+        The errors are checked in this order: 400, 404, 403 (the caller is not the author:
+        FORBIDDEN with the message "You can only edit your own comments." and
+        `details.reason = "AUTHOR_ONLY"`), 422 APPLICATION_ARCHIVED (when the application is
+        archived it is read-only, CP-01, for every role), 412 and 422 REVIEW_COMMENT_LOCKED.
+        Review comments (`reviewDecision` not null, CP-11) are the record of the decision and
+        cannot be edited.
+
+        `If-Match` is optional. The tag of a comment is `W/"<epoch ms of updatedAt, or of
+        createdAt if updatedAt is null>"`, so a client can build `If-Match` from an item of
+        the list; it is compared inside the transaction and a mismatch is a 412 with
+        `details.currentETag`. `If-Match` is checked even when the text does not change. A
+        text equal to the stored one (compared exactly, spaces included) writes nothing: 200
+        with the same `ETag` and `updatedAt` unchanged.
+
+        The text is stored as it arrives, without trimming, and must have at least one
+        character that is not whitespace (400 with rule `pattern`).
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/CommentWrite' }
+            example: { text: El filtro por estado no considera las solicitudes anuladas ni las vencidas. }
       responses:
         '200':
-          description: Updated
+          description: Updated (the `ETag` is that of the comment after the change)
           headers:
+            ETag: { $ref: '#/components/headers/ETag' }
             X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CommentEnvelope' }
+              example: { data: { id: 31, screenId: 7, author: { id: 3, name: Ana Torres }, text: El filtro por estado no considera las solicitudes anuladas ni las vencidas., reviewDecision: null, createdAt: '2026-11-12T09:00:00.000Z', updatedAt: '2026-11-12T09:20:00.000Z' } }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
         '422': { $ref: '#/components/responses/RuleViolation' }
   /screens/{id}/review:
     parameters:
@@ -1940,9 +2006,11 @@ paths:
         `applicationId` is required, and one that does not exist (or is outside the
         `integer` range) is a 404.
 
-        Text. `q` is optional (CP-03). It is trimmed before it is measured and must have
-        2 to 100 characters: one that is shorter once trimmed (for example only spaces) is a
-        400 with rule `minLength` on `q`. The search ignores case and accents: á, é, í, ó,
+        Text. `q` is optional (CP-03). As sent it has at most 100 characters (the validator
+        measures it before trimming, so a longer text is a 400 with rule `maxLength` even
+        when the excess is spaces); once trimmed it must have at least 2 (the service measures
+        it after trimming, so one that is shorter, for example only spaces, is a 400 with
+        rule `minLength` on `q`). The search ignores case and accents: á, é, í, ó,
         ú and ü match the vowel without the accent, in lower and upper case; ñ is not n.
         `%` and `_` are ordinary characters.
 
@@ -1979,7 +2047,7 @@ paths:
         - name: q
           in: query
           required: false
-          description: Text to search (2 to 100 characters once trimmed). Optional when at least one filter is sent.
+          description: 'Text to search: at most 100 characters as sent (measured before trimming) and at least 2 once trimmed. Optional when at least one filter is sent.'
           schema: { type: string, minLength: 2, maxLength: 100 }
         - name: types
           in: query
@@ -2158,6 +2226,12 @@ paths:
       parameters:
         - name: applicationId
           in: query
+          description: |
+            Only the records of this application. It is a filter, not a parent: one that does not exist
+            gives an empty page. Limitation: a row deleted in cascade along with its element (for
+            example the comments, links and tickets of a deleted screen) can be recorded without an
+            application, so this filter does not return it; it is found by `entityType` and
+            `entityId` or by date, and the record of the deleted element itself does appear.
           schema: { type: integer, minimum: 1 }
         - name: entityType
           in: query
@@ -2224,20 +2298,38 @@ paths:
       x-roles: [ADMINISTRATOR, DEVELOPER]
       summary: Request a PDF report (FR-22)
       description: |
-        Roles: Administrator, Developer. Generation is asynchronous (NFR-12): the
-        report is saved with status PENDING and the client polls
-        `GET /reports/{id}` until READY or FAILED.
+        Roles: Administrator, Developer. Generation is asynchronous (NFR-12): the request
+        only saves the report with status PENDING and answers 202, and the client polls
+        `GET /reports/{id}` at an interval of its own (the answer carries no `Retry-After`)
+        until the status is READY or FAILED. What the report contains, in which order, and
+        the rules of `scope` are described in `ReportRequest`. Every request creates a new
+        report: a failed one stays in the history and "generate again" is a new request with
+        the same parameters (D-55).
+
+        A report of an archived application can be requested (D-47). The errors are checked
+        in this order: 400, 404. The 400 comes from the validator or from the rules of
+        `scope` that the service applies (see `ReportRequest`). The 404 is for an application
+        that does not exist (also outside the `integer` range) or for a screen of
+        `scope.screenIds` that does not exist or belongs to another application
+        (`details.field` is its position).
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/ReportRequest' }
-            example: { applicationId: 1, title: Documentación de SAR - octubre 2026, scope: { elementTypes: [SCREEN, VARIABLE, COLLECTION], documentationStatus: [APPROVED], includeDependencies: true }, publish: true }
+            examples:
+              selection:
+                summary: Approved screens, variables and collections with their dependencies, published when ready
+                value: { applicationId: 1, title: Documentación de SAR - octubre 2026, scope: { elementTypes: [SCREEN, VARIABLE, COLLECTION], documentationStatus: [APPROVED], includeDependencies: true }, publish: true }
+              statusOnly:
+                summary: Only the overall documentation status
+                value: { applicationId: 1, title: Estado de la documentación de SAR, scope: { elementTypes: [], includeStatusSummary: true }, publish: false }
       responses:
         '202': { $ref: '#/components/responses/ReportAccepted' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /reports/excel:
     post:
       tags: [Reports]
@@ -2245,17 +2337,27 @@ paths:
       x-capability: 'Generate and export reports'
       x-roles: [ADMINISTRATOR, DEVELOPER]
       summary: Request an Excel (.xlsx) report (FR-22)
-      description: 'Roles: Administrator, Developer. Same behavior as the PDF report.'
+      description: |
+        Roles: Administrator, Developer. Same behavior, errors and order of errors as the
+        PDF report (`POST /reports/pdf`); the file is an Excel workbook (`.xlsx`) with one
+        sheet per part of the report.
+
+        Text in the workbook: every text value from the documentation is written as a
+        literal string cell, never as a formula; a value that begins with =, +, -, @, tab or
+        carriage return is forced to text. Numbers and dates are written as numbers and
+        dates.
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/ReportRequest' }
+            example: { applicationId: 1, title: Variables y colecciones de SAR, scope: { elementTypes: [VARIABLE, COLLECTION] }, publish: false }
       responses:
         '202': { $ref: '#/components/responses/ReportAccepted' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /reports:
     get:
       tags: [Reports]
@@ -2264,11 +2366,20 @@ paths:
       x-roles: [ADMINISTRATOR, DEVELOPER, READER]
       x-rule: READER_PUBLISHED_ONLY
       summary: Saved reports
-      description: 'Roles: Administrator, Developer (all); Reader (published only, enforced by the server).'
+      description: |
+        Roles: Administrator, Developer (all); Reader (published only, enforced by the
+        server: without `published` a Reader gets only the published reports, and
+        `published=false` gives a Reader an empty page, not an error, D-32). Newest first:
+        `createdAt` descending and then `id` descending, so the page is stable. Each item is
+        a `Report` without `parameters` (the detail has them, D-55). `published=false` for
+        an Administrator or a Developer lists the reports that are not published, whatever
+        their status. An `applicationId` that does not exist (or is outside the `integer`
+        range) is a 404. The `ETag` is a weak hash of the body.
       parameters:
         - $ref: '#/components/parameters/ApplicationId'
         - name: published
           in: query
+          description: true = only published reports; false = only reports that are not published. Omitted = both (Readers still get only the published ones).
           schema: { type: boolean }
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
@@ -2288,9 +2399,20 @@ paths:
                     required: [data]
                     properties:
                       data: { type: array, items: { $ref: '#/components/schemas/Report' } }
+              examples:
+                page:
+                  summary: A ready and published report, and one that failed
+                  value:
+                    data:
+                      - { id: 13, applicationId: 1, title: Estado de la documentación de SAR, format: XLSX, status: FAILED, isPublished: false, fileName: null, fileSize: null, errorMessage: "The report took too long to generate. Try again with a smaller selection.", generatedBy: { id: 2, name: Camila Castillo }, createdAt: '2026-11-14T16:10:00.000Z', updatedAt: '2026-11-14T16:12:00.000Z', completedAt: null, publishedAt: null }
+                      - { id: 12, applicationId: 1, title: Documentación de SAR - octubre 2026, format: PDF, status: READY, isPublished: true, fileName: documentacion-de-sar-octubre-2026-2026-11-14.pdf, fileSize: 482113, errorMessage: null, generatedBy: { id: 2, name: Camila Castillo }, createdAt: '2026-11-14T15:30:00.000Z', updatedAt: '2026-11-14T15:31:00.000Z', completedAt: '2026-11-14T15:31:00.000Z', publishedAt: '2026-11-14T15:31:00.000Z' }
+                    page: 1
+                    pageSize: 20
+                    total: 2
         '304': { $ref: '#/components/responses/NotModified' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /reports/{id}:
     parameters:
       - $ref: '#/components/parameters/Id'
@@ -2302,10 +2424,24 @@ paths:
       x-rule: READER_PUBLISHED_ONLY
       summary: Report status, metadata and generation parameters
       description: |
-        Roles: Administrator, Developer; Reader only if published (otherwise 404).
-        The detail includes `parameters` (format, scope, publish), stored in
-        `report.parameters` (CP-10), so "Generate again" can request a new report
-        with the same configuration. The list (`GET /reports`) does not include them.
+        Roles: Administrator, Developer; Reader only if published. For a Reader, a report
+        that is not published answers exactly the same 404 as one that does not exist, so
+        its existence is not disclosed (D-32).
+
+        The detail includes `parameters` (`format`, `scope`, `publish`), stored in
+        `report.parameters` (CP-10), for every role that can read the report, so "generate
+        again" can request a new report with the same configuration. The list
+        (`GET /reports`) does not include them.
+
+        Polling. While the status is PENDING, `fileName`, `fileSize`, `completedAt`,
+        `publishedAt` and `errorMessage` are null and `isPublished` is false; `parameters.publish`
+        tells whether the report will be published when it is ready. When it is READY the file
+        data and `completedAt` are set and, if `parameters.publish` is true, `isPublished` is
+        true and `publishedAt` is set in the same update. When it is FAILED, `errorMessage` says
+        why (one of the texts listed in `Report`), the report is never published, and it stays in
+        the history.
+
+        The `ETag` is `W/"<epoch ms of updatedAt>"`.
       parameters:
         - $ref: '#/components/parameters/IfNoneMatch'
       responses:
@@ -2317,6 +2453,13 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ReportDetailEnvelope' }
+              examples:
+                pending:
+                  value: { data: { id: 14, applicationId: 1, title: Variables y colecciones de SAR, format: XLSX, status: PENDING, isPublished: false, fileName: null, fileSize: null, errorMessage: null, generatedBy: { id: 2, name: Camila Castillo }, createdAt: '2026-11-14T16:20:00.000Z', updatedAt: '2026-11-14T16:20:00.000Z', completedAt: null, publishedAt: null, parameters: { format: XLSX, scope: { elementTypes: [VARIABLE, COLLECTION] }, publish: false } } }
+                ready:
+                  value: { data: { id: 12, applicationId: 1, title: Documentación de SAR - octubre 2026, format: PDF, status: READY, isPublished: true, fileName: documentacion-de-sar-octubre-2026-2026-11-14.pdf, fileSize: 482113, errorMessage: null, generatedBy: { id: 2, name: Camila Castillo }, createdAt: '2026-11-14T15:30:00.000Z', updatedAt: '2026-11-14T15:31:00.000Z', completedAt: '2026-11-14T15:31:00.000Z', publishedAt: '2026-11-14T15:31:00.000Z', parameters: { format: PDF, scope: { elementTypes: [SCREEN, VARIABLE, COLLECTION], documentationStatus: [APPROVED], includeDependencies: true }, publish: true } } }
+                failed:
+                  value: { data: { id: 13, applicationId: 1, title: Estado de la documentación de SAR, format: XLSX, status: FAILED, isPublished: false, fileName: null, fileSize: null, errorMessage: "A selected screen no longer exists. Select the screens again and try once more.", generatedBy: { id: 2, name: Camila Castillo }, createdAt: '2026-11-14T16:10:00.000Z', updatedAt: '2026-11-14T16:12:00.000Z', completedAt: null, publishedAt: null, parameters: { format: XLSX, scope: { elementTypes: [SCREEN], screenIds: [7, 9] }, publish: false } } }
         '304': { $ref: '#/components/responses/NotModified' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -2330,15 +2473,32 @@ paths:
       x-roles: [ADMINISTRATOR, DEVELOPER, READER]
       x-rule: READER_PUBLISHED_ONLY
       summary: Download the generated file
-      description: 'Roles: as GET /reports/{id}. 409 REPORT_NOT_READY while PENDING or FAILED.'
+      description: |
+        Roles: as `GET /reports/{id}`. The errors are checked in this order: 400 (the `id`),
+        404 (the report does not exist, or the caller is a Reader and it is not published:
+        the same answer in both cases, D-32), 409 `REPORT_NOT_READY` (the report is PENDING or
+        FAILED, `details.status`), and then 304 or 200.
+
+        The content type follows the `format` of the report: `PDF` is sent as
+        `application/pdf` and `XLSX` as
+        `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`; the other type
+        is never sent for a report. `Content-Disposition` is `attachment; filename="<name>"`
+        with the `fileName` of the report as `<name>`, which is built when the report is
+        ready: the title in lowercase ASCII (accents removed, every run of characters other
+        than letters and digits replaced by one `-`, no `-` at the ends, at most 80
+        characters, `report` when nothing is left), then `-YYYY-MM-DD` (UTC date of
+        `completedAt`) and `.pdf` or `.xlsx`. It only has the characters `a-z`, `0-9`, `-` and
+        `.`, so it needs no quoting, no path separators and no `filename*` form. The `ETag` is
+        the one of the report, `W/"<epoch ms of updatedAt>"`.
       parameters:
         - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
-          description: File
+          description: The file; its content type is the one of the `format` of the report
           headers:
             Content-Disposition:
-              schema: { type: string, example: 'attachment; filename="documentacion-sar-2026-10.pdf"' }
+              description: 'attachment; filename="<fileName of the report>"'
+              schema: { type: string, example: 'attachment; filename="documentacion-de-sar-octubre-2026-2026-11-14.pdf"' }
             ETag: { $ref: '#/components/headers/ETag' }
             X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
@@ -2347,9 +2507,10 @@ paths:
             application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
               schema: { type: string, format: binary }
         '304': { $ref: '#/components/responses/NotModified' }
+        '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
+        '409': { $ref: '#/components/responses/ReportNotReady' }
   /reports/{id}/publication:
     parameters:
       - $ref: '#/components/parameters/Id'
@@ -2359,7 +2520,23 @@ paths:
       x-capability: 'Generate and export reports'
       x-roles: [ADMINISTRATOR, DEVELOPER]
       summary: Publish or unpublish a saved report
-      description: 'Roles: Administrator, Developer. Only READY reports can be published.'
+      description: |
+        Roles: Administrator, Developer (a Reader gets 403 before anything else). Publishing
+        and unpublishing are allowed on a report of an archived application: a report is not
+        documentation (D-47).
+
+        The errors are checked in this order: 400, 404 (the report does not exist), 412
+        (`If-Match` is optional; when sent it is compared inside the transaction with the
+        `ETag` of the report and a mismatch is a 412 with `details.currentETag`), and 409
+        `REPORT_NOT_READY`: any PUT on a report that is PENDING or FAILED, also
+        `isPublished: false`, is a 409 with `details.status`.
+
+        Publishing sets `isPublished` to true and `publishedAt` to the current instant;
+        unpublishing sets `isPublished` to false and `publishedAt` to null (the audit log
+        keeps the history). A PUT with the value the report already has writes nothing: it
+        answers 200 with the same `ETag` and `updatedAt` (`If-Match` is still checked).
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
       requestBody:
         required: true
         content:
@@ -2373,24 +2550,20 @@ paths:
             example: { isPublished: true }
       responses:
         '200':
-          description: Updated
+          description: Updated (the `ETag` is that of the report after the change)
           headers:
+            ETag: { $ref: '#/components/headers/ETag' }
             X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ReportEnvelope' }
+              example: { data: { id: 12, applicationId: 1, title: Documentación de SAR - octubre 2026, format: PDF, status: READY, isPublished: true, fileName: documentacion-de-sar-octubre-2026-2026-11-14.pdf, fileSize: 482113, errorMessage: null, generatedBy: { id: 2, name: Camila Castillo }, createdAt: '2026-11-14T15:30:00.000Z', updatedAt: '2026-11-14T17:00:00.000Z', completedAt: '2026-11-14T15:31:00.000Z', publishedAt: '2026-11-14T17:00:00.000Z' } }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
-        '409':
-          description: The report is not READY
-          headers:
-            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-              example: { code: REPORT_NOT_READY, message: "Only ready reports can be published or downloaded.", details: { status: PENDING } }
+        '409': { $ref: '#/components/responses/ReportNotReady' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
 
   # ----------------------------------------------------------- Onboarding
   /onboarding/summary:
@@ -2400,7 +2573,37 @@ paths:
       x-capability: 'Onboarding (FR-25, no row in Table 26)'
       x-roles: [ADMINISTRATOR, DEVELOPER, READER]
       summary: Guided overview of an application for new developers (FR-25)
-      description: 'Roles: all.'
+      description: |
+        Roles: all. Everything is read in one read-only snapshot and every list has a
+        deterministic order, so the `ETag` (a weak hash of the body) and the 304 are stable.
+        An `applicationId` that does not exist (or is outside the `integer` range) is a 404.
+        An archived application can be read.
+
+        - `counts`: screens (App (OnStart) included, as in the dashboard), variables (any
+          scope), collections and components of the application.
+        - `approvedPercent`: screens APPROVED over `counts.screens`, with one decimal, rounded
+          half up (as `documentation.approvedPercent` of the dashboard); 0 when there are no
+          screens.
+        - `appContextScreen`: the App (OnStart) screen with its status, Miro link and the seven
+          template fields. FR-25 takes the integration flow from its documentation.
+        - `keyScreens`: the main screens in suggested reading order, without App (OnStart).
+          `connections` of a screen is the number of different screens, variables and
+          collections that are its neighbors in the dependency graph through `ACCESSES`,
+          `CREATES` and `NAVIGATES_TO` edges (in either direction); `CONTAINS` edges are not
+          counted, and a neighbor linked several times counts once. The 10 screens with the
+          most connections are chosen (ties: name, then `id`). They are listed by `depth`
+          ascending, where `depth` is the least number of `NAVIGATES_TO` steps from App
+          (OnStart) (1 = reached directly from App (OnStart)); then by `connections`
+          descending, name and `id`. A screen that App (OnStart) does not reach has
+          `depth: null` and goes last.
+        - `globalVariables`: the 10 `GLOBAL` variables used by the most screens
+          (`usedByScreens` = different screens that read or write them, without the origin
+          row); ties: name, then `id`.
+        - `topComponents`: the 10 components that use the most variables and collections
+          (`uses` = number of `USES` dependencies whose source is the component, D-50), only
+          those with at least one; ties: component name, screen name, then `id`.
+
+        Names are compared by code point (collation "C"), as in the search.
       parameters:
         - $ref: '#/components/parameters/ApplicationId'
         - $ref: '#/components/parameters/IfNoneMatch'
@@ -2413,9 +2616,29 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/OnboardingEnvelope' }
+              example:
+                data:
+                  application: { id: 1, name: SAR }
+                  counts: { screens: 24, variables: 40, collections: 9, components: 130 }
+                  approvedPercent: 41.7
+                  appContextScreen:
+                    id: 1
+                    name: App (OnStart)
+                    documentationStatus: APPROVED
+                    miroLink: 'https://miro.com/app/board/uXjVSAR=/'
+                    template: { onStart: Carga el usuario actual y las colecciones de catálogo., workingProcess: null, architecture: null, dataModel: null, requirements: null, knownIssues: null, risks: null }
+                  keyScreens:
+                    - { screen: { id: 3, name: Inicio }, documentationStatus: APPROVED, connections: 14, depth: 1, miroLink: null }
+                    - { screen: { id: 7, name: Solicitudes }, documentationStatus: IN_REVIEW, connections: 21, depth: 2, miroLink: 'https://miro.com/app/board/uXjVSAR=/?moveToWidget=7' }
+                    - { screen: { id: 19, name: Administración }, documentationStatus: DRAFT, connections: 6, depth: null, miroLink: null }
+                  globalVariables:
+                    - { variable: { id: 11, name: gUsuarioActual }, dataType: RECORD, originScreen: null, usedByScreens: 18 }
+                  topComponents:
+                    - { component: { id: 88, name: galSolicitudes }, screen: { id: 7, name: Solicitudes }, uses: 5 }
         '304': { $ref: '#/components/responses/NotModified' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   # ---------------------------------------------------------- Jira webhook
   /integrations/jira/webhook:
@@ -2585,6 +2808,7 @@ components:
       description: |
         Weak validator. A single resource with `updatedAt` sends one derived from it (`W/"<updatedAt ms>"`);
         a screen also appends its `pendingSubtasks` and `commentCount` (`W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"`);
+        a saved report sends `W/"<updatedAt ms>"` and a comment `W/"<ms of updatedAt, or of createdAt if updatedAt is null>"`;
         listings and other responses send a weak hash of the body.
       schema: { type: string, example: 'W/"1727548800123"' }
     XRequestId:
@@ -2738,6 +2962,38 @@ components:
                 details:
                   fields:
                     - { field: 'variableLinks[1].usedIn', rule: pattern, message: 'must match pattern "^(?!origin$)[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$"' }
+            REPORT_SCOPE_REPEATED:
+              summary: POST /reports/pdf with a repeated element type (the same applies to scope.screenIds[i] and scope.documentationStatus[i])
+              value:
+                code: VALIDATION_ERROR
+                message: Check the highlighted fields.
+                details:
+                  fields:
+                    - { field: 'scope.elementTypes[1]', rule: unique, message: 'This value is repeated. Each one must be unique.' }
+            REPORT_SCOPE_EMPTY:
+              summary: POST /reports/pdf with no element type and without includeStatusSummary
+              value:
+                code: VALIDATION_ERROR
+                message: Check the highlighted fields.
+                details:
+                  fields:
+                    - { field: 'scope.elementTypes', rule: required, message: This value is required. }
+            REPORT_SCOPE_NOT_APPLICABLE:
+              summary: POST /reports/pdf with screenIds and no SCREEN or COMPONENT in elementTypes
+              value:
+                code: VALIDATION_ERROR
+                message: Check the highlighted fields.
+                details:
+                  fields:
+                    - { field: 'scope.screenIds', rule: notApplicable, message: 'screenIds only applies when SCREEN or COMPONENT is selected.' }
+            TEXT_IS_BLANK:
+              summary: A title or a comment that is only whitespace
+              value:
+                code: VALIDATION_ERROR
+                message: Check the highlighted fields.
+                details:
+                  fields:
+                    - { field: text, rule: pattern, message: 'must match pattern "\S"' }
     RefreshInvalid:
       description: Missing, expired, revoked or already rotated refresh token, or the account is no longer active
       headers:
@@ -2789,6 +3045,9 @@ components:
             own_actions:
               summary: GET /audit-log, a Developer asks for the actions of another user (DEVELOPER_OWN_ACTIONS)
               value: { code: FORBIDDEN, message: "Your role doesn't allow this action.", details: { reason: OWN_ACTIONS } }
+            author_only:
+              summary: PUT /comments/{id} by a user who is not the author of the comment (AUTHOR_ONLY)
+              value: { code: FORBIDDEN, message: "You can only edit your own comments.", details: { reason: AUTHOR_ONLY } }
     NotFound:
       description: |
         The resource does not exist. It may be the one in the path, the application of a listing
@@ -2812,8 +3071,17 @@ components:
               summary: A variable, collection or screen the body points at that does not exist
               value: { code: NOT_FOUND, message: "This screen doesn't exist. It may have been deleted.", details: { element: screen, id: 912, field: 'navigations[0].targetScreenId' } }
             application:
-              summary: GET /dependencies/graph, /search or /dashboard/indicators with an applicationId that does not exist
+              summary: An applicationId that does not exist (or is outside the integer range) in GET /dependencies/graph, /search, /dashboard/indicators, /onboarding/summary or /reports, and in the body of POST /reports/pdf and /reports/excel
               value: { code: NOT_FOUND, message: "This application doesn't exist. It may have been deleted.", details: { element: application, id: 912 } }
+            report:
+              summary: A report that does not exist; a Reader gets the same answer for a report that is not published (GET /reports/{id}, GET /reports/{id}/file, PUT /reports/{id}/publication)
+              value: { code: NOT_FOUND, message: "This report doesn't exist. It may have been deleted.", details: { element: report, id: 912 } }
+            report_screen:
+              summary: POST /reports/pdf or /reports/excel with a screen of scope.screenIds that does not exist or belongs to another application
+              value: { code: NOT_FOUND, message: "This screen doesn't exist. It may have been deleted.", details: { element: screen, id: 912, field: 'scope.screenIds[1]' } }
+            comment:
+              summary: PUT /comments/{id} with a comment that does not exist
+              value: { code: NOT_FOUND, message: "This comment doesn't exist. It may have been deleted.", details: { element: comment, id: 912 } }
             neighborhood_node:
               summary: GET /dependencies/{type}/{id} with an element that does not exist (also an id outside the integer range)
               value: { code: NOT_FOUND, message: "This collection doesn't exist. It may have been deleted.", details: { element: collection, id: 912 } }
@@ -2851,7 +3119,15 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
-          example: { code: PRECONDITION_FAILED, message: "Someone else saved changes to this screen after you opened it. Reload to see their version.", details: { element: screen, currentETag: 'W/"1727548900456"' } }
+          examples:
+            screen:
+              value: { code: PRECONDITION_FAILED, message: "Someone else saved changes to this screen after you opened it. Reload to see their version.", details: { element: screen, currentETag: 'W/"1727548900456"' } }
+            report:
+              summary: PUT /reports/{id}/publication with an If-Match that is no longer the tag of the report
+              value: { code: PRECONDITION_FAILED, message: "Someone else saved changes to this report after you opened it. Reload to see their version.", details: { element: report, currentETag: 'W/"1731603600000"' } }
+            comment:
+              summary: PUT /comments/{id} with an If-Match that is no longer the tag of the comment
+              value: { code: PRECONDITION_FAILED, message: "Someone else saved changes to this comment after you opened it. Reload to see their version.", details: { element: comment, currentETag: 'W/"1731403200000"' } }
     RuleViolation:
       description: Well-formed request that breaks a business or integrity rule
       headers:
@@ -2958,13 +3234,27 @@ components:
               summary: An issue was created in Jira but could not be saved here
               value: { code: JIRA_PARTIAL_FAILURE, message: "These Jira issues were created but couldn't be saved here: TECHEA-2. Delete them in Jira, then try again.", details: { created: { epic: TECHEA-1, story: TECHEA-2 }, unsaved: [TECHEA-2], reason: SAVE_FAILED } }
     ReportAccepted:
-      description: Report accepted and queued (NFR-12)
+      description: Report accepted and queued (NFR-12). It is PENDING; `Location` is `GET /reports/{id}` and the `ETag` is the one of the report. There is no `Retry-After`.
       headers:
         Location: { $ref: '#/components/headers/Location' }
+        ETag: { $ref: '#/components/headers/ETag' }
         X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ReportEnvelope' }
+          example: { data: { id: 14, applicationId: 1, title: Variables y colecciones de SAR, format: XLSX, status: PENDING, isPublished: false, fileName: null, fileSize: null, errorMessage: null, generatedBy: { id: 2, name: Camila Castillo }, createdAt: '2026-11-14T16:20:00.000Z', updatedAt: '2026-11-14T16:20:00.000Z', completedAt: null, publishedAt: null } }
+    ReportNotReady:
+      description: The report is not READY (it is PENDING or FAILED), so it can be neither downloaded nor published or unpublished
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          examples:
+            pending:
+              value: { code: REPORT_NOT_READY, message: "Only ready reports can be published or downloaded.", details: { status: PENDING } }
+            failed:
+              value: { code: REPORT_NOT_READY, message: "Only ready reports can be published or downloaded.", details: { status: FAILED } }
     PayloadTooLarge:
       description: Request body larger than allowed
       headers:
@@ -3580,7 +3870,7 @@ components:
         summary: { type: string }
         status: { type: string }
         statusCategory: { $ref: '#/components/schemas/JiraStatusCategory' }
-        url: { type: string, format: uri, description: 'Link to the issue in Jira Cloud: the base URL of Jira followed by /browse/<key>' }
+        url: { type: [string, 'null'], format: uri, description: 'Link to the issue in Jira Cloud: the base URL of Jira followed by /browse/<key>. null when Jira has no base URL configured (the tree is then served from the local copy; a created ticket always has a link)' }
         lastSyncedAt: { type: string, format: date-time }
     JiraTicketCreatedEnvelope:
       type: object
@@ -3661,10 +3951,22 @@ components:
       required: [text]
       additionalProperties: false
       properties:
-        text: { type: string, minLength: 1, maxLength: 4000 }
+        text:
+          type: string
+          minLength: 1
+          maxLength: 4000
+          pattern: '\S'
+          description: Stored as it arrives, without trimming. It needs at least one character that is not whitespace.
     Comment:
       type: object
+      description: |
+        A comment of a screen. A review comment is a comment with a `reviewDecision`.
+
+        Its tag, in the `ETag` header of the 201 and of the edit, is `W/"<epoch ms of updatedAt,
+        or of createdAt if updatedAt is null>"`, so a client can build `If-Match` from an item of
+        the list. The list keeps its own tag, a weak hash of its body.
       required: [id, screenId, author, text, reviewDecision, createdAt, updatedAt]
+      additionalProperties: false
       properties:
         id: { type: integer }
         screenId: { type: integer }
@@ -3673,13 +3975,13 @@ components:
         reviewDecision:
           oneOf: [{ $ref: '#/components/schemas/ReviewDecision' }, { type: 'null' }]
           readOnly: true
-          description: 'null = ordinary comment; APPROVE/RETURN = written by POST /screens/{id}/review (CP-11). Not accepted in CommentWrite.'
-
+          description: 'null = ordinary comment; APPROVE or RETURN = the comment of a review decision, written by POST /screens/{id}/review (CP-11) and never editable (422 REVIEW_COMMENT_LOCKED). Not accepted in CommentWrite.'
         createdAt: { type: string, format: date-time }
         updatedAt: { type: [string, 'null'], format: date-time, description: null = never edited }
     CommentEnvelope:
       type: object
       required: [data]
+      additionalProperties: false
       properties:
         data: { $ref: '#/components/schemas/Comment' }
     ReviewRequest:
@@ -3921,13 +4223,13 @@ components:
               type: object
               required: [total, untraced]
               properties:
-                total: { type: integer }
+                total: { type: integer, description: 'All the variables of the application, of any scope' }
                 untraced: { type: integer, description: Without origin screen }
             collections:
               type: object
               required: [total, undocumented]
               properties:
-                total: { type: integer }
+                total: { type: integer, description: All the collections of the application }
                 undocumented: { type: integer, description: Not linked to any screen }
             jira:
               type: object
@@ -4006,62 +4308,156 @@ components:
     # ------------------------------------------------------------ reports
     ReportScope:
       type: object
+      description: |
+        What the report contains (FR-22). Besides the shape, the service applies these rules
+        and answers 400 `VALIDATION_ERROR` with the position of the item in `details.fields`:
+        - A repeated value in `elementTypes`, `screenIds` or `documentationStatus` is `unique`
+          on `scope.elementTypes[i]`, `scope.screenIds[i]` or `scope.documentationStatus[i]`
+          (`uniqueItems` is not used, so the position is reported).
+        - An empty `elementTypes` is valid only when `includeStatusSummary` is true; otherwise
+          it is `required` on `scope.elementTypes`.
+        - `screenIds` and `documentationStatus` apply to `SCREEN` and `COMPONENT` (a component
+          is listed with its screen). When `elementTypes` has neither, they are `notApplicable`
+          on `scope.screenIds` or `scope.documentationStatus`, with the message "<field> only
+          applies when SCREEN or COMPONENT is selected.". Variables and collections are not
+          filtered by them.
       required: [elementTypes]
       additionalProperties: false
       properties:
-        elementTypes: { type: array, minItems: 1, uniqueItems: true, items: { $ref: '#/components/schemas/ElementType' } }
-        screenIds: { type: array, items: { type: integer, minimum: 1 }, description: Empty = all screens }
-        documentationStatus: { type: array, items: { $ref: '#/components/schemas/DocumentationStatus' } }
-        includeDependencies: { type: boolean, default: false }
+        elementTypes:
+          type: array
+          maxItems: 4
+          items: { $ref: '#/components/schemas/ElementType' }
+          description: Kinds of element to include. May be empty only together with `includeStatusSummary` true.
+        includeStatusSummary:
+          type: boolean
+          default: false
+          description: Add the "Summary" part, the overall documentation status of the application (FR-22).
+        screenIds:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items: { type: integer, minimum: 1 }
+          description: Only these screens (and their components). Omitted = all screens. An empty list is a 400.
+        documentationStatus:
+          type: array
+          minItems: 1
+          maxItems: 5
+          items: { $ref: '#/components/schemas/DocumentationStatus' }
+          description: Only screens (and their components) in these statuses. Omitted = all statuses. An empty list is a 400.
+        includeDependencies:
+          type: boolean
+          default: false
+          description: Add the "Dependencies" part with the edges of the dependency graph whose two ends are in the report.
     ReportRequest:
       type: object
+      description: |
+        Request of a PDF or Excel report. `scope` is stored with the request and returned as
+        sent in `parameters`.
+
+        Contents. The same for both formats: in Excel each part is a sheet and in PDF a section,
+        in the order below and only the ones requested. The report is a snapshot of the
+        documentation taken when generation starts (one read-only transaction). Rows are ordered
+        by name compared by code point (collation "C", as in the search) and then by `id`,
+        unless a part says otherwise; environments are listed as `DEV, PROD`.
+        - Summary (`includeStatusSummary`): application, title, who generated it, when (UTC),
+          screens in total and in each of the five statuses (UNDOCUMENTED, DRAFT, IN_PROGRESS,
+          IN_REVIEW, APPROVED), the approved percentage (one decimal, rounded half up, App
+          (OnStart) included, as in the dashboard), variables (total, without origin screen)
+          and collections (total, not documented).
+        - Screens (`SCREEN`): name, status, author, last updated, Miro link and the seven
+          template fields.
+        - Components (`COMPONENT`): screen, name, control type, description and on-select
+          formula; ordered by screen name, component name and `id`.
+        - Variables (`VARIABLE`): name, data type, scope, origin screen, description and
+          environments.
+        - Collections (`COLLECTION`): name, creation condition, description, environments and
+          whether it is linked to a screen. Its fields follow as the "Collection fields" part:
+          collection, position, name, data type and description; ordered by collection name,
+          collection `id`, `position` and field `id`.
+        - Dependencies (`includeDependencies`): relation, source type and name, target type and
+          name, access mode, where it is used and assignment function; ordered by relation in
+          the order of the dependency graph (CONTAINS, CREATES, ACCESSES, FEEDS, USES,
+          DERIVES_FROM, NAVIGATES_TO) and then by the identifier of the edge, as
+          `GET /dependencies/graph` orders them.
+
+        Text in Excel: every text value from the documentation is written as a literal string
+        cell, never as a formula; a value that begins with =, +, -, @, tab or carriage return is
+        forced to text. Numbers and dates are written as numbers and dates.
       required: [applicationId, title, scope, publish]
       additionalProperties: false
       properties:
         applicationId: { type: integer, minimum: 1 }
-        title: { type: string, minLength: 1, maxLength: 200 }
+        title: { type: string, minLength: 1, maxLength: 200, pattern: '\S', description: Stored as sent; it needs at least one character that is not whitespace }
         scope: { $ref: '#/components/schemas/ReportScope' }
-        publish: { type: boolean, description: Publish automatically when READY }
-    Report:
+        publish: { type: boolean, description: Publish automatically when the report is READY (it is never published if it fails) }
+    ReportCore:
       type: object
-      required: [id, applicationId, title, format, status, isPublished, generatedBy, createdAt]
+      description: The fields of a saved report. `Report` and `ReportDetail` close it.
+      required: [id, applicationId, title, format, status, isPublished, fileName, fileSize, errorMessage, generatedBy, createdAt, updatedAt, completedAt, publishedAt]
       properties:
         id: { type: integer }
         applicationId: { type: integer }
-        title: { type: string }
+        title: { type: string, maxLength: 200 }
         format: { $ref: '#/components/schemas/ReportFormat' }
         status: { $ref: '#/components/schemas/ReportStatus' }
-        isPublished: { type: boolean }
-        fileName: { type: [string, 'null'] }
-        fileSize: { type: [integer, 'null'] }
-        errorMessage: { type: [string, 'null'] }
+        isPublished: { type: boolean, description: 'Readers see only the published reports (D-32). true only when the status is READY' }
+        fileName:
+          type: [string, 'null']
+          maxLength: 255
+          pattern: '^[a-z0-9][a-z0-9.-]*$'
+          description: Name of the file (see `GET /reports/{id}/file`); null until the report is READY.
+        fileSize: { type: [integer, 'null'], minimum: 0, description: Size of the file in bytes; null until the report is READY }
+        errorMessage:
+          type: [string, 'null']
+          maxLength: 200
+          enum:
+            - The report took too long to generate. Try again with a smaller selection.
+            - The report is too large. Select fewer elements and try again.
+            - A selected screen no longer exists. Select the screens again and try once more.
+            - The report couldn't be generated. Try again in a few minutes.
+            - null
+          description: |
+            Why the report is FAILED, one of these four texts (never the text of an exception,
+            SQL or a trace; the detail is only in the server log). null in any other status.
         generatedBy: { $ref: '#/components/schemas/Ref' }
         createdAt: { type: string, format: date-time }
-        completedAt: { type: [string, 'null'], format: date-time }
-        publishedAt: { type: [string, 'null'], format: date-time }
+        updatedAt: { type: string, format: date-time, description: 'Last change of the report; its epoch milliseconds are the ETag (`W/"<ms>"`)' }
+        completedAt: { type: [string, 'null'], format: date-time, description: When the report became READY; null while PENDING and when FAILED }
+        publishedAt: { type: [string, 'null'], format: date-time, description: Set while the report is published; null when it is not }
+    Report:
+      description: A saved report, as the list and the publication return it (without `parameters`).
+      allOf:
+        - $ref: '#/components/schemas/ReportCore'
+      unevaluatedProperties: false
     ReportEnvelope:
       type: object
       required: [data]
+      additionalProperties: false
       properties:
         data: { $ref: '#/components/schemas/Report' }
     ReportParameters:
       type: object
-      description: Generation parameters stored in report.parameters (CP-10)
+      description: Generation parameters stored in report.parameters (CP-10), as requested
       required: [format, scope, publish]
+      additionalProperties: false
       properties:
         format: { $ref: '#/components/schemas/ReportFormat' }
         scope: { $ref: '#/components/schemas/ReportScope' }
         publish: { type: boolean }
     ReportDetail:
+      description: A saved report with the parameters it was requested with (`GET /reports/{id}`).
       allOf:
-        - $ref: '#/components/schemas/Report'
+        - $ref: '#/components/schemas/ReportCore'
         - type: object
           required: [parameters]
           properties:
             parameters: { $ref: '#/components/schemas/ReportParameters' }
+      unevaluatedProperties: false
     ReportDetailEnvelope:
       type: object
       required: [data]
+      additionalProperties: false
       properties:
         data: { $ref: '#/components/schemas/ReportDetail' }
 
@@ -4069,55 +4465,75 @@ components:
     OnboardingEnvelope:
       type: object
       required: [data]
+      additionalProperties: false
       properties:
         data:
           type: object
           required: [application, counts, approvedPercent, appContextScreen, keyScreens, globalVariables, topComponents]
+          additionalProperties: false
           properties:
             application: { $ref: '#/components/schemas/Ref' }
             counts:
               type: object
               required: [screens, variables, collections, components]
+              additionalProperties: false
               properties:
-                screens: { type: integer }
-                variables: { type: integer }
-                collections: { type: integer }
-                components: { type: integer }
-            approvedPercent: { type: number }
-            appContextScreen: { $ref: '#/components/schemas/Ref' }
+                screens: { type: integer, minimum: 0 }
+                variables: { type: integer, minimum: 0 }
+                collections: { type: integer, minimum: 0 }
+                components: { type: integer, minimum: 0 }
+            approvedPercent: { type: number, minimum: 0, maximum: 100, description: 'APPROVED over `counts.screens`, with one decimal (rounded half up); 0 without screens' }
+            appContextScreen:
+              type: object
+              description: The App (OnStart) screen; its documentation is the integration flow (FR-25).
+              required: [id, name, documentationStatus, miroLink, template]
+              additionalProperties: false
+              properties:
+                id: { type: integer }
+                name: { type: string }
+                documentationStatus: { $ref: '#/components/schemas/DocumentationStatus' }
+                miroLink: { type: [string, 'null'] }
+                template: { $ref: '#/components/schemas/ScreenTemplate' }
             keyScreens:
               type: array
-              description: Screens with most connections, approved first (suggested reading order)
+              description: The main screens (most connections) in suggested reading order, without App (OnStart); see the operation.
               maxItems: 10
               items:
                 type: object
-                required: [screen, documentationStatus, connections]
+                required: [screen, documentationStatus, connections, depth, miroLink]
+                additionalProperties: false
                 properties:
                   screen: { $ref: '#/components/schemas/Ref' }
                   documentationStatus: { $ref: '#/components/schemas/DocumentationStatus' }
-                  connections: { type: integer }
+                  connections: { type: integer, minimum: 0, description: 'Different neighbors through ACCESSES, CREATES and NAVIGATES_TO edges' }
+                  depth: { type: [integer, 'null'], minimum: 1, description: 'Least NAVIGATES_TO steps from App (OnStart); null when it does not reach the screen' }
                   miroLink: { type: [string, 'null'] }
             globalVariables:
               type: array
-              maxItems: 20
+              description: The GLOBAL variables used by the most screens.
+              maxItems: 10
               items:
                 type: object
-                required: [variable, dataType, originScreen]
+                required: [variable, dataType, originScreen, usedByScreens]
+                additionalProperties: false
                 properties:
                   variable: { $ref: '#/components/schemas/Ref' }
                   dataType: { $ref: '#/components/schemas/DataType' }
                   originScreen: { oneOf: [{ $ref: '#/components/schemas/Ref' }, { type: 'null' }] }
+                  usedByScreens: { type: integer, minimum: 0, description: 'Different screens that read or write the variable, without the origin row' }
             topComponents:
               type: array
               description: |
                 CP-05: components that use the most variables and collections, by `uses`
                 descending. `uses` = number of USES rows of `dependency` whose source is
-                the component (component -> variable / collection).
+                the component (component -> variable / collection). Components that use
+                nothing are not listed.
               maxItems: 10
               items:
                 type: object
                 required: [component, screen, uses]
+                additionalProperties: false
                 properties:
                   component: { $ref: '#/components/schemas/Ref' }
                   screen: { $ref: '#/components/schemas/Ref' }
-                  uses: { type: integer, minimum: 0 }
+                  uses: { type: integer, minimum: 1 }

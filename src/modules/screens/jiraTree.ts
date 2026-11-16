@@ -50,9 +50,12 @@ export function projectKeyOf(tree: JiraTree): string | null {
   return dash > 0 ? key.slice(0, dash) : null;
 }
 
-/** The link to an issue only when it is http or https (a stored value of another kind is never made clickable). */
-export function safeJiraUrl(url: string): string | null {
-  return /^https?:\/\//i.test(url) ? url : null;
+/**
+ * The link to an issue only when it is http or https (a stored value of another kind is never made clickable).
+ * `null` is what the API sends when Jira has no base URL (D-111): there is then no link at all.
+ */
+export function safeJiraUrl(url: string | null): string | null {
+  return url !== null && /^https?:\/\//i.test(url) ? url : null;
 }
 
 const byId = (a: { id: number }, b: { id: number }) => a.id - b.id;
