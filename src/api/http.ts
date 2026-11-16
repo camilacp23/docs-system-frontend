@@ -5,6 +5,8 @@
 // GET requests use `cache: 'no-cache'`: the browser always revalidates with the server (If-None-Match from its own
 // cache; a 304 reaches JavaScript as a 200 with the cached body) and never serves a copy older than the last PUT.
 // Query parameters go through encodeQuery (RFC 3986, lists as comma-separated values).
+// rawDownload is the binary variant (a file): the same request and the same ApiError for a non-2xx answer (its JSON body
+// is read), but a successful body is a Blob with the Content-Disposition and Content-Type headers.
 // Writes carry no cache option. A raw 304 (only when a caller sets If-None-Match itself) is never an error: the
 // result has notModified = true and a null body.
 import { ApiError, type ErrorDetails } from './ApiError';
@@ -95,18 +97,16 @@ function toApiError(
   });
 }
 
-export async function rawRequest<T = unknown>(request: RawRequest): Promise<HttpResult<T>> {
-  const headers: Record<string, string> = { Accept: 'application/json', ...request.headers };
+async function send(request: RawRequest, accept: string): Promise<Response> {
+  const headers: Record<string, string> = { Accept: accept, ...request.headers };
   if (request.token) headers.Authorization = `Bearer ${request.token}`;
   let body: string | undefined;
   if (request.body !== undefined) {
     headers['Content-Type'] = 'application/json';
     body = JSON.stringify(request.body);
   }
-
-  let response: Response;
   try {
-    response = await fetch(buildUrl(request.path, request.pathParams, request.query), {
+    return await fetch(buildUrl(request.path, request.pathParams, request.query), {
       method: request.method,
       headers,
       body,
@@ -118,6 +118,10 @@ export async function rawRequest<T = unknown>(request: RawRequest): Promise<Http
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
     throw new ApiError({ status: 0, code: 'NETWORK_ERROR' });
   }
+}
+
+export async function rawRequest<T = unknown>(request: RawRequest): Promise<HttpResult<T>> {
+  const response = await send(request, 'application/json');
 
   if (response.status === 304) {
     return {
@@ -138,5 +142,39 @@ export async function rawRequest<T = unknown>(request: RawRequest): Promise<Http
     etag: response.headers.get('ETag'),
     location: response.headers.get('Location'),
     notModified: false,
+  };
+}
+
+/** A downloaded file: the bytes and the headers that name it. */
+export interface DownloadResult {
+  blob: Blob;
+  contentType: string | null;
+  /** The raw `Content-Disposition` header, or null. */
+  contentDisposition: string | null;
+  etag: string | null;
+}
+
+/** The file of a GET (a report). A non-2xx answer is the usual JSON error, so it becomes an ApiError like any other. */
+export async function rawDownload(request: RawRequest): Promise<DownloadResult> {
+  const response = await send(
+    request,
+    'application/pdf, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/json',
+  );
+  if (!response.ok) {
+    const parsed = await readJson(response).catch(() => ({ ok: false }) as const);
+    throw toApiError(response, parsed);
+  }
+  let blob: Blob;
+  try {
+    blob = await response.blob();
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw error;
+    throw new ApiError({ status: response.status, code: 'UNEXPECTED_RESPONSE' });
+  }
+  return {
+    blob,
+    contentType: response.headers.get('Content-Type'),
+    contentDisposition: response.headers.get('Content-Disposition'),
+    etag: response.headers.get('ETag'),
   };
 }

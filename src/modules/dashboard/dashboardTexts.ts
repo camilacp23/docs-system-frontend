@@ -1,6 +1,9 @@
 // dashboardTexts: the words of the dashboard that are not built from data (S-31, S-31r, S-31j). The ones of the frames
 // are marked; the rest are derived and are listed in DESIGN_REFERENCE §9, pending confirmation in design.
 export const REFRESH_LABEL = 'Refresh'; // S-31
+export const GENERATE_REPORT_LABEL = 'Generate report'; // S-31, flow 5
+export const DIALOG_LOAD_FAILED =
+  "The dialog couldn't be opened. Check your connection and try again.";
 
 /** Titles and subtitles of the cards (S-31). */
 export const STATUS_TITLE = 'Documentation by status';

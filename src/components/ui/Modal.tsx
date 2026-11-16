@@ -1,7 +1,7 @@
 // Modal: dialog over a dimmed overlay (S-43b, S-17).
 // Props: open, onClose, placement ('center' of the window, default | 'top-right' for confirmations that must not
 // hide the page), title, description (one line under the title, as in S-37b; it describes the dialog for assistive technology), icon (decorative icon in a colored circle before the title; tone 'danger' tints it
-// red for destructive confirmations), size ('sm' 400 px | 'md' | 'lg' | 'xl' 960 px, default 'sm'), footer (usually Buttons,
+// red for destructive confirmations), size ('sm' 400 px | 'md' | 'lg' | 'form' 760 px, the width of the generate-report form S-34 | 'xl' 960 px, default 'sm'), footer (usually Buttons,
 // right-aligned), dismissible (default true: Esc, click on the overlay and the close button call onClose;
 // false for blocking dialogs such as "Your session ended"), initialFocusRef (element to focus on open; defaults
 // to the first focusable element). Behavior: focus is trapped inside, Esc closes, focus returns to the element
@@ -13,7 +13,7 @@ import { createPortal } from 'react-dom';
 
 import { cx, ICON_STROKE_WIDTH } from './cx';
 
-export type ModalSize = 'sm' | 'md' | 'lg' | 'xl';
+export type ModalSize = 'sm' | 'md' | 'lg' | 'form' | 'xl';
 
 export interface ModalProps {
   open: boolean;
@@ -34,6 +34,7 @@ const SIZE_CLASS: Record<ModalSize, string> = {
   sm: 'max-w-100',
   md: 'max-w-140',
   lg: 'max-w-180',
+  form: 'max-w-190',
   xl: 'max-w-240',
 };
 

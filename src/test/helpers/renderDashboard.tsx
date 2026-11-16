@@ -8,6 +8,7 @@ import type { Application } from '../../application/ApplicationContext';
 import type { Role } from '../../app/router/routes';
 import type { Screen } from '../../modules/screens/screenTypes';
 
+import { makeReportsApi, type ReportsApiInit } from './fakeReportsApi';
 import { makeDashboardApi, makeIndicators, type DashboardApiInit } from './fakeDashboardApi';
 import { makeScreenDetail } from './fakeScreensApi';
 import { renderApp } from './renderApp';
@@ -36,11 +37,14 @@ export interface RenderDashboardOptions {
   screens?: Screen[];
   prepare?: (api: ReturnType<typeof makeDashboardApi>) => void;
   settled?: boolean;
+  /** Puts the reports fake in front of the dashboard fake (the generate dialog and /reports). */
+  reports?: ReportsApiInit;
 }
 
 export async function renderDashboard(options: RenderDashboardOptions = {}) {
   const role = options.role ?? 'ADMINISTRATOR';
   let api!: ReturnType<typeof makeDashboardApi>;
+  let reportsApi: ReturnType<typeof makeReportsApi> | undefined;
   const view = await renderApp({
     role,
     name: options.name,
@@ -56,8 +60,10 @@ export async function renderDashboard(options: RenderDashboardOptions = {}) {
         },
       });
       options.prepare?.(api);
-      return api.client;
+      if (options.reports === undefined) return api.client;
+      reportsApi = makeReportsApi(apps, { role, ...options.reports }, api.client);
+      return reportsApi.client;
     },
   });
-  return { ...view, api };
+  return { ...view, api, reportsApi };
 }

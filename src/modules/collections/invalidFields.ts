@@ -1,7 +1,8 @@
 // invalidFields: the controls of a form that are marked invalid, for the "N fields need attention." summary of a long
 // form (S-42, Table 58). invalidFields(form) -> [{ label, element }] in page order, one per control with
 // aria-invalid="true"; the label is the accessible name the control already has (its aria-label or its <label>,
-// without the required mark). The summary links call element.focus().
+// without the required mark; a group of controls is named by the first element its aria-labelledby points to). The
+// summary links call element.focus().
 export interface InvalidField {
   label: string;
   element: HTMLElement;
@@ -10,6 +11,9 @@ export interface InvalidField {
 function labelOf(element: HTMLElement): string {
   const own = element.getAttribute('aria-label');
   if (own !== null && own !== '') return own;
+  const labelledBy = element.getAttribute('aria-labelledby')?.split(' ')[0];
+  const named = labelledBy ? document.getElementById(labelledBy)?.textContent : null;
+  if (named) return named.replace(/\*+\s*$/, '').trim();
   const fromLabel = (element as HTMLInputElement).labels?.[0]?.textContent ?? '';
   return fromLabel.replace(/\*+\s*$/, '').trim() || 'This field';
 }

@@ -283,6 +283,7 @@ const RULE_MESSAGES: Record<string, RuleText> = {
   uniqueItems: (label) => `${label} has repeated values. Each one must be unique.`,
   unique: (label) => `${label} has repeated values. Each one must be unique.`,
   self: (label) => `${label} can't point to itself.`,
+  notApplicable: (label) => `${label} only applies when Screens or Components is included.`,
   singleLine: (label) => `${label} must be a single line.`,
   type: (label) => `${label} has an unexpected type of value.`,
   CHECK: (label) => `${label} doesn't meet the required conditions.`,

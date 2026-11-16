@@ -1,4 +1,4 @@
-// devRoutes: the /dev pages (design showcase, map, dashboard, quick search, lazy loading) exist only in development.
+// devRoutes: the /dev pages (design showcase, map, dashboard, reports, quick search, lazy loading) exist only in development.
 // `import.meta.env.DEV` is a build-time constant: in the production build the list folds to empty and the dynamic imports
 // of the pages are dropped, so neither the routes nor their code ship in dist/ (checked on the real build with
 // `grep` in dist/assets; this test checks the guard itself in both modes).
@@ -23,6 +23,7 @@ describe('devRoutes', () => {
       expect.arrayContaining([
         '/dev/ui',
         '/dev/dashboard',
+        '/dev/reports',
         '/dev/quick-search',
         '/dev/lazy',
         '/dev/map',

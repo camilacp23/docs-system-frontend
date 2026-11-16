@@ -1,12 +1,18 @@
 // client: authenticated API client typed from the contract (src/api/schema.d.ts).
-// createApiClient(port) returns { get, post, put, delete }. Each call sends `Authorization: Bearer <token>`
+// createApiClient(port) returns { get, post, put, delete, download } (`download` is a GET whose answer is a file). Each call sends `Authorization: Bearer <token>`
 // from the session port. On a 401 with UNAUTHENTICATED or TOKEN_EXPIRED it asks the port for ONE refresh
 // (shared by every concurrent call) and retries ONCE; a second 401 ends the session. The 401 of login and of
 // the refresh itself never go through here (see src/session/SessionManager.ts).
 // Options per call: path (values for {placeholders}), query, body, ifMatch, signal.
 // Result: { body, etag, location, status }. Errors are always ApiError.
 import { TOKEN_REFRESH_CODES, isApiError } from './ApiError';
-import { rawRequest, type HttpMethod, type HttpResult } from './http';
+import {
+  rawDownload,
+  rawRequest,
+  type DownloadResult,
+  type HttpMethod,
+  type HttpResult,
+} from './http';
 import type { paths } from './schema';
 
 /** What the client needs from the session. Implemented by SessionManager. */
@@ -70,6 +76,11 @@ export interface ApiClient {
     path: P,
     options?: RequestOptions<OperationOf<P, 'delete'>>,
   ): Promise<ApiResult<OperationOf<P, 'delete'>>>;
+  /** GET of a file (a report): the same token, single refresh and retry as `get`; resolves with the Blob. */
+  download<P extends PathsWith<'get'>>(
+    path: P,
+    options?: Pick<RequestOptions<OperationOf<P, 'get'>>, 'path' | 'signal'>,
+  ): Promise<DownloadResult>;
 }
 
 function needsRefresh(error: unknown): boolean {
@@ -95,19 +106,16 @@ export function createApiClient(port: SessionPort): ApiClient {
     });
   }
 
-  async function request(
-    method: HttpMethod,
-    path: string,
-    options: RequestOptions<never> | undefined,
-  ) {
+  /** Runs a call with the session token; on a token 401 asks ONE shared refresh and retries ONCE. */
+  async function withSession<T>(run: (token: string | null) => Promise<T>): Promise<T> {
     const usedToken = port.getAccessToken();
     try {
-      return await send(method, path, options, usedToken);
+      return await run(usedToken);
     } catch (error) {
       if (!needsRefresh(error)) throw error;
       const freshToken = await port.refreshAfterUnauthorized(usedToken);
       try {
-        return await send(method, path, options, freshToken);
+        return await run(freshToken);
       } catch (retryError) {
         if (needsRefresh(retryError)) port.endSessionUnauthorized();
         throw retryError;
@@ -116,12 +124,24 @@ export function createApiClient(port: SessionPort): ApiClient {
   }
 
   const call = (method: HttpMethod) => (path: string, options?: RequestOptions<never>) =>
-    request(method, path, options);
+    withSession((token) => send(method, path, options, token));
+
+  const download = (path: string, options?: RequestOptions<never>) =>
+    withSession((token) =>
+      rawDownload({
+        method: 'GET',
+        path,
+        pathParams: options?.path,
+        token,
+        signal: options?.signal,
+      }),
+    );
 
   return {
     get: call('GET'),
     post: call('POST'),
     put: call('PUT'),
     delete: call('DELETE'),
+    download,
   } as unknown as ApiClient;
 }
