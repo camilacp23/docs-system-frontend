@@ -35,6 +35,7 @@ const hasOwnPage = (path: string) =>
   path === '/audit' ||
   path === '/reports' ||
   path === '/review' ||
+  path === '/onboarding' ||
   path === '/admin/users' ||
   path === '/admin/applications';
 
