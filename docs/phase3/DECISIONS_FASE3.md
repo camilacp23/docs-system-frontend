@@ -43,6 +43,7 @@ Aprobadas por la autora el 18 de octubre de 2026. Deben incorporarse al SDD v1.4
 | Tema | Decisión |
 |---|---|
 | Node | ≥ 22.22.0 (lo exigen react-router 8.4.0 y Vite 8.3.2). Sigue siendo Node 22 (SDD Tabla 7). |
+| Versión de Node del entorno | `.nvmrc` pasa de 22.22.2 a **22.23.3**, la del backend y la de este equipo; el workflow la toma de `.nvmrc`. `engines` se queda en `>=22.22.2` porque ni el lock ni las herramientas exigen más. El workflow imprime las versiones (`node --version`, `npm --version`) antes de instalar. |
 | Lenguaje | TypeScript en backend (como la base) y frontend (`.tsx`, Figura 4). |
 | Rutas frontend | Las planas de D-57 (la Figura 4 con `/apps/:appId` queda obsoleta). |
 | Calidad | ESLint (typescript-eslint, `no-floating-promises` = R-1/D-20), Prettier, husky + lint-staged + commitlint (Conventional Commits). |
