@@ -1,6 +1,6 @@
 name: CI
 
-# Verifies the frontend from scratch: format, lint, types, unit tests, production build, the versioned API contract
+# Verifies the frontend from scratch: format, lint, types, unit tests, production build (with no /dev page code in it), the versioned API contract
 # and the dependency audit. It needs no database and no backend: contract:check works on the copy in contract/.
 
 on:
@@ -61,6 +61,9 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Check that the build has no /dev page code
+        run: npm run check:dist
 
       - name: Check the API contract types
         run: npm run contract:check

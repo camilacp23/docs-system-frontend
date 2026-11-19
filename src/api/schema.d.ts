@@ -532,11 +532,14 @@ export interface paths {
         };
         /**
          * Get a screen with its template, components and links
-         * @description Roles: all. The `ETag` is `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"`:
+         * @description Roles: all. The `ETag` is `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>-<fingerprint>"`:
          *     the counters change without touching `updatedAt` (Jira tickets created,
-         *     refreshed or updated by the webhook, comments), so `If-None-Match` compares
-         *     all of it and answers 304 only when neither the screen nor either counter
-         *     changed. The same `ETag` is sent by the answers of `POST /screens`,
+         *     refreshed or updated by the webhook, comments), and so do the items that come
+         *     from other rows (the name of a variable, collection or screen that the screen
+         *     links to, navigates to or uses, `originUsedIn`, the author). The fingerprint
+         *     (8 hexadecimal digits) covers those items, so `If-None-Match` compares all of
+         *     it and answers 304 only when nothing the screen shows changed. The same `ETag`
+         *     is sent by the answers of `POST /screens`,
          *     `PUT /screens/{id}`, `PUT /screens/{id}/status` and `POST /screens/{id}/review`.
          */
         get: operations["getScreen"];
@@ -565,11 +568,13 @@ export interface paths {
          *     created in this screen); it is read-only here and is edited with `PUT /variables/{id}`.
          *     `If-Match` is always checked when sent, also when the body changes nothing.
          *     Only its `updatedAt` part is compared, inside the transaction: a change of
-         *     `pendingSubtasks` or `commentCount` between the read and the save is not a 412.
-         *     The former format `W/"<updatedAt ms>"` is accepted; a value in any other format
-         *     is a 412, whose `details.currentETag` is the full `ETag`.
+         *     `pendingSubtasks`, `commentCount` or the fingerprint between the read and the
+         *     save (for example a renamed variable) is not a 412. The formats `W/"<updatedAt ms>"`,
+         *     `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"` and the full one are
+         *     accepted; a value in any other format is a 412, whose `details.currentETag` is
+         *     the full `ETag`.
          *     An update that changes nothing writes nothing: it answers 200 with the same
-         *     `updatedAt` and status, and with the same `ETag` unless a counter changed. A
+         *     `updatedAt` and status, and with the same `ETag` unless a counter or the fingerprint changed. A
          *     change in any nested array also moves the `ETag` of the screen.
          *     Resulting status: editing an APPROVED screen in any way (a column or a nested
          *     item) returns it to IN_PROGRESS; an UNDOCUMENTED screen in which a template
@@ -647,8 +652,8 @@ export interface paths {
          *     The errors are checked in this order: 400, 404, 422 APPLICATION_ARCHIVED,
          *     412, 422 INVALID_TRANSITION, 422 TEMPLATE_INCOMPLETE. `If-Match` is optional;
          *     when sent, its `updatedAt` part is compared with the screen locked inside the
-         *     transaction (same rule as `PUT /screens/{id}`: a change of the counters is not
-         *     a 412, and the former `W/"<updatedAt ms>"` format is accepted).
+         *     transaction (same rule as `PUT /screens/{id}`: a change of the counters or of the
+         *     fingerprint is not a 412, and the three formats of the `ETag` of a screen are accepted).
          *     Asking for the status the screen already has is a 422 INVALID_TRANSITION
          *     (`details { from, to }`, with `to` equal to `from`). TEMPLATE_INCOMPLETE applies
          *     only to IN_PROGRESS -> IN_REVIEW and lists in `details.fields` the template
@@ -1676,7 +1681,7 @@ export interface components {
         } & components["schemas"]["Timestamps"];
         Variable: components["schemas"]["VariableSummary"] & {
             description: string | null;
-            /** @description Where the variable is created inside its origin screen (D-134); null when not described or without origin screen */
+            /** @description Where the variable is created inside its origin screen (D-150); null when not described or without origin screen */
             originUsedIn: string | null;
             environmentDetails: components["schemas"]["EnvironmentPresence"][];
         };
@@ -1921,7 +1926,7 @@ export interface components {
                 usedIn: string;
                 /** @description Row maintained by the variables module (read-only here): a write never updates or deletes it and does not reconcile it */
                 isOrigin: boolean;
-                /** @description Only on the origin row (isOrigin = true): where the variable is created in this screen, edited with PUT /variables/{id}; null in the other rows or when not described (D-134) */
+                /** @description Only on the origin row (isOrigin = true): where the variable is created in this screen, edited with PUT /variables/{id}; null in the other rows or when not described (D-150) */
                 originUsedIn: string | null;
             }[];
             collectionLinks: {
@@ -2563,7 +2568,7 @@ export interface components {
             };
         };
         OnboardingProgressEnvelope: {
-            /** @description The steps of the onboarding that the user of the token completed in the application (D-133). */
+            /** @description The steps of the onboarding that the user of the token completed in the application (D-149). */
             data: {
                 applicationId: number;
                 /**
@@ -2854,8 +2859,9 @@ export interface components {
         EnvironmentFilter: components["schemas"]["Environment"];
         /**
          * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
-         *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
-         *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+         *     For a screen only the `updatedAt` part is compared, so a change of its counters or of its fingerprint is not a 412;
+         *     the formats `W/"<updatedAt ms>"`, `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"` and the full one are accepted,
+         *     and any other format is a 412.
          */
         IfMatch: string;
         /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
@@ -2867,7 +2873,8 @@ export interface components {
         Location: string;
         /**
          * @description Weak validator. A single resource with `updatedAt` sends one derived from it (`W/"<updatedAt ms>"`);
-         *     a screen also appends its `pendingSubtasks` and `commentCount` (`W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"`);
+         *     a screen also appends its `pendingSubtasks`, its `commentCount` and a fingerprint of the items that come from other rows
+         *     (`W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>-<fingerprint>"`, the fingerprint being 8 lowercase hexadecimal digits);
          *     a saved report sends `W/"<updatedAt ms>"` and a comment `W/"<ms of updatedAt, or of createdAt if updatedAt is null>"`;
          *     listings and other responses send a weak hash of the body.
          */
@@ -3080,8 +3087,9 @@ export interface operations {
             header?: {
                 /**
                  * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
-                 *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
-                 *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+                 *     For a screen only the `updatedAt` part is compared, so a change of its counters or of its fingerprint is not a 412;
+                 *     the formats `W/"<updatedAt ms>"`, `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"` and the full one are accepted,
+                 *     and any other format is a 412.
                  */
                 "If-Match"?: components["parameters"]["IfMatch"];
             };
@@ -3291,8 +3299,9 @@ export interface operations {
             header?: {
                 /**
                  * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
-                 *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
-                 *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+                 *     For a screen only the `updatedAt` part is compared, so a change of its counters or of its fingerprint is not a 412;
+                 *     the formats `W/"<updatedAt ms>"`, `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"` and the full one are accepted,
+                 *     and any other format is a 412.
                  */
                 "If-Match"?: components["parameters"]["IfMatch"];
             };
@@ -3462,8 +3471,9 @@ export interface operations {
             header?: {
                 /**
                  * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
-                 *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
-                 *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+                 *     For a screen only the `updatedAt` part is compared, so a change of its counters or of its fingerprint is not a 412;
+                 *     the formats `W/"<updatedAt ms>"`, `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"` and the full one are accepted,
+                 *     and any other format is a 412.
                  */
                 "If-Match"?: components["parameters"]["IfMatch"];
             };
@@ -3700,8 +3710,9 @@ export interface operations {
             header?: {
                 /**
                  * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
-                 *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
-                 *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+                 *     For a screen only the `updatedAt` part is compared, so a change of its counters or of its fingerprint is not a 412;
+                 *     the formats `W/"<updatedAt ms>"`, `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"` and the full one are accepted,
+                 *     and any other format is a 412.
                  */
                 "If-Match"?: components["parameters"]["IfMatch"];
             };
@@ -3956,8 +3967,9 @@ export interface operations {
             header?: {
                 /**
                  * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
-                 *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
-                 *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+                 *     For a screen only the `updatedAt` part is compared, so a change of its counters or of its fingerprint is not a 412;
+                 *     the formats `W/"<updatedAt ms>"`, `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"` and the full one are accepted,
+                 *     and any other format is a 412.
                  */
                 "If-Match"?: components["parameters"]["IfMatch"];
             };
@@ -4023,8 +4035,9 @@ export interface operations {
             header?: {
                 /**
                  * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
-                 *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
-                 *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+                 *     For a screen only the `updatedAt` part is compared, so a change of its counters or of its fingerprint is not a 412;
+                 *     the formats `W/"<updatedAt ms>"`, `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"` and the full one are accepted,
+                 *     and any other format is a 412.
                  */
                 "If-Match"?: components["parameters"]["IfMatch"];
             };
@@ -4251,8 +4264,9 @@ export interface operations {
             header?: {
                 /**
                  * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
-                 *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
-                 *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+                 *     For a screen only the `updatedAt` part is compared, so a change of its counters or of its fingerprint is not a 412;
+                 *     the formats `W/"<updatedAt ms>"`, `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"` and the full one are accepted,
+                 *     and any other format is a 412.
                  */
                 "If-Match"?: components["parameters"]["IfMatch"];
             };
@@ -4715,8 +4729,9 @@ export interface operations {
             header?: {
                 /**
                  * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
-                 *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
-                 *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+                 *     For a screen only the `updatedAt` part is compared, so a change of its counters or of its fingerprint is not a 412;
+                 *     the formats `W/"<updatedAt ms>"`, `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"` and the full one are accepted,
+                 *     and any other format is a 412.
                  */
                 "If-Match"?: components["parameters"]["IfMatch"];
             };
