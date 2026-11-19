@@ -92,6 +92,44 @@ describe('Edit user modal', () => {
     expect(api.state.revoked).toEqual([3]);
   });
 
+  it('"Generate" fills the new password with one that meets the policy, shows it and sends it with Save', async () => {
+    const user = setupUser();
+    const { api } = await renderUsers();
+    const dialog = await openEdit(user, 'Sample Developer A');
+    const field = dialog.getByLabelText<HTMLInputElement>('New password');
+    expect(field).toHaveAttribute('type', 'password');
+
+    await user.click(dialog.getByRole('button', { name: 'Generate' }));
+
+    // It is shown as text, so the administrator can read it and pass it on.
+    expect(field).toHaveAttribute('type', 'text');
+    expect(field.value).toMatch(/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9]{16}$/);
+    const first = field.value;
+    await user.click(dialog.getByRole('button', { name: 'Generate' }));
+    expect(field.value).not.toBe(first);
+    expect(field).toHaveAttribute('type', 'text');
+
+    await user.click(dialog.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => {
+      expect(api.callsTo('PUT /users/{id}')).toHaveLength(1);
+    });
+    expect(api.callsTo('PUT /users/{id}')[0]?.options.body).toMatchObject({
+      password: field.value,
+    });
+  });
+
+  it('has a save button that says just "Save", and a Generate button only for the password', async () => {
+    const user = setupUser();
+    await renderUsers();
+    const dialog = await openEdit(user, 'Sample Developer A');
+
+    expect(dialog.getByRole('button', { name: 'Save changes' })).toHaveTextContent(/^Save$/);
+    expect(dialog.getAllByRole('button', { name: 'Generate' })).toHaveLength(1);
+    expect(dialog.getByRole('button', { name: 'Generate' }).querySelector('svg')).toHaveClass(
+      'lucide-key-round',
+    );
+  });
+
   it('checks the form before sending and marks the first invalid field', async () => {
     const user = setupUser();
     const { api } = await renderUsers();

@@ -1,13 +1,14 @@
 // ScreenComponentsTab: the Components & navigation tab of the screen detail, read only.
-// Two cards: the components of the screen (name, control type, the OnSelect formula in IBM Plex Mono, the
-// description and what each one uses: variables and collections, linked to their pages) and the navigations (the
-// screens this one goes to, linked to /screens/:id, with their description). The color per element type is not
+// Two cards with a tinted header (the style of Template progress): the components of the screen, each one in its own box in
+// two columns (name, control type, the OnSelect formula in IBM Plex Mono, the description and what it uses: variables and
+// collections, linked to their pages), and the navigations (the screens this one goes to, linked to /screens/:id, with
+// their description, in two columns). The color per element type is not
 // defined in the design: every element uses the neutral icon of ElementTypeIcon.
 // Props: screen.
 import { Box, Navigation } from 'lucide-react';
 import { Link } from 'react-router';
 
-import { ElementTypeIcon, ICON_STROKE_WIDTH, SectionCard, Tag } from '../../components/ui';
+import { ElementTypeIcon, ICON_STROKE_WIDTH, Tag, ToneCard } from '../../components/ui';
 
 import type { Screen } from './screenTypes';
 
@@ -43,8 +44,9 @@ function Uses({ component }: { component: Component }) {
 export function ScreenComponentsTab({ screen }: { screen: Screen }) {
   return (
     <div className="flex flex-col gap-4">
-      <SectionCard
+      <ToneCard
         title="Components"
+        tone="screen"
         description="Controls of the screen and what they use"
         icon={<Box size={16} strokeWidth={ICON_STROKE_WIDTH} />}
         count={screen.components.length}
@@ -52,11 +54,11 @@ export function ScreenComponentsTab({ screen }: { screen: Screen }) {
         {screen.components.length === 0 ? (
           <p className="text-body text-ink-500">No components yet.</p>
         ) : (
-          <ul className="flex flex-col">
+          <ul className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {screen.components.map((component) => (
               <li
                 key={component.id}
-                className="flex flex-col gap-2 border-t border-divider py-3.5 first:border-t-0 first:pt-0 last:pb-0"
+                className="flex min-w-0 flex-col gap-2 rounded-card border border-border-subtle p-4"
               >
                 <div className="flex flex-wrap items-center gap-2.5">
                   <span aria-hidden="true" className="text-ink-500">
@@ -87,23 +89,23 @@ export function ScreenComponentsTab({ screen }: { screen: Screen }) {
             ))}
           </ul>
         )}
-      </SectionCard>
+      </ToneCard>
 
-      <SectionCard
+      <ToneCard
         title="Navigation"
         description="Screens this screen goes to"
         icon={<Navigation size={16} strokeWidth={ICON_STROKE_WIDTH} />}
-        tone="success"
+        tone="teal"
         count={screen.navigations.length}
       >
         {screen.navigations.length === 0 ? (
           <p className="text-body text-ink-500">No navigations yet.</p>
         ) : (
-          <ul className="flex flex-col">
+          <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             {screen.navigations.map((navigation) => (
               <li
                 key={navigation.id}
-                className="flex flex-wrap items-center gap-2.5 border-t border-divider py-2.5 first:border-t-0 first:pt-0 last:pb-0"
+                className="flex min-w-0 flex-wrap items-center gap-2.5 rounded-card border border-border-subtle px-4 py-3"
               >
                 <span aria-hidden="true" className="text-ink-500">
                   <ElementTypeIcon type="screen" />
@@ -120,7 +122,7 @@ export function ScreenComponentsTab({ screen }: { screen: Screen }) {
             ))}
           </ul>
         )}
-      </SectionCard>
+      </ToneCard>
     </div>
   );
 }

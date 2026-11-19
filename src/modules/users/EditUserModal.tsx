@@ -9,7 +9,7 @@
 //    form (RESERVED_ACCOUNT, NOT_FOUND, ...). Saving is disabled with the reason while offline.
 //  - The administrator editing THEMSELVES: a new password ends their sessions on the server, so the client signs out
 //    at once and the sign-in page says why; a change of name or email only updates the top bar (replaceUser).
-import { Pencil } from 'lucide-react';
+import { KeyRound, Pencil } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 
@@ -39,6 +39,7 @@ import {
   NAME_MAX,
   PASSWORD_MAX,
   emailError,
+  generatePassword,
   hasErrors,
   nameError,
   passwordError,
@@ -133,6 +134,8 @@ function EditUserForm({ user, etag, onClose, onSaved, onReload }: EditUserFormPr
   const [name, setName] = useState(user.name);
   const [email, setEmail] = useState(user.email);
   const [password, setPassword] = useState('');
+  // Each press of "Generate" shows the new password in the field, so it can be read and passed on.
+  const [revealKey, setRevealKey] = useState(0);
   const [errors, setErrors] = useState<UserFormErrors>({});
   const [errorToken, setErrorToken] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -230,8 +233,9 @@ function EditUserForm({ user, etag, onClose, onSaved, onReload }: EditUserFormPr
               loading={saving}
               disabled={blocked || conflict !== null}
               aria-describedby={saveReason ? reasonId : undefined}
+              aria-label="Save changes"
             >
-              Save changes
+              Save
             </Button>
           </span>
         </div>
@@ -319,19 +323,39 @@ function EditUserForm({ user, etag, onClose, onSaved, onReload }: EditUserFormPr
           }
         >
           {(control) => (
-            <PasswordField
-              {...control}
-              autoComplete="new-password"
-              spellCheck={false}
-              maxLength={PASSWORD_MAX}
-              placeholder="Leave empty to keep the current password"
-              disabled={saving}
-              value={password}
-              onChange={(event) => {
-                setPassword(event.target.value);
-                setErrors((current) => ({ ...current, password: undefined, form: undefined }));
-              }}
-            />
+            <div className="flex items-start gap-2">
+              <div className="min-w-0 flex-1">
+                <PasswordField
+                  {...control}
+                  autoComplete="new-password"
+                  spellCheck={false}
+                  maxLength={PASSWORD_MAX}
+                  placeholder="Leave empty to keep the current password"
+                  disabled={saving}
+                  value={password}
+                  revealKey={revealKey}
+                  onChange={(event) => {
+                    setPassword(event.target.value);
+                    setErrors((current) => ({
+                      ...current,
+                      password: undefined,
+                      form: undefined,
+                    }));
+                  }}
+                />
+              </div>
+              <Button
+                disabled={saving}
+                iconLeft={<KeyRound aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+                onClick={() => {
+                  setPassword(generatePassword());
+                  setRevealKey((key) => key + 1);
+                  setErrors((current) => ({ ...current, password: undefined, form: undefined }));
+                }}
+              >
+                Generate
+              </Button>
+            </div>
           )}
         </FormField>
         <p className="text-small text-ink-500">Role and status are changed from the row menu.</p>

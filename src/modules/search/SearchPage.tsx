@@ -8,8 +8,10 @@
 // Dashboard). An archived application is searched like any other (the search writes nothing). The 400 `required` of
 // the API (a request with neither text nor filter) is the initial state, not an error.
 // The number of results is announced in a polite live region once the page is read.
-// The list keeps the order and the page of the API; the chips carry the total of each type (useSearchResults).
-import { Search } from 'lucide-react';
+// The list keeps the order and the page of the API; the pills carry the total of each type (useSearchResults).
+// Layout (the style of the redesigned pages): the hero (with "Clear all"), the search card (text box, type pills and filters
+// on a soft band) and the results in a tinted card, each result with a tile in the color of its type.
+import { ListChecks, Search, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 
@@ -17,18 +19,20 @@ import type { ApiError } from '../../api/ApiError';
 import { useApplication } from '../../application/useApplication';
 import {
   Button,
+  cx,
+  ElementTypeIcon,
   EmptyState,
   ErrorState,
   ICON_STROKE_WIDTH,
-  PageHeader,
+  PageHero,
   Pagination,
   SLOW_LOADING_MESSAGE,
-  SectionCard,
   Skeleton,
+  ToneCard,
   useDelayedLoading,
 } from '../../components/ui';
 
-import { resultsHeading } from './searchLabels';
+import { resultsHeading, TYPE_ICON } from './searchLabels';
 import { SearchFilters } from './SearchFilters';
 import { SearchForm } from './SearchForm';
 import { SearchResultItem } from './SearchResultItem';
@@ -36,6 +40,12 @@ import { useSearchListParams } from './useSearchListParams';
 import { useSearchResults } from './useSearchResults';
 
 const RESULT_PLACEHOLDERS = [0, 1, 2, 3] as const;
+/** The types that have an icon of their own, each in the color of its module, for the initial state. */
+const INITIAL_TILES = [
+  { type: 'SCREEN', tile: 'bg-screen-soft text-screen-ink' },
+  { type: 'VARIABLE', tile: 'bg-variable-soft text-variable-ink' },
+  { type: 'COLLECTION', tile: 'bg-collection-soft text-collection-ink' },
+] as const;
 
 /** The 400 of a request with neither text nor filter: the page never sends it, and it is handled as the initial state. */
 function isRequiredQuery(error: ApiError | null): boolean {
@@ -108,10 +118,22 @@ function AdvancedSearch() {
 
   return (
     <>
-      <PageHeader
+      <PageHero
+        tone="find"
         icon={<Search size={20} strokeWidth={ICON_STROKE_WIDTH} />}
         title="Advanced search"
         description={`Search across screens, variables, collections and components of ${currentApplication?.name ?? 'the application'}.`}
+        actions={
+          hasAnything ? (
+            <Button
+              size="sm"
+              iconLeft={<X aria-hidden="true" size={14} strokeWidth={ICON_STROKE_WIDTH} />}
+              onClick={clearAll}
+            >
+              Clear all
+            </Button>
+          ) : undefined
+        }
       />
 
       <SearchForm params={params} setParams={setParams}>
@@ -120,8 +142,6 @@ function AdvancedSearch() {
           setParams={setParams}
           totals={totals}
           searching={asking && !requiredAnswer}
-          canClear={hasAnything}
-          onClearAll={clearAll}
         />
       </SearchForm>
 
@@ -130,15 +150,29 @@ function AdvancedSearch() {
       </p>
 
       {showInitial ? (
-        <div className="rounded-card border border-border-subtle bg-surface shadow-card">
-          <EmptyState
-            icon={<Search />}
-            title="Search the documentation"
-            description="Type at least 2 characters or choose a filter."
-          />
+        <div className="shrink-0 rounded-modal border border-find-border bg-surface shadow-card">
+          <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+            <div aria-hidden="true" className="flex items-center gap-3">
+              {INITIAL_TILES.map(({ type, tile }) => (
+                <span
+                  key={type}
+                  className={cx(
+                    'flex size-12 items-center justify-center rounded-card shadow-card',
+                    tile,
+                  )}
+                >
+                  <ElementTypeIcon type={TYPE_ICON[type]} size={22} />
+                </span>
+              ))}
+            </div>
+            <h2 className="text-section font-bold text-ink-900">Search the documentation</h2>
+            <p className="max-w-md text-body text-ink-500">
+              Type at least 2 characters or choose a filter.
+            </p>
+          </div>
         </div>
       ) : list.status === 'error' ? (
-        <div className="rounded-card border border-border-subtle bg-surface shadow-card">
+        <div className="shrink-0 rounded-modal border border-find-border bg-surface shadow-card">
           <ErrorState
             variant="server-error"
             requestId={list.error?.requestId ?? undefined}
@@ -147,7 +181,7 @@ function AdvancedSearch() {
           />
         </div>
       ) : data === null ? (
-        <SectionCard title="Results" flush>
+        <ToneCard title="Results" tone="find" flush>
           <div aria-busy="true">
             {showSkeleton ? (
               <ul>
@@ -174,9 +208,9 @@ function AdvancedSearch() {
               </p>
             )}
           </div>
-        </SectionCard>
+        </ToneCard>
       ) : data.total === 0 && !list.loading ? (
-        <div className="rounded-card border border-border-subtle bg-surface shadow-card">
+        <div className="shrink-0 rounded-modal border border-find-border bg-surface shadow-card">
           <EmptyState
             icon={<Search />}
             title="No results"
@@ -191,8 +225,10 @@ function AdvancedSearch() {
           />
         </div>
       ) : (
-        <SectionCard
+        <ToneCard
           title={resultsHeading(data)}
+          tone="find"
+          icon={<ListChecks size={16} strokeWidth={ICON_STROKE_WIDTH} />}
           description={
             data.text === '' ? 'Sorted by name.' : 'Exact name matches first, then by name.'
           }
@@ -228,7 +264,7 @@ function AdvancedSearch() {
               setParams({ pageSize });
             }}
           />
-        </SectionCard>
+        </ToneCard>
       )}
     </>
   );

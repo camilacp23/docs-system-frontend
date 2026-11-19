@@ -119,9 +119,20 @@ export function GraphCanvas({
     void setViewport({ x: view.x, y: view.y, zoom: view.zoom }, { duration: 0 });
   }, [setViewport, bounds, fit]);
 
-  // A new placement (new data) fits the view; selecting, panning or zooming never comes here.
+  // A new placement (new data) fits the view; selecting, panning or zooming never comes here. The new map fades in, so a change of the
+  // filters or of the view is a soft transition and not a jump (not with reduced motion).
   useEffect(() => {
     fitReadable();
+    const element = containerRef.current;
+    if (element === null || typeof element.animate !== 'function') return;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    element.animate(
+      [
+        { opacity: 0, transform: 'scale(0.985)' },
+        { opacity: 1, transform: 'scale(1)' },
+      ],
+      { duration: 320, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' },
+    );
   }, [layoutKey, fitReadable]);
 
   const showTooltip = useCallback<EdgeMouseHandler<MapFlowEdge>>((event, edge) => {

@@ -7,6 +7,8 @@ import {
   countLabel,
   depthText,
   directlyReached,
+  completedPercent,
+  firstIncompleteStep,
   isDone,
   maxConnections,
   parseStep,
@@ -121,5 +123,25 @@ describe('countLabel', () => {
     expect(countLabel(1, 'screen', 'screens')).toBe('screen');
     expect(countLabel(0, 'screen', 'screens')).toBe('screens');
     expect(countLabel(2, 'screen', 'screens')).toBe('screens');
+  });
+});
+
+describe('firstIncompleteStep and completedPercent', () => {
+  it('opens at the first step that was not completed, whatever the order of the list', () => {
+    expect(firstIncompleteStep([])).toBe(1);
+    expect(firstIncompleteStep([1, 2])).toBe(3);
+    expect(firstIncompleteStep([1, 3])).toBe(2);
+    expect(firstIncompleteStep([3, 2, 1])).toBe(4);
+    expect(firstIncompleteStep([2, 3, 4, 5])).toBe(1);
+  });
+
+  it('is null when the five steps are completed', () => {
+    expect(firstIncompleteStep([1, 2, 3, 4, 5])).toBeNull();
+  });
+
+  it('measures the progress over the five steps, never past 0 to 100', () => {
+    expect([0, 1, 2, 3, 4, 5].map(completedPercent)).toEqual([0, 20, 40, 60, 80, 100]);
+    expect(completedPercent(-1)).toBe(0);
+    expect(completedPercent(9)).toBe(100);
   });
 });

@@ -44,7 +44,7 @@ export function SectionCard({
     <section
       aria-label={title}
       className={cx(
-        'relative overflow-hidden rounded-card border border-border-subtle bg-surface shadow-card before:absolute before:inset-y-0 before:left-0 before:w-1',
+        'relative shrink-0 overflow-hidden rounded-card border border-border-subtle bg-surface shadow-card before:absolute before:inset-y-0 before:left-0 before:w-1',
         TONE_EDGE[tone],
         className,
       )}

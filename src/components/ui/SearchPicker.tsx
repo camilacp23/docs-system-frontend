@@ -13,17 +13,20 @@
 // caller gave them, for a list that is searched somewhere else (the audit log's user filter asks the server).
 import { ChevronDown } from 'lucide-react';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import type { ComponentProps, KeyboardEvent } from 'react';
+import type { ComponentProps, KeyboardEvent, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 import { cx, ICON_STROKE_WIDTH } from './cx';
 import { fieldBorderClass } from './fieldStyles';
+import { FILTER_TONE_HOVER, FILTER_TONE_INPUT_FOCUS, type FilterTone } from './filterTones';
 
 export interface SearchPickerOption {
   value: string;
   label: string;
   /** Secondary text at the right of the label; for a disabled option it is the reason. */
   detail?: string;
+  /** A small decorative element before the label (the initials of a person). */
+  leading?: ReactNode;
   disabled?: boolean;
 }
 
@@ -39,6 +42,14 @@ export interface SearchPickerProps extends Pick<
   mono?: boolean;
   invalid?: boolean;
   disabled?: boolean;
+  /** A pill (rounded, with a soft shadow) for a filter bar, in the teal of the audit page, instead of the form field. */
+  pill?: boolean;
+  /** With `pill`: a decorative icon at the start of the input. */
+  icon?: ReactNode;
+  /** With `pill`: the color of its page (default the teal of the audit page). */
+  tone?: FilterTone;
+  /** Without the arrow of a select: a search box that lists matches as the user types. Default true. */
+  chevron?: boolean;
   /** Called with what the user types, and with '' when the typing ends (a choice, Escape, leaving the input). */
   onQueryChange?: (query: string) => void;
   /** false: show `options` as they are, because the caller already searched them (for example on the server). */
@@ -58,6 +69,10 @@ export function SearchPicker({
   mono = false,
   invalid = false,
   disabled = false,
+  pill = false,
+  icon,
+  tone = 'audit',
+  chevron = true,
   onQueryChange,
   filterOptions = true,
   placeholder,
@@ -213,17 +228,38 @@ export function SearchPicker({
         }}
         onKeyDown={onKeyDown}
         className={cx(
-          'h-9 w-full rounded-control border-2 bg-surface pr-9 pl-3 text-ink-900 placeholder:text-ink-500 disabled:cursor-not-allowed disabled:bg-disabled-bg disabled:opacity-45',
-          mono ? 'font-mono text-label' : 'text-body-lg',
-          fieldBorderClass(invalid),
+          pill
+            ? 'h-9 w-full rounded-pill border bg-surface pr-9 text-label font-semibold text-ink-900 shadow-button placeholder:font-medium placeholder:text-ink-700 disabled:cursor-not-allowed disabled:opacity-45'
+            : 'h-9 w-full rounded-control border-2 bg-surface pr-9 pl-3 text-ink-900 placeholder:text-ink-500 disabled:cursor-not-allowed disabled:bg-disabled-bg disabled:opacity-45',
+          pill ? false : mono ? 'font-mono text-label' : 'text-body-lg',
+          pill && (icon === undefined ? 'pl-4' : 'pl-9'),
+          pill
+            ? invalid
+              ? 'border-danger'
+              : cx(
+                  'border-border-subtle focus:outline-none',
+                  FILTER_TONE_HOVER[tone],
+                  FILTER_TONE_INPUT_FOCUS[tone],
+                )
+            : fieldBorderClass(invalid),
         )}
       />
-      <ChevronDown
-        aria-hidden="true"
-        size={16}
-        strokeWidth={ICON_STROKE_WIDTH}
-        className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-ink-500"
-      />
+      {pill && icon !== undefined && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-ink-700"
+        >
+          {icon}
+        </span>
+      )}
+      {chevron && (
+        <ChevronDown
+          aria-hidden="true"
+          size={16}
+          strokeWidth={ICON_STROKE_WIDTH}
+          className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-ink-500"
+        />
+      )}
       {open &&
         createPortal(
           <ul
@@ -233,7 +269,10 @@ export function SearchPicker({
             aria-label={inputProps['aria-label']}
             aria-labelledby={inputProps['aria-labelledby']}
             style={{ top: 0, left: 0, visibility: 'hidden', maxHeight: LIST_MAX_HEIGHT }}
-            className="fixed z-40 overflow-y-auto rounded-card border border-border-subtle bg-surface p-1.5 shadow-modal"
+            className={cx(
+              'fixed z-40 overflow-y-auto rounded-card border border-border-subtle bg-surface p-1.5 shadow-modal',
+              pill && 'min-w-80',
+            )}
           >
             {shown.length === 0 && (
               <li role="presentation" className="px-3 py-2 text-body text-ink-500">
@@ -265,8 +304,16 @@ export function SearchPicker({
                         ),
                   )}
                 >
-                  <span className={mono ? 'font-mono text-label' : 'text-body'}>
-                    {option.label}
+                  <span className="flex min-w-0 items-center gap-2">
+                    {option.leading}
+                    <span
+                      className={cx(
+                        mono ? 'font-mono text-label' : 'text-body',
+                        pill && 'whitespace-nowrap',
+                      )}
+                    >
+                      {option.label}
+                    </span>
                   </span>
                   {option.detail && (
                     <span className="text-small text-ink-500">{option.detail}</span>

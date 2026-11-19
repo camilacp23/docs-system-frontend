@@ -1,5 +1,5 @@
-// useCollectionCounts: the two numbers of the list subtitle "N collections · M not linked to any screen" (S-14).
-// Two light reads of GET /collections (pageSize 1: only `total` is used), loaded once per application and reloaded
+// useCollectionCounts: the numbers of the counters above the list (S-14): all the collections and those not linked to any
+// screen. Two light reads of GET /collections (pageSize 1: only `total` is used), loaded once per application and reloaded
 // with `reload()` after a collection is created or deleted, not with every change of the filters.
 import { useApi } from '../../api/useApi';
 import { useApiResource, type ApiResource } from '../../api/useApiResource';

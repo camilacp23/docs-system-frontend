@@ -67,6 +67,25 @@ describe('audit log, opening a record', () => {
     expect(record('Detalle').queryByRole('table')).toBeNull();
   });
 
+  it('opens and closes when any empty part of the row is pressed, not only the chevron, and keeps its links and its detail alone', async () => {
+    await renderAudit({ entries: ENTRIES });
+    await screen.findByText('Detalle');
+    const user = setupUser();
+    const row = timeline().getByText('Detalle').closest('li') as HTMLElement;
+    const opener = within(row).getByRole('button', { name: /^Details of / });
+    expect(opener).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(row.querySelector('time') as HTMLElement);
+    expect(opener).toHaveAttribute('aria-expanded', 'true');
+
+    // Pressing inside the open detail does not close it.
+    await user.click(within(row).getByRole('table', { name: 'Changes' }));
+    expect(opener).toHaveAttribute('aria-expanded', 'true');
+
+    await user.click(row.querySelector('time') as HTMLElement);
+    expect(opener).toHaveAttribute('aria-expanded', 'false');
+  });
+
   it('opens and closes with the keyboard: Enter and Space on the focused button', async () => {
     await renderAudit({ entries: ENTRIES });
     await screen.findByText('Detalle');
@@ -110,7 +129,7 @@ describe('audit log, the detail of each action', () => {
     const rows = within(table).getAllByRole('row').slice(1);
     expect(rows).toHaveLength(2);
     const [working, known] = rows as [HTMLElement, HTMLElement];
-    expect(within(working).getByRole('rowheader')).toHaveTextContent('workingProcess');
+    expect(within(working).getByRole('rowheader')).toHaveTextContent('Working process');
     expect(
       within(working)
         .getAllByRole('cell')
@@ -141,8 +160,8 @@ describe('audit log, the detail of each action', () => {
       within(table)
         .getAllByRole('rowheader')
         .map((h) => h.textContent),
-    ).toEqual(['id', 'name', 'scope']);
-    expect(within(table).getByText('CONTEXT')).toBeInTheDocument();
+    ).toEqual(['ID', 'Name', 'Scope']);
+    expect(within(table).getByText('Context')).toBeInTheDocument();
   });
 
   it('DELETE: the old values', async () => {
@@ -154,7 +173,7 @@ describe('audit log, the detail of each action', () => {
       within(table)
         .getAllByRole('rowheader')
         .map((h) => h.textContent),
-    ).toEqual(['id', 'name']);
+    ).toEqual(['ID', 'Name']);
     expect(within(table).getByText('5')).toBeInTheDocument();
   });
 
@@ -167,9 +186,9 @@ describe('audit log, the detail of each action', () => {
       within(table)
         .getAllByRole('rowheader')
         .map((h) => h.textContent),
-    ).toEqual(['from', 'to', 'commentId']);
-    expect(within(table).getByText('IN_REVIEW')).toBeInTheDocument();
-    expect(within(table).getByText('APPROVED')).toBeInTheDocument();
+    ).toEqual(['From', 'To', 'Comment ID']);
+    expect(within(table).getByText('In review')).toBeInTheDocument();
+    expect(within(table).getByText('Approved')).toBeInTheDocument();
     expect(within(table).getByText('—')).toBeInTheDocument();
   });
 
@@ -228,7 +247,7 @@ describe('audit log, values as text', () => {
     expect(element.querySelector('b, script, img, a, strong')).toBeNull();
   });
 
-  it('shows an object or an array as formatted JSON, nested ones included', async () => {
+  it('shows an object or an array as readable lines, never as JSON, nested ones included', async () => {
     const parameters = {
       format: 'PDF',
       scope: {
@@ -247,9 +266,13 @@ describe('audit log, values as text', () => {
     });
     await screen.findByText('Q4', { selector: 'span' });
     const { detail } = await open('Q4');
-    const json = detail.getByText((_, element) => element?.tagName === 'PRE');
-    expect(json.textContent).toBe(JSON.stringify(parameters, null, 2));
-    expect(json.textContent).toContain('\n    "elementTypes": [\n      "SCREEN",');
+    const lines = detail.getByText('Scope:').closest('dl') as HTMLElement;
+    expect(lines.tagName).toBe('DL');
+    expect(lines).toHaveTextContent('Format:PDF');
+    expect(lines).toHaveTextContent('Element types:Screen, Variable');
+    expect(lines).toHaveTextContent('Screen IDs:1, 2');
+    expect(lines).toHaveTextContent('Include dependencies:No');
+    expect(detail.queryByText(/[{}[\]"]/)).toBeNull();
   });
 
   it('cuts a long value, shows it whole with "Show more" and cuts it again with "Show less"', async () => {
@@ -345,6 +368,6 @@ describe('audit log, a password change', () => {
     await screen.findByText('Zoe', { selector: 'span' });
     const { detail } = await open('Zoe');
     expect(detail.queryByText(/secret/)).toBeNull();
-    expect(detail.getAllByRole('rowheader').map((h) => h.textContent)).toEqual(['id', 'name']);
+    expect(detail.getAllByRole('rowheader').map((h) => h.textContent)).toEqual(['ID', 'Name']);
   });
 });

@@ -8,13 +8,24 @@
 // row is the click target of that link.
 import { Link } from 'react-router';
 
-import { ElementTypeIcon, StatusTag, Tag } from '../../components/ui';
+import { cx, ElementTypeIcon, StatusTag, Tag } from '../../components/ui';
 import { elementHref } from '../dependency-map/nodeLinks';
 import { toTagStatus } from '../screens/screenLabels';
 
 import { Highlighted } from './Highlighted';
 import { MATCHED_IN_MONO, matchedInText, TYPE_ICON, TYPE_LABEL } from './searchLabels';
 import { SEARCH_ENVIRONMENTS, type SearchResult } from './searchTypes';
+
+/** The tile and the hover wash of each type: the color of its module. */
+const TYPE_TILE: Record<SearchResult['type'], { tile: string; row: string }> = {
+  SCREEN: { tile: 'bg-screen-soft text-screen-ink', row: 'hover:bg-screen-soft/40' },
+  VARIABLE: { tile: 'bg-variable-soft text-variable-ink', row: 'hover:bg-variable-soft/40' },
+  COLLECTION: {
+    tile: 'bg-collection-soft text-collection-ink',
+    row: 'hover:bg-collection-soft/40',
+  },
+  COMPONENT: { tile: 'bg-empty-icon-bg text-primary', row: 'hover:bg-empty-icon-bg/40' },
+};
 
 interface SearchResultItemProps {
   result: SearchResult;
@@ -36,10 +47,18 @@ export function SearchResultItem({ result, text }: SearchResultItemProps) {
   ].filter((part) => part !== null);
 
   return (
-    <li className="relative flex items-start gap-4 border-b border-divider px-5 py-3.5 last:border-b-0 hover:bg-control-hover">
+    <li
+      className={cx(
+        'relative flex items-start gap-4 border-b border-divider px-5 py-3.5 transition-colors duration-150 last:border-b-0 motion-reduce:transition-none',
+        TYPE_TILE[result.type].row,
+      )}
+    >
       <span
         aria-hidden="true"
-        className="flex size-10 shrink-0 items-center justify-center rounded-control border border-border-subtle bg-surface text-ink-700"
+        className={cx(
+          'flex size-10 shrink-0 items-center justify-center rounded-control',
+          TYPE_TILE[result.type].tile,
+        )}
       >
         <ElementTypeIcon type={TYPE_ICON[result.type]} size={18} />
       </span>

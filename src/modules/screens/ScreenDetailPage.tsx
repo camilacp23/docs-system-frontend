@@ -1,5 +1,6 @@
-// ScreenDetailPage: /screens/:id (S-19, S-19r), read only. Header with the name (IBM Plex Mono), the status tag,
-// "Reserved" for App (OnStart), the author and the last update, and the link to the Miro diagram (another tab).
+// ScreenDetailPage: /screens/:id (S-19, S-19r), read only. Hero with the name (IBM Plex Mono, the icon tile of the size of the
+// edit page's) and the link to the Miro diagram (another tab); the status, the author and the last update are in the
+// Template tab.
 // Five tabs: Template, Components & navigation, Variables & collections, Future to do (the Jira to-dos, with the
 // pending count as a badge) and Comments. The tab is part of the URL (`?tab=components`, `?tab=links`, `?tab=todo`; Template is the
 // default and leaves no parameter), so a tab can be linked and the back button returns to the previous one. Comments
@@ -8,18 +9,18 @@
 // the count, D-101; a status change sent with the old tag is not a 412 because If-Match compares only `updatedAt`). The pending to-dos shown in the badge and in the side card are the detail's `pendingSubtasks` until the
 // Future to do tab has read the tree; from then on they are the tree's count. (The ETag of the detail follows `updatedAt`,
 // which a Jira change does not move, so a read that revalidates could bring a count older than the tree.)
-// The workflow actions of the status and the role (screenWorkflow, Table 61, S-25b) are in the header: buttons next to
-// Edit and the less frequent ones in the "…" menu. A change goes through PUT /screens/{id}/status with the ETag of the
+// The workflow actions of the status and the role (screenWorkflow, Table 61, S-25b) are in the header, all of them
+// visible buttons (the steps back secondary, the step forward primary), then Edit and Delete after a divider. A change goes through PUT /screens/{id}/status with the ETag of the
 // detail; the answer and its new ETag replace the copy (no second read) and a toast says what happened. A 412 shows the
 // S-44 banner with Reload, INVALID_TRANSITION shows its text and reads the screen again, and TEMPLATE_INCOMPLETE opens
 // the edit page (`?tab=template&submit=1`), which says which template fields are missing (S-25a). The actions are disabled with the
 // reason when the application is archived or there is no connection (useWriteBlock); a Reader sees none.
 // Approve and Return (the Administrator, in review) open ReviewModal (S-37c, S-37b); the answer replaces the copy like
 // any other change, and NOT_IN_REVIEW shows its text and reads the screen again.
-// Edit (Administrator and Developer) opens /screens/:id/edit; it is disabled with the reason for a screen in review, an
-// archived application or no connection (editBlockReason). Delete opens the confirmation with the impact; it is
-// disabled with the reason for App (OnStart) and for the same cases (deleteBlockReason); after deleting, the page goes
-// back to the list.
+// Edit (Administrator and Developer) opens /screens/:id/edit; it is disabled with the reason for an archived application
+// or no connection (editBlockReason). Delete opens the confirmation with the impact; it is disabled with the reason for
+// App (OnStart) and for the same cases (deleteBlockReason); after deleting, the page goes back to the list. A screen IN
+// REVIEW has neither of them (they are not drawn, not disabled): it leaves review with Withdraw, Return or Approve.
 // A screen of another application than the selected one selects that application and says so (D-78); switching
 // application from the shell while the page is open goes back to the list.
 // The breadcrumb reads "Screens / <name>". Loading shows a skeleton after 300 ms; unknown id: "This screen doesn't
@@ -35,11 +36,9 @@ import {
   Button,
   ErrorState,
   ICON_STROKE_WIDTH,
-  PageHeader,
+  PageHero,
   Skeleton,
-  StatusTag,
   Tabs,
-  Tag,
   tabPanelProps,
   useDelayedLoading,
   useToast,
@@ -48,7 +47,6 @@ import { useWriteBlock } from '../../hooks/useWriteBlock';
 import { useBreadcrumbLabel } from '../../layout/breadcrumbContext';
 import { useCurrentUser } from '../../session/useCurrentUser';
 import { parseId } from '../variables/parseId';
-import { formatTimestamp } from '../variables/variableLabels';
 
 import { CommentsTab } from '../comments/CommentsTab';
 
@@ -59,10 +57,9 @@ import { ScreenComponentsTab } from './ScreenComponentsTab';
 import { ScreenLinksTab } from './ScreenLinksTab';
 import { ScreenTemplateTab } from './ScreenTemplateTab';
 import { ReviewModal } from './ReviewModal';
-import { WorkflowButtons, WorkflowMenu } from './ScreenWorkflowControls';
+import { WorkflowButtons } from './ScreenWorkflowControls';
 import { deleteBlockReason, editBlockReason } from './screenActionBlock';
 import { FUTURE_TODO_LABEL } from './jiraTree';
-import { RESERVED_LABEL, toTagStatus } from './screenLabels';
 import { workflowActions, workflowToast, type WorkflowAction } from './screenWorkflow';
 import { SCREEN_TAB_KEYS, type ScreenTabKey } from './screenTabs';
 import { useScreen } from './useScreen';
@@ -174,6 +171,8 @@ export function ScreenDetailPage() {
   const blockReason = deleteBlockReason(loaded, writeReason);
   const editReason = editBlockReason(loaded, writeReason);
   const actions = workflowActions(loaded.documentationStatus, user?.role);
+  // A screen in review can't be edited or deleted: the buttons are not there (its way out is Withdraw, or the decision).
+  const inReview = loaded.documentationStatus === 'IN_REVIEW';
   const controls = {
     actions,
     reason: writeReason,
@@ -190,27 +189,33 @@ export function ScreenDetailPage() {
 
   return (
     <>
-      <PageHeader
-        icon={<Monitor size={20} strokeWidth={ICON_STROKE_WIDTH} />}
+      <PageHero
+        tone="screen"
+        compact
+        icon={<Monitor size={18} strokeWidth={ICON_STROKE_WIDTH} />}
         title={<span className="font-mono">{loaded.name}</span>}
         titleRef={titleRef}
-        meta={
-          <>
-            <StatusTag status={toTagStatus(loaded.documentationStatus)} />
-            {loaded.isAppContext && <Tag>{RESERVED_LABEL}</Tag>}
-            <span className="text-label text-ink-500">
-              Author {loaded.author.name} · Updated {formatTimestamp(loaded.updatedAt)}
-            </span>
-          </>
-        }
         actions={
           <>
-            <MiroLink href={loaded.miroLink}>Open in Miro</MiroLink>
-            {canWrite && (
+            <MiroLink href={loaded.miroLink} className="text-label">
+              Open in Miro
+            </MiroLink>
+            {canWrite && actions.length > 0 && (
               <>
-                <WorkflowButtons {...controls} beforeEdit />
+                <span aria-hidden="true" className="h-6 w-px bg-border" />
+                <WorkflowButtons {...controls} />
+                {writeReason !== null && (
+                  <span id={workflowReasonId} className="sr-only">
+                    {writeReason}
+                  </span>
+                )}
+              </>
+            )}
+            {canWrite && !inReview && (
+              <>
+                <span aria-hidden="true" className="h-6 w-px bg-border" />
                 <Button
-                  variant="primary"
+                  size="sm"
                   disabled={editReason !== null}
                   title={editReason ?? undefined}
                   aria-describedby={editReason === null ? undefined : 'screen-edit-reason'}
@@ -226,15 +231,9 @@ export function ScreenDetailPage() {
                     {editReason}
                   </span>
                 )}
-                <WorkflowButtons {...controls} beforeEdit={false} />
-                <WorkflowMenu {...controls} />
-                {writeReason !== null && actions.length > 0 && (
-                  <span id={workflowReasonId} className="sr-only">
-                    {writeReason}
-                  </span>
-                )}
                 <Button
-                  variant="danger"
+                  size="sm"
+                  variant="danger-soft"
                   disabled={blockReason !== null}
                   title={blockReason ?? undefined}
                   aria-describedby={blockReason === null ? undefined : 'screen-delete-reason'}

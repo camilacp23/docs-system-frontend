@@ -2,11 +2,14 @@
 // (S-22). Props: kind ('variable' | 'collection'), rows, onChange(next rows), errors (by row key), groupError, options (the
 // elements of the screen's application, for the search picker), accessOf (variables only: what the access mode may be for
 // the chosen variable), origins (variables only: the rows the variables module keeps), loadingOptions, disabled.
-// One row per link: the element (chosen with search), the access mode (radios: Read, Write, Read/Write) and where in the
+// One row per link: the element (chosen with search), the access mode (radios: Read, Write, Read/Write, centered in its
+// column) and where in the
 // screen it happens (`usedIn`, IBM Plex Mono: "OnVisible", "btnGuardar.OnSelect"). A context variable of another screen
 // can only be written (Navigate), so Read and Read/Write are disabled for it with the reason of the frame; choosing such
 // a variable switches the row to Write. The API judges it too and its answer is shown on the row.
-// The origin rows come first, read only, with the note that they are maintained from the variable; they are never sent.
+// The origin rows come first: the variable is created in this screen (the "Origin" tag and the Write mode stay, read only), and its
+// "Used in" (`originUsedIn`, optional) is editable here but saved on the VARIABLE (PUT /variables/{id}); the row is never sent in the
+// PUT of the screen.
 // Every control carries the number of its row ("Variable (link 2)"); its error is linked with aria-describedby. After
 // "Add" the focus goes to the new row; after a removal, to the "Add" button.
 import { Database, Lock, Plus, Trash2, Variable } from 'lucide-react';
@@ -17,7 +20,7 @@ import {
   Button,
   ICON_STROKE_WIDTH,
   SearchPicker,
-  SectionCard,
+  ToneCard,
   SegmentedControl,
   Tag,
   TextField,
@@ -59,6 +62,10 @@ interface LinkRowsEditorProps {
   options: readonly SearchPickerOption[];
   accessOf?: (elementId: string) => VariableAccess;
   origins?: readonly OriginLink[];
+  /** The user typed in the "Used in" of an origin row (saved on the variable, not with the screen). */
+  onOriginChange?: (id: number, usedIn: string) => void;
+  /** Errors of the "Used in" of the origin rows, by the id of the link. */
+  originErrors?: Record<number, string>;
   loadingOptions?: boolean;
   disabled?: boolean;
 }
@@ -100,6 +107,8 @@ export function LinkRowsEditor({
   options,
   accessOf,
   origins = [],
+  onOriginChange,
+  originErrors = {},
   loadingOptions = false,
   disabled = false,
 }: LinkRowsEditorProps) {
@@ -131,7 +140,7 @@ export function LinkRowsEditor({
   const showTable = rows.length > 0 || origins.length > 0;
 
   return (
-    <SectionCard
+    <ToneCard
       title={copy.title}
       description={copy.description}
       icon={
@@ -141,13 +150,14 @@ export function LinkRowsEditor({
           <Database size={16} strokeWidth={ICON_STROKE_WIDTH} />
         )
       }
-      tone={kind === 'variable' ? 'accent' : 'success'}
+      tone={kind === 'variable' ? 'variable' : 'collection'}
       count={rows.length + origins.length}
       flush
       actions={
         <Button
           ref={addRef}
           size="sm"
+          aria-label={copy.add}
           disabled={disabled || rows.length >= max}
           iconLeft={<Plus aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
           onClick={() => {
@@ -156,7 +166,7 @@ export function LinkRowsEditor({
             focusRow(row.key);
           }}
         >
-          {copy.add}
+          Add
         </Button>
       }
     >
@@ -172,7 +182,7 @@ export function LinkRowsEditor({
                   <th scope="col" className={HEAD_CLASS}>
                     {copy.column} <span aria-hidden="true">*</span>
                   </th>
-                  <th scope="col" className={HEAD_CLASS}>
+                  <th scope="col" className={HEAD_CLASS.replace('text-left', 'text-center')}>
                     Access <span aria-hidden="true">*</span>
                   </th>
                   <th scope="col" className={HEAD_CLASS}>
@@ -195,14 +205,35 @@ export function LinkRowsEditor({
                       </Link>{' '}
                       <Tag tone="info">Origin</Tag>
                     </td>
-                    <td className={CELL_CLASS}>
+                    <td className={`${CELL_CLASS} text-center`}>
                       <Tag>{ACCESS_MODE_LABEL[origin.accessMode]}</Tag>
                     </td>
-                    <td className={`${CELL_CLASS} font-mono text-label text-ink-900`}>origin</td>
+                    <td className={CELL_CLASS}>
+                      <TextField
+                        mono
+                        autoComplete="off"
+                        spellCheck={false}
+                        aria-label={`Used in (origin ${origin.variable.name})`}
+                        placeholder="OnVisible"
+                        invalid={Boolean(originErrors[origin.id])}
+                        aria-describedby={describedBy(
+                          originErrors[origin.id] ? `${baseId}-origin-${origin.id}` : null,
+                        )}
+                        disabled={disabled}
+                        value={origin.originUsedIn}
+                        onChange={(event) => {
+                          onOriginChange?.(origin.id, event.target.value);
+                        }}
+                      />
+                      <CellError
+                        id={`${baseId}-origin-${origin.id}`}
+                        message={originErrors[origin.id]}
+                      />
+                    </td>
                     <td className={`${CELL_CLASS} text-small text-ink-500`}>
                       <span className="flex items-center gap-1.5">
                         <Lock aria-hidden="true" size={14} strokeWidth={ICON_STROKE_WIDTH} />
-                        Maintained from the variable
+                        Saved on the variable
                       </span>
                     </td>
                   </tr>
@@ -239,7 +270,7 @@ export function LinkRowsEditor({
                         <CellError id={`${id}-element`} message={rowErrors.element} />
                         <CellError id={`${id}-row`} message={rowErrors.row} />
                       </td>
-                      <td className={CELL_CLASS}>
+                      <td className={`${CELL_CLASS} text-center`}>
                         <SegmentedControl
                           name={`${id}-access`}
                           label={`Access (${copy.noun} ${label})`}
@@ -256,6 +287,7 @@ export function LinkRowsEditor({
                             title: writeOnly && mode !== 'WRITE' ? WRITE_ONLY_REASON : undefined,
                           }))}
                           value={row.accessMode}
+                          className="mx-auto"
                           onChange={(accessMode) => {
                             update(row.key, { accessMode });
                           }}
@@ -312,6 +344,6 @@ export function LinkRowsEditor({
           </p>
         )}
       </div>
-    </SectionCard>
+    </ToneCard>
   );
 }

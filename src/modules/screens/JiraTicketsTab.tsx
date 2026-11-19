@@ -1,5 +1,6 @@
 // JiraTicketsTab: the Future to do tab of the screen detail (S-23, S-23b): the screen's Jira Epic, its Stories and their
-// Subtasks as a table (JiraTicketTable), with the date of the last synchronization and the pending to-dos.
+// Subtasks as a table (JiraTicketTable), with the date of the last synchronization and the pending to-dos. The card has the
+// purple of everything that comes from Jira and the tinted header of Template progress.
 // Props: screen, canWrite (Administrator and Developer: they have "Refresh from Jira", SDD Table 56; a Reader only
 // queries), onPendingChange(count) (the Subtasks not done of the tree, so the detail shows the same number elsewhere).
 // Opening the tab reads the local copy (fast; the webhook keeps it up to date). "Refresh from Jira" is manual and asks the
@@ -22,9 +23,9 @@ import {
   EmptyState,
   ErrorState,
   ICON_STROKE_WIDTH,
-  SectionCard,
   Skeleton,
   Tag,
+  ToneCard,
   useDelayedLoading,
   useToast,
 } from '../../components/ui';
@@ -161,8 +162,9 @@ export function JiraTicketsTab({ screen, canWrite, onPendingChange }: JiraTicket
           {jira.refreshError}
         </Banner>
       )}
-      <SectionCard
+      <ToneCard
         title={FUTURE_TODO_LABEL}
+        tone="jira"
         icon={<ListTodo size={16} strokeWidth={ICON_STROKE_WIDTH} />}
         description={
           epic === null ? (
@@ -223,7 +225,7 @@ export function JiraTicketsTab({ screen, canWrite, onPendingChange }: JiraTicket
             </p>
           </>
         )}
-      </SectionCard>
+      </ToneCard>
       {adding && (
         <AddTodoModal
           screen={screen}

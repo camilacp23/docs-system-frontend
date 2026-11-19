@@ -49,7 +49,7 @@ export function CommentSidePanel({
   return (
     <aside
       aria-labelledby="comments-panel-title"
-      className="flex flex-col gap-4 rounded-card border border-border-subtle bg-surface p-5 shadow-card"
+      className="sticky top-0 flex flex-col gap-4 rounded-card border border-border-subtle bg-surface p-5 shadow-card"
     >
       <h2 id="comments-panel-title" className="text-card-title font-bold text-ink-900">
         {PANEL_TITLE}
@@ -84,7 +84,7 @@ export function CommentSidePanel({
         </ul>
         {partial && <p className="text-small text-ink-500">{PARTIAL_PARTICIPANTS_NOTE}</p>}
       </section>
-      <p className="mt-auto text-small text-ink-500">{PANEL_NOTE}</p>
+      <p className="text-small text-ink-500">{PANEL_NOTE}</p>
     </aside>
   );
 }

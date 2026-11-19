@@ -108,11 +108,16 @@ export interface NavigationRow {
   description: string;
 }
 
-/** A link the variables module keeps (`isOrigin`): shown, never edited, never sent. */
+/**
+ * A link the variables module keeps (`isOrigin`): the row that says the variable is created in this screen. It is never part of
+ * the PUT of the screen (the API keeps it), but its "Used in" (`originUsedIn`) is edited here and saved on the VARIABLE with its own
+ * PUT /variables/{id} (contract 0.5.0). `originUsedIn` is the text of the field ('' = not described).
+ */
 export interface OriginLink {
   id: number;
   variable: { id: number; name: string };
   accessMode: AccessMode;
+  originUsedIn: string;
 }
 
 export interface ScreenEditValues {
@@ -199,7 +204,12 @@ export function valuesFromScreen(screen: Screen): ScreenEditValues {
     })),
     origins: screen.variableLinks
       .filter((link) => link.isOrigin)
-      .map((link) => ({ id: link.id, variable: link.variable, accessMode: link.accessMode })),
+      .map((link) => ({
+        id: link.id,
+        variable: link.variable,
+        accessMode: link.accessMode,
+        originUsedIn: link.originUsedIn ?? '',
+      })),
   };
 }
 
@@ -320,6 +330,8 @@ export interface ScreenEditErrors {
   collectionLinkRows?: Record<string, CollectionLinkRowErrors>;
   navigations?: string;
   navigationRows?: Record<string, NavigationRowErrors>;
+  /** "Used in" of the origin rows, by the id of the link. */
+  originRows?: Record<number, string>;
   /** A message for the whole form (a server error that points to no field). */
   form?: string;
 }
@@ -344,6 +356,7 @@ export function hasErrors(errors: ScreenEditErrors): boolean {
       errors.variableLinkRows,
       errors.collectionLinkRows,
       errors.navigationRows,
+      errors.originRows,
     ].some(present)
   );
 }
@@ -357,7 +370,8 @@ export function errorTab(errors: ScreenEditErrors): EditTab | null {
     errors.variableLinks ||
     errors.collectionLinks ||
     present(errors.variableLinkRows) ||
-    present(errors.collectionLinkRows)
+    present(errors.collectionLinkRows) ||
+    present(errors.originRows)
   )
     return 'links';
   return null;
@@ -428,8 +442,29 @@ function validateLink(
   };
 }
 
+/** The text of an origin row's "Used in": optional, with the format of `usedIn` (never `origin`). */
+export function validateOriginUsedIn(text: string): string | undefined {
+  const used = text.trim();
+  if (used === '') return undefined;
+  if (used.length > USED_IN_MAX_LENGTH) return getRuleMessage('maxLength', FIELD_LABEL.usedIn);
+  if (!USED_IN_PATTERN.test(used)) return getRuleMessage('pattern', FIELD_LABEL.usedIn);
+  return undefined;
+}
+
+/** The origin rows whose "Used in" the user changed: each one is a PUT of its variable. */
+export function changedOrigins(values: ScreenEditValues, screen: Screen): OriginLink[] {
+  return values.origins.filter((origin) => {
+    const before = screen.variableLinks.find((link) => link.id === origin.id)?.originUsedIn ?? null;
+    return origin.originUsedIn.trim() !== (before ?? '');
+  });
+}
+
 export function validateScreenEdit(values: ScreenEditValues): ScreenEditErrors {
   const errors: ScreenEditErrors = {};
+  for (const origin of values.origins) {
+    const found = validateOriginUsedIn(origin.originUsedIn);
+    if (found !== undefined) errors.originRows = { ...errors.originRows, [origin.id]: found };
+  }
   const name = requiredText(values.name.trim(), FIELD_LABEL.name, NAME_MAX_LENGTH);
   if (name !== undefined) errors.name = name;
   const link = values.miroLink.trim();

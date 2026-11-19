@@ -78,7 +78,7 @@ export const PUBLISH_LABEL = 'Publish when ready';
 export const PUBLISH_HELP = 'Readers can see and download it';
 export const FOOTER_NOTE = 'Built in the background — you can keep working.';
 export const CANCEL_LABEL = 'Cancel';
-export const SUBMIT_LABEL = 'Generate';
+export const SUBMIT_LABEL = 'Create report';
 
 export const TITLE_REQUIRED_TEXT = 'Title is required.';
 export const INCLUDE_REQUIRED_TEXT = 'Choose at least one element, or include the status summary.';
@@ -96,6 +96,7 @@ export const screensSummary = (count: number) => `${count} screen${count === 1 ?
 
 // The screen selector
 export const SCREENS_PLACEHOLDER = 'All screens';
+export const SCREENS_EMPTY_BOX_TEXT = 'No screens chosen yet.';
 export const SCREENS_HELP = 'Leave empty to include every screen.';
 export const screensSelected = (count: number) => `${screensSummary(count)} selected`;
 export const SCREEN_SEARCH_LABEL = 'Search screens';

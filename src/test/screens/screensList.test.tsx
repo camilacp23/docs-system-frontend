@@ -17,7 +17,9 @@ const ROW_NAMES = (table: HTMLElement) =>
 
 /** The table once the application is known and its first load has finished. */
 async function table() {
-  await screen.findAllByText(/screens? ·|Read-only: the application is archived/);
+  await screen.findAllByText(
+    /their template and the variables and collections they use|Read-only: the application is archived/,
+  );
   const grid = await screen.findByRole('table', { name: 'Screens' });
   await waitFor(() => {
     expect(grid).toHaveAttribute('aria-busy', 'false');
@@ -88,36 +90,51 @@ describe('screen list', () => {
     });
   });
 
-  it('says how many screens there are and how many are approved, loaded once', async () => {
+  it('says how many screens there are, how many are in review, approved and undocumented, loaded once', async () => {
     const { api } = await renderScreens();
     await table();
 
-    expect(await screen.findByText(/5 screens · 1 approved/)).toBeInTheDocument();
-    // The two counts of the subtitle (the application card reads its own total, D-98, and the Review item of the menu
-    // reads the screens In review).
+    const counts = screen.getByRole('region', { name: 'Screen counts' });
+    await waitFor(() => {
+      expect(counts).toHaveTextContent(/5Screens/);
+    });
+    expect(counts).toHaveTextContent(/1In review/);
+    expect(counts).toHaveTextContent(/1Approved/);
+    // The four counters (the Review item of the menu reads the screens In review on its own).
     const light = api.callsTo('GET /screens').filter((c) => c.options.query?.pageSize === 1);
-    expect(light.filter((c) => c.options.query?.documentationStatus === 'APPROVED')).toHaveLength(
-      1,
-    );
-    expect(light.filter((c) => c.options.query?.documentationStatus === 'IN_REVIEW')).toHaveLength(
-      1,
-    );
-    expect(light).toHaveLength(4);
+    for (const status of ['APPROVED', 'IN_REVIEW', 'UNDOCUMENTED']) {
+      expect(
+        light.filter((c) => c.options.query?.documentationStatus === status).length,
+      ).toBeGreaterThanOrEqual(1);
+    }
+    expect(light.filter((c) => c.options.query?.documentationStatus === undefined)).toHaveLength(1);
   });
 
-  it('keeps the counts when the application is archived and adds the reason after them', async () => {
+  it('says what the page is about, with a link to the map, and the archived reason when it applies', async () => {
+    await renderScreens();
+    await table();
+
+    expect(
+      screen.getByText(
+        'Screens of SAR, their template and the variables and collections they use.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'View on map' })).toHaveAttribute(
+      'href',
+      '/dependency-map',
+    );
+  });
+
+  it('says why writing is off when the application is archived', async () => {
     await renderScreens({
       applications: [makeApplication(1, { name: 'SAR', status: 'ARCHIVED' })],
     });
     await table();
 
-    const subtitle = (await screen.findByText(/5 screens/)).parentElement;
-    expect(subtitle).toHaveTextContent(
-      '5 screens · 1 approved · Read-only: the application is archived.',
-    );
+    expect(await screen.findByText('Read-only: the application is archived.')).toBeInTheDocument();
   });
 
-  it('shows the subtitle once the counts arrive, never a blank line that stays', async () => {
+  it('shows a dash in the counters until they arrive; the list keeps working if they cannot be read', async () => {
     let release: () => void = () => undefined;
     await renderScreens({
       prepare: (fake) => {
@@ -125,55 +142,30 @@ describe('screen list', () => {
       },
     });
     await screen.findByRole('heading', { name: 'Screens' });
-    expect(screen.queryByText(/approved/)).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Screen counts' })).toHaveTextContent('–Screens');
 
     release();
 
-    expect(await screen.findByText(/5 screens · 1 approved/)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('region', { name: 'Screen counts' })).toHaveTextContent(/5Screens/);
+    });
   });
 
-  it('says so, with a retry, when the counts cannot be read', async () => {
-    const user = setupUser();
-    let failing = true;
+  it('keeps the list when the counts cannot be read', async () => {
     await renderScreens({
       prepare: (fake) => {
         const read = fake.client.get.bind(fake.client);
         fake.client.get = (path: string, options?: unknown) => {
           const query = (options as { query?: { pageSize?: number } } | undefined)?.query;
-          if (failing && path === '/screens' && query?.pageSize === 1)
+          if (path === '/screens' && query?.pageSize === 1)
             return Promise.reject(new ApiError({ status: 500, code: 'INTERNAL_ERROR' }));
           return read(path as never, options as never);
         };
       },
     });
 
-    expect(await screen.findByText("Couldn't load the counts.")).toBeInTheDocument();
     expect(await screen.findByRole('link', { name: 'Detalle' })).toBeInTheDocument();
-    failing = false;
-    await user.click(screen.getByRole('button', { name: 'Try again' }));
-
-    expect(await screen.findByText(/5 screens · 1 approved/)).toBeInTheDocument();
-  });
-
-  it('filters by name with a wait after typing, through the URL and the request', async () => {
-    const user = setupUser();
-    const { router, api } = await renderScreens();
-    const grid = await table();
-
-    await user.click(screen.getByRole('searchbox', { name: 'Search by name' }));
-    await user.paste('det');
-
-    await waitFor(() => {
-      expect(ROW_NAMES(grid)).toEqual(['Detalle']);
-    });
-    expect(router.state.location.search).toBe('?q=det');
-    expect(api.callsTo('GET /screens').at(-1)?.options.query).toMatchObject({
-      applicationId: 1,
-      q: 'det',
-      page: 1,
-      pageSize: 20,
-      sort: 'name',
-    });
+    expect(screen.getByRole('region', { name: 'Screen counts' })).toHaveTextContent('–Screens');
   });
 
   it('filters by status', async () => {

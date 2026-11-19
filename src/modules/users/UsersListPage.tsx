@@ -1,6 +1,7 @@
 // UsersListPage: /admin/users, "Users & roles" (S-02, S-02b, S-02c, S-02d). Administrator only: the route guard shows
 // S-41b to the other roles, and the API answers 403 whatever the client does (NFR-03).
-// Page header with the count and "New user", the filter bar, the table and the pagination. Search, role, status,
+// The hero of the redesigned pages in plum with the count and "New" (named "New user"), one "List" card with the filter strip,
+// the table and the pagination. Search, role, status,
 // sort and page live in the URL (useUserListParams); the screen opens on the active users. The reserved account never
 // arrives from the API and is not filtered here. Loading shows a skeleton only after 300 ms (Table 58); an empty list
 // offers "Clear filters" when filters are set; a failure shows the server error state with a retry. The creation
@@ -9,7 +10,7 @@
 // Unarchive has none: it reads the user and sends every field back with If-Match). Deactivating yourself is shown
 // disabled with the reason (the API answers 422 CANNOT_DEACTIVATE_SELF anyway). Every write is disabled with the
 // reason while offline.
-import { Lock, LockOpen, Pencil, Plus, UserPlus, Users, X } from 'lucide-react';
+import { ListFilter, Lock, LockOpen, Pencil, Plus, UserPlus, Users, X } from 'lucide-react';
 import { useState } from 'react';
 import { useSearchParams } from 'react-router';
 
@@ -23,9 +24,10 @@ import {
   EmptyState,
   ErrorState,
   ICON_STROKE_WIDTH,
-  PageHeader,
+  PageHero,
   Pagination,
   SLOW_LOADING_MESSAGE,
+  ToneCard,
   useDelayedLoading,
   useToast,
 } from '../../components/ui';
@@ -116,28 +118,50 @@ export function UsersListPage() {
 
   return (
     <>
-      <PageHeader
+      <PageHero
+        tone="people"
         icon={<Users size={20} strokeWidth={ICON_STROKE_WIDTH} />}
         title="Users & roles"
-        description={list.status === 'ready' ? countText(total, params.status) : undefined}
+        description={
+          list.status === 'ready'
+            ? countText(total, params.status)
+            : 'Who can sign in, with which role.'
+        }
         actions={
           <Button
+            size="sm"
             variant="primary"
             disabled={blocked}
             title={reason ?? undefined}
+            aria-label="New user"
             iconLeft={<Plus aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
             onClick={() => {
               setCreating(true);
             }}
           >
-            New user
+            New
           </Button>
         }
       />
 
-      <section
-        aria-label="User list"
-        className="overflow-hidden rounded-card border border-border-subtle bg-surface shadow-card"
+      <ToneCard
+        title="List"
+        tone="people"
+        icon={<ListFilter size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+        description="Search, filter and sort the users"
+        actions={
+          hasFilters && total > 0 ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              iconLeft={<X aria-hidden="true" size={14} strokeWidth={ICON_STROKE_WIDTH} />}
+              onClick={clearFilters}
+            >
+              Clear filters
+            </Button>
+          ) : undefined
+        }
+        flush
       >
         <UserFilters params={params} setParams={setParams} />
         {list.status === 'error' ? (
@@ -148,22 +172,24 @@ export function UsersListPage() {
             onAction={list.reload}
           />
         ) : list.status === 'ready' && total === 0 ? (
-          <EmptyState
-            icon={<UserPlus />}
-            title="No results"
-            description="No users match these filters."
-            action={
-              hasFilters ? (
-                <Button
-                  variant="primary"
-                  iconLeft={<X aria-hidden="true" size={14} strokeWidth={ICON_STROKE_WIDTH} />}
-                  onClick={clearFilters}
-                >
-                  Clear filters
-                </Button>
-              ) : undefined
-            }
-          />
+          <div className="border-t border-border-subtle">
+            <EmptyState
+              icon={<UserPlus />}
+              title="No results"
+              description="No users match these filters."
+              action={
+                hasFilters ? (
+                  <Button
+                    variant="primary"
+                    iconLeft={<X aria-hidden="true" size={14} strokeWidth={ICON_STROKE_WIDTH} />}
+                    onClick={clearFilters}
+                  >
+                    Clear filters
+                  </Button>
+                ) : undefined
+              }
+            />
+          </div>
         ) : (
           <>
             <UserTable
@@ -178,6 +204,7 @@ export function UsersListPage() {
               renderActions={(row) => (
                 <ActionMenu
                   label={`Actions for ${row.name}`}
+                  buttonLabel="Actions"
                   items={[
                     {
                       key: 'edit',
@@ -245,7 +272,7 @@ export function UsersListPage() {
             />
           </>
         )}
-      </section>
+      </ToneCard>
 
       {editing !== null && (
         <EditUserModal

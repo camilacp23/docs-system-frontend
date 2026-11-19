@@ -1,10 +1,12 @@
-// ScreenTemplateFields: the Template tab of the screen edit page (S-20): the name, the link to the Miro diagram and the
-// seven fields of the standard template (SRS Table 28), in template order.
+// ScreenTemplateFields: the Template tab of the screen edit page (S-20), in the style of the edit variable page: two numbered
+// bands in one card, Basics (the name and the link to the Miro diagram) and Template (the seven fields of the standard
+// template, SRS Table 28, in template order, in two columns).
 // Props: values (ScreenEditValues), onChange(next values), errors, applicationName, isAppContext, disabled (while saving).
 // The name of App (OnStart) is shown but cannot be changed (D-87). The Miro link accepts https addresses only and has
-// an "Open" link next to it when what is typed is a valid address. OnStart is Power Fx: IBM Plex Mono. A line under the
-// name says how many of the seven fields have content (the rule of the server, D-81).
+// an "Open" link next to it when what is typed is a valid address. OnStart is Power Fx: IBM Plex Mono. The hint of the
+// Template band says how many of the seven fields have content (the rule of the server, D-81).
 import { FormField, Textarea, TextField } from '../../components/ui';
+import { PageBand } from '../shared/PageBand';
 
 import { MiroLink } from './MiroLink';
 import {
@@ -51,99 +53,114 @@ export function ScreenTemplateFields({
     link !== '' && link.length <= MIRO_LINK_MAX_LENGTH && MIRO_LINK_PATTERN.test(link);
 
   return (
-    <div className="rounded-card border border-border-subtle bg-surface p-6 shadow-card">
-      <div className="grid grid-cols-2 gap-x-6 gap-y-5">
-        <FormField
-          label={FIELD_LABEL.name}
-          required
-          error={errors.name}
-          help={
-            isAppContext ? (
-              "The name of App (OnStart) can't be changed."
-            ) : (
-              <span className="flex justify-between gap-2">
-                <span>Unique in {applicationName}</span>
-                <span aria-hidden="true">
-                  {values.name.length}/{NAME_MAX_LENGTH}
-                </span>
-              </span>
-            )
-          }
-        >
-          {(control) => (
-            <TextField
-              {...control}
-              data-first
-              mono
-              autoComplete="off"
-              spellCheck={false}
-              disabled={disabled || isAppContext}
-              value={values.name}
-              onChange={(event) => {
-                onChange({ ...values, name: event.target.value });
-              }}
-            />
-          )}
-        </FormField>
-        <FormField
-          label={FIELD_LABEL.miroLink}
-          error={errors.miroLink}
-          help="Optional · https only"
-        >
-          {(control) => (
-            <div className="flex items-start gap-2">
-              <TextField
-                {...control}
-                type="url"
-                autoComplete="off"
-                spellCheck={false}
-                placeholder="https://miro.com/app/board/…"
-                disabled={disabled}
-                value={values.miroLink}
-                onChange={(event) => {
-                  onChange({ ...values, miroLink: event.target.value });
-                }}
-              />
-              {openable && (
-                <MiroLink
-                  href={link}
-                  className="h-9 shrink-0 rounded-control border border-border-control bg-surface px-3.5 text-body shadow-button"
-                >
-                  Open
-                </MiroLink>
-              )}
-            </div>
-          )}
-        </FormField>
-        <p className="col-span-2 -mt-2 text-small text-ink-500">
-          {done} of {TEMPLATE_FIELDS.length} template fields completed
-        </p>
-        {TEMPLATE_FIELDS.map((field) => (
+    <div className="divide-y divide-border overflow-hidden rounded-card border border-border bg-surface shadow-card">
+      <PageBand
+        step={1}
+        tone="accent"
+        title="Basics"
+        label="Basics"
+        description="Name and the link to the Miro diagram."
+      >
+        <div className="grid grid-cols-1 gap-x-4 gap-y-4 lg:grid-cols-2">
           <FormField
-            key={field.key}
-            label={field.label}
-            error={errors.template?.[field.key]}
-            help={FIELD_HELP[field.key]}
+            label={FIELD_LABEL.name}
+            required
+            error={errors.name}
+            help={
+              isAppContext ? (
+                "The name of App (OnStart) can't be changed."
+              ) : (
+                <span className="flex justify-between gap-2">
+                  <span>Unique in {applicationName}</span>
+                  <span aria-hidden="true">
+                    {values.name.length}/{NAME_MAX_LENGTH}
+                  </span>
+                </span>
+              )
+            }
           >
             {(control) => (
-              <Textarea
+              <TextField
                 {...control}
-                rows={4}
-                spellCheck={field.mono ? false : undefined}
-                className={field.mono ? 'font-mono text-label' : undefined}
-                disabled={disabled}
-                value={values.template[field.key]}
+                data-first
+                mono
+                autoComplete="off"
+                spellCheck={false}
+                disabled={disabled || isAppContext}
+                value={values.name}
                 onChange={(event) => {
-                  onChange({
-                    ...values,
-                    template: { ...values.template, [field.key]: event.target.value },
-                  });
+                  onChange({ ...values, name: event.target.value });
                 }}
               />
             )}
           </FormField>
-        ))}
-      </div>
+          <FormField
+            label={FIELD_LABEL.miroLink}
+            error={errors.miroLink}
+            help="Optional · https only"
+          >
+            {(control) => (
+              <div className="flex items-start gap-2">
+                <TextField
+                  {...control}
+                  type="url"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="https://miro.com/app/board/…"
+                  disabled={disabled}
+                  value={values.miroLink}
+                  onChange={(event) => {
+                    onChange({ ...values, miroLink: event.target.value });
+                  }}
+                />
+                {openable && (
+                  <MiroLink
+                    href={link}
+                    className="h-9 shrink-0 rounded-control border border-border-control bg-surface px-3.5 text-body shadow-button"
+                  >
+                    Open
+                  </MiroLink>
+                )}
+              </div>
+            )}
+          </FormField>
+        </div>
+      </PageBand>
+      <PageBand
+        step={2}
+        tone="success"
+        title="Template"
+        label="Template"
+        description={`${done} of ${TEMPLATE_FIELDS.length} template fields completed`}
+      >
+        <div className="grid grid-cols-1 gap-x-4 gap-y-4 lg:grid-cols-2">
+          {TEMPLATE_FIELDS.map((field) => (
+            <FormField
+              key={field.key}
+              label={field.label}
+              error={errors.template?.[field.key]}
+              help={FIELD_HELP[field.key]}
+            >
+              {(control) => (
+                <Textarea
+                  {...control}
+                  rows={4}
+                  spellCheck={field.mono ? false : undefined}
+                  className={field.mono ? 'font-mono text-label' : undefined}
+                  disabled={disabled}
+                  value={values.template[field.key]}
+                  onChange={(event) => {
+                    onChange({
+                      ...values,
+                      template: { ...values.template, [field.key]: event.target.value },
+                    });
+                  }}
+                />
+              )}
+            </FormField>
+          ))}
+        </div>
+      </PageBand>
     </div>
   );
 }

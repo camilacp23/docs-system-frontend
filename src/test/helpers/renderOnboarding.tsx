@@ -19,6 +19,8 @@ export interface RenderOnboardingOptions {
   path?: string;
   applications?: Application[];
   summaries?: Record<number, SummaryData>;
+  /** The steps already completed, by application id (the saved progress). */
+  progress?: Record<number, number[]>;
   prepare?: (api: ReturnType<typeof makeOnboardingApi>) => void;
   settled?: boolean;
   /** The rest of the options of the fake (the screens the shell reads). */
@@ -37,6 +39,7 @@ export async function renderOnboarding(options: RenderOnboardingOptions = {}) {
       api = makeOnboardingApi(apps, {
         ...options.fake,
         summaries: options.summaries ?? { 1: makeSummary() },
+        ...(options.progress !== undefined && { progress: options.progress }),
       });
       options.prepare?.(api);
       return api.client;

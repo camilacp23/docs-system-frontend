@@ -2,11 +2,12 @@
 // (UpdateContext) and without origin screen. The last one is also a filter: pressing it toggles `untraced`.
 // Props: kpis (the counters, null while they load or failed: the cards then show a dash), untracedActive,
 // onToggleUntraced.
+// They are StatTile cards (the same size and look as the collection counters): cerulean for the total, green for global,
+// teal for context and red for the filter (always red, also when the count is 0; with a ring and a check while the filter is
+// on: `aria-pressed` says it).
 import { Braces, CircleAlert, LayoutGrid, Monitor } from 'lucide-react';
-import type { ReactNode } from 'react';
 
-import { cx, ICON_STROKE_WIDTH, SECTION_TONE_TILE } from '../../components/ui';
-import type { SectionTone } from '../../components/ui';
+import { ICON_STROKE_WIDTH, StatTile } from '../../components/ui';
 
 import type { VariableKpis as Kpis } from './useVariableKpis';
 
@@ -16,81 +17,36 @@ interface VariableKpisProps {
   onToggleUntraced: () => void;
 }
 
-const CARD_CLASS =
-  'flex items-center gap-3.5 rounded-card border p-4 text-left shadow-card transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:transform-none';
-
-function Card({
-  icon,
-  value,
-  label,
-  tone = 'accent',
-}: {
-  icon: ReactNode;
-  value: number | null;
-  label: string;
-  tone?: SectionTone;
-}) {
-  return (
-    <>
-      <span
-        aria-hidden="true"
-        className={cx(
-          'flex size-9 shrink-0 items-center justify-center rounded-control',
-          SECTION_TONE_TILE[tone],
-        )}
-      >
-        {icon}
-      </span>
-      <span className="flex flex-col">
-        <span className="text-title font-bold text-ink-900">{value ?? '–'}</span>
-        <span className="text-label text-ink-500">{label}</span>
-      </span>
-    </>
-  );
-}
-
 export function VariableKpis({ kpis, untracedActive, onToggleUntraced }: VariableKpisProps) {
-  const iconProps = { size: 16, strokeWidth: ICON_STROKE_WIDTH } as const;
+  const iconProps = { size: 18, strokeWidth: ICON_STROKE_WIDTH } as const;
   return (
     <section aria-label="Variable counts" className="grid grid-cols-4 gap-4">
-      <div className={cx(CARD_CLASS, 'border-border-subtle bg-surface')}>
-        <Card icon={<Braces {...iconProps} />} value={kpis?.total ?? null} label="Variables" />
-      </div>
-      <div className={cx(CARD_CLASS, 'border-border-subtle bg-surface')}>
-        <Card
-          icon={<LayoutGrid {...iconProps} />}
-          value={kpis?.global ?? null}
-          label="Global · Set"
-          tone="success"
-        />
-      </div>
-      <div className={cx(CARD_CLASS, 'border-border-subtle bg-surface')}>
-        <Card
-          icon={<Monitor {...iconProps} />}
-          value={kpis?.context ?? null}
-          label="Context · UpdateContext"
-          tone="neutral"
-        />
-      </div>
-      <button
-        type="button"
-        aria-pressed={untracedActive}
-        onClick={onToggleUntraced}
-        className={cx(
-          CARD_CLASS,
-          'w-full',
-          untracedActive || (kpis?.untraced ?? 0) > 0
-            ? 'border-warning-border bg-warning-bg'
-            : 'border-border-subtle bg-surface',
-        )}
-      >
-        <Card
-          icon={<CircleAlert {...iconProps} />}
-          value={kpis?.untraced ?? null}
-          label="Without origin screen · filter"
-          tone="warning"
-        />
-      </button>
+      <StatTile
+        icon={<Braces {...iconProps} />}
+        value={kpis?.total ?? null}
+        label="Variables"
+        tone="variable"
+      />
+      <StatTile
+        icon={<LayoutGrid {...iconProps} />}
+        value={kpis?.global ?? null}
+        label="Global · Set"
+        tone="success"
+      />
+      <StatTile
+        icon={<Monitor {...iconProps} />}
+        value={kpis?.context ?? null}
+        label="Context · UpdateContext"
+        tone="teal"
+      />
+      <StatTile
+        icon={<CircleAlert {...iconProps} />}
+        value={kpis?.untraced ?? null}
+        label="Without origin screen · filter"
+        tone="danger"
+        pressed={untracedActive}
+        onPress={onToggleUntraced}
+      />
     </section>
   );
 }

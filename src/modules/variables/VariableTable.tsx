@@ -36,7 +36,7 @@ interface VariableTableProps {
 }
 
 const HEAD_CLASS =
-  'px-3 py-2.5 text-left text-micro font-bold tracking-wider text-ink-500 uppercase';
+  'px-3 py-3 text-left text-micro font-bold tracking-wider text-variable-ink uppercase';
 const SKELETON_ROWS = 5;
 
 function EnvironmentTags({ present }: { present: VariableSummary['environments'] }) {
@@ -65,19 +65,37 @@ export function VariableTable({
   return (
     <div className="overflow-x-auto border-t border-border-subtle">
       <table aria-label="Variables" aria-busy={loading} className="w-full text-left">
-        <thead className="bg-search-bg">
+        <thead className="bg-variable-soft/60">
           <tr>
-            <SortableHeader label="Name" sortKey="name" sort={sort} onSort={onSort} />
-            <SortableHeader label="Scope" sortKey="scope" sort={sort} onSort={onSort} />
+            <SortableHeader
+              label="Name"
+              sortKey="name"
+              sort={sort}
+              onSort={onSort}
+              className="py-3 pl-5 text-variable-ink"
+            />
+            <SortableHeader
+              label="Scope"
+              sortKey="scope"
+              sort={sort}
+              onSort={onSort}
+              className="py-3 text-variable-ink"
+            />
             <th scope="col" className={HEAD_CLASS}>
               Environments
             </th>
             <th scope="col" className={HEAD_CLASS}>
               Origin screen
             </th>
-            <SortableHeader label="Updated" sortKey="updatedAt" sort={sort} onSort={onSort} />
+            <SortableHeader
+              label="Updated"
+              sortKey="updatedAt"
+              sort={sort}
+              onSort={onSort}
+              className="py-3 text-variable-ink"
+            />
             {hasActions && (
-              <th scope="col" className={HEAD_CLASS}>
+              <th scope="col" className={cx(HEAD_CLASS, 'pr-8')}>
                 <span className="sr-only">Actions</span>
               </th>
             )}
@@ -87,7 +105,7 @@ export function VariableTable({
           {showSkeleton
             ? Array.from({ length: SKELETON_ROWS }, (_, index) => (
                 <tr key={index} aria-hidden="true" className="border-t border-divider">
-                  <td className="px-3 py-3.5">
+                  <td className="py-3.5 pr-3 pl-5">
                     <Skeleton className="h-8 w-48" />
                   </td>
                   <td className="px-3 py-3.5">
@@ -110,12 +128,15 @@ export function VariableTable({
                 </tr>
               ))
             : rows.map((row) => (
-                <tr key={row.id} className="border-t border-divider hover:bg-control-hover">
-                  <td className="px-3 py-2.5">
+                <tr
+                  key={row.id}
+                  className="border-t border-divider transition-colors duration-150 hover:bg-variable-soft/40 motion-reduce:transition-none"
+                >
+                  <td className="py-3 pr-3 pl-5">
                     <div className="flex items-center gap-3">
                       <span
                         aria-hidden="true"
-                        className="flex size-9 shrink-0 items-center justify-center rounded-chip bg-accent-soft text-accent-ink"
+                        className="flex size-9 shrink-0 items-center justify-center rounded-control bg-variable-soft text-variable-ink"
                       >
                         <ElementTypeIcon type="variable" />
                       </span>
@@ -132,15 +153,15 @@ export function VariableTable({
                       </span>
                     </div>
                   </td>
-                  <td className="px-3 py-2.5">
+                  <td className="px-3 py-3">
                     <Tag tone={row.scope === 'GLOBAL' ? 'info' : 'neutral'}>
                       {SCOPE_FUNCTION[row.scope]} · {SCOPE_LABEL[row.scope]}
                     </Tag>
                   </td>
-                  <td className="px-3 py-2.5">
+                  <td className="px-3 py-3">
                     <EnvironmentTags present={row.environments} />
                   </td>
-                  <td className="px-3 py-2.5">
+                  <td className="px-3 py-3">
                     {row.originScreen === null ? (
                       <Tag
                         tone="warning"
@@ -160,10 +181,12 @@ export function VariableTable({
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 text-label whitespace-nowrap text-ink-700">
+                  <td className="px-3 py-3 text-label whitespace-nowrap text-ink-700">
                     {formatTimestamp(row.updatedAt)}
                   </td>
-                  {hasActions && <td className="px-3 py-2.5 text-right">{renderActions(row)}</td>}
+                  {hasActions && (
+                    <td className="py-3 pr-8 pl-3 text-right">{renderActions(row)}</td>
+                  )}
                 </tr>
               ))}
         </tbody>

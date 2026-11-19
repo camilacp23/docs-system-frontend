@@ -62,6 +62,81 @@
   --color-success: #16a06a;
   --color-success-pill-ink: #16794a;
   --color-success-pill-bg: #e7f6ee;
+  /* Jira: everything that comes from Jira (pending to-dos, last sync, status) is purple (Atlassian family). */
+  --color-jira: #6554c0;
+  --color-jira-light: #8777d9;
+  --color-jira-ink: #43328f;
+  --color-jira-soft: #efebfc;
+  --color-jira-border: #d8d0f5;
+  /* Variables: cerulean (a cyan-leaning blue, the classic color of code variables; distinct from accent, teal and Jira), the color of the variables module (hero, counters, list). */
+  --color-variable: #0b86b8;
+  --color-variable-light: #3bb3e0;
+  --color-variable-ink: #075a80;
+  --color-variable-soft: #e3f4fb;
+  --color-variable-border: #bfe3f3;
+  /* Collections: royal blue (deeper and more saturated than the accent blue), the color of the collections module. */
+  --color-collection: #2d4fc9;
+  --color-collection-light: #5b7ae6;
+  --color-collection-ink: #1d3392;
+  --color-collection-soft: #e8edfc;
+  --color-collection-border: #c5d1f6;
+  /* Screens: indigo (blue leaning to violet, distinct from the accent blue, cerulean and royal blue), the color of the screens module. */
+  --color-screen: #4a52d1;
+  --color-screen-light: #7279e6;
+  --color-screen-ink: #2f3696;
+  --color-screen-soft: #eceefc;
+  --color-screen-border: #cdd1f6;
+  /* Reports: bronze gold (a deep, muted gold, the color of a printed report; distinct from the review orange and the warning amber), the color of the reports page. */
+  --color-report: #a97a1d;
+  --color-report-light: #d1a64d;
+  --color-report-ink: #6b4a0b;
+  --color-report-soft: #fbf4e2;
+  --color-report-border: #ecdcae;
+  /* Onboarding: sky blue (a bright, light blue, distinct from the accent, cerulean, royal blue, indigo and steel), the color of the guided introduction. */
+  --color-onboarding: #2f9fe3;
+  --color-onboarding-light: #62bbf0;
+  --color-onboarding-ink: #16608f;
+  --color-onboarding-soft: #e6f4fd;
+  --color-onboarding-border: #bfe1f7;
+  /* Review: amber-orange (the color of what is waiting), the color of the review queue. */
+  --color-review: #d9780f;
+  --color-review-light: #f0a03e;
+  --color-review-ink: #8a4300;
+  --color-review-soft: #fff4e5;
+  --color-review-border: #f4d9b3;
+  /* Review accent: petrol blue (deep, slightly green-leaning), the counterpart of the review amber for its icon tiles and count. */
+  --color-review-blue: #1d6a96;
+  --color-review-blue-light: #4a9cc6;
+  /* Audit log: teal (a calm blue-green, distinct from the success green, the cerulean and the sky), the color of the audit page. */
+  --color-audit: #14867f;
+  --color-audit-light: #3fb8ae;
+  --color-audit-ink: #0c5753;
+  --color-audit-soft: #e3f6f4;
+  --color-audit-border: #b8e4df;
+  /* Users & roles: plum (a warm magenta-purple, distinct from the Jira violet, the indigo and the danger red), the color of the people page. */
+  --color-people: #a8408f;
+  --color-people-light: #cf6fb8;
+  --color-people-ink: #6b1f5b;
+  --color-people-soft: #fbebf7;
+  --color-people-border: #efc9e4;
+  /* Applications: forest green (a deep yellow-leaning green, distinct from the teal-green of success and the teal of the audit), the color of the applications page. */
+  --color-apps: #3f7d3a;
+  --color-apps-light: #70ad66;
+  --color-apps-ink: #25521f;
+  --color-apps-soft: #ecf5ea;
+  --color-apps-border: #cae1c5;
+  /* Dependency map: coral rose (a warm pink-red, distinct from the plum of the people page and the danger red), the color of the map page. */
+  --color-map: #d4577a;
+  --color-map-light: #ee8fa9;
+  --color-map-ink: #85203f;
+  --color-map-soft: #fdedf2;
+  --color-map-border: #f6cad8;
+  /* Advanced search: slate navy (a deep grey-leaning blue, corporate and calm, distinct from the accent blue and the report gold), the color of the search page. */
+  --color-find: #3a4f7a;
+  --color-find-light: #6e88b8;
+  --color-find-ink: #243556;
+  --color-find-soft: #edf1f9;
+  --color-find-border: #cdd7ea;
   --color-badge-warning-bg: #f5a524;
   --color-badge-warning-ink: #3b2500;
   --color-toast-bg: #0a1730;
@@ -104,13 +179,16 @@
   --color-sidebar-muted: #8ea2c2;
   --color-sidebar-muted-2: #a9b8d0;
   --color-sidebar-muted-3: #7f93b4;
-  --color-sidebar-glow: #18366a;
+  --color-sidebar-from: #0f1b66;
+  --color-sidebar-to: #080f3f;
+  --color-sidebar-hover: rgba(255, 255, 255, 0.06);
+  --color-sidebar-active-icon: #6ea2ff;
   --color-sidebar-tile: rgba(255, 255, 255, 0.05);
   --color-sidebar-card: rgba(255, 255, 255, 0.06);
   --color-sidebar-card-border: rgba(255, 255, 255, 0.1);
   --color-sidebar-switch: rgba(255, 255, 255, 0.08);
   --color-sidebar-divider: rgba(255, 255, 255, 0.08);
-  --color-sidebar-active-indicator: #7fb3ff;
+  --color-sidebar-active-indicator: #5b95ff;
   --color-sidebar-live-dot: #34d399;
   --color-topbar: rgba(255, 255, 255, 0.88);
 
@@ -133,13 +211,11 @@
     var(--color-skeleton-base)
   );
   --gradient-avatar: linear-gradient(135deg, var(--color-avatar-from), var(--color-avatar-to));
-  --gradient-sidebar:
-    radial-gradient(
-      ellipse 321.6px 540px at 0 0,
-      var(--color-sidebar-glow) 0%,
-      rgb(24 54 106 / 0) 60%
-    ),
-    linear-gradient(180deg, var(--color-navy-900) 0%, var(--color-navy-950) 100%);
+  --gradient-sidebar: linear-gradient(
+    180deg,
+    var(--color-sidebar-from) 0%,
+    var(--color-sidebar-to) 100%
+  );
   --gradient-canvas-soft: linear-gradient(
     160deg,
     var(--color-canvas) 0%,
@@ -150,8 +226,33 @@
     linear-gradient(rgb(255 255 255 / 0.05) 1px, transparent 1px),
     linear-gradient(90deg, rgb(255 255 255 / 0.05) 1px, transparent 1px);
   --gradient-brand-tile: linear-gradient(135deg, #1a86a0, var(--color-accent));
+  --gradient-variable: linear-gradient(135deg, var(--color-variable-light), var(--color-variable));
+  --gradient-collection: linear-gradient(
+    120deg,
+    var(--color-collection-ink) 0%,
+    var(--color-collection) 58%,
+    var(--color-collection-light) 100%
+  );
+  --gradient-screen: linear-gradient(135deg, var(--color-screen-light), var(--color-screen));
+  --gradient-report: linear-gradient(135deg, var(--color-report-light), var(--color-report));
+  --gradient-onboarding: linear-gradient(
+    135deg,
+    var(--color-onboarding-light),
+    var(--color-onboarding)
+  );
+  --gradient-review: linear-gradient(135deg, var(--color-review-light), var(--color-review));
+  --gradient-review-blue: linear-gradient(
+    135deg,
+    var(--color-review-blue-light),
+    var(--color-review-blue)
+  );
+  --gradient-audit: linear-gradient(135deg, var(--color-audit-light), var(--color-audit));
+  --gradient-people: linear-gradient(135deg, var(--color-people-light), var(--color-people));
+  --gradient-apps: linear-gradient(135deg, var(--color-apps-light), var(--color-apps));
+  --gradient-map: linear-gradient(135deg, var(--color-map-light), var(--color-map));
+  --gradient-find: linear-gradient(135deg, var(--color-find-light), var(--color-find));
   --gradient-app-tile: linear-gradient(135deg, var(--color-accent), #2a5fb0);
-  --gradient-nav-active: linear-gradient(90deg, rgb(61 129 217 / 0.3), rgb(61 129 217 / 0.06));
+  --gradient-nav-active: linear-gradient(90deg, rgb(91 149 255 / 0.22), rgb(91 149 255 / 0.07));
   /* derived hover / pressed gradients: base stops mixed with navy-950 (primary) or ink-900 (danger) */
   --gradient-primary-hover: linear-gradient(
     180deg,
@@ -220,6 +321,8 @@
   --radius-card: 12px;
   --radius-modal: 14px;
   --radius-pill: 999px;
+  --radius-bubble: 26px;
+  --radius-bubble-item: 18px;
 
   /* ---- Elevation ---- */
   --shadow-card: 0 1px 1px rgb(16 24 40 / 0.05), 0 1px 1.5px rgb(16 24 40 / 0.07);
@@ -228,10 +331,12 @@
   --shadow-button-hover: 0 4px 10px rgb(16 24 40 / 0.12);
   --shadow-toast: 0 4px 6px rgb(22 33 43 / 0.12);
   --shadow-modal: 0 12px 32px rgb(22 33 43 / 0.2);
+  --shadow-bubble: 0 24px 56px rgb(8 15 63 / 0.32), 0 4px 14px rgb(8 15 63 / 0.14);
   --shadow-nav-tile: 0 4px 6px rgb(61 129 217 / 0.5);
   --shadow-brand-tile: 0 4px 7px rgb(61 129 217 / 0.45);
   --shadow-field-inset: inset 0 1px 2px 1px rgb(16 24 40 / 0.04);
   --shadow-live-dot: 0 0 0 3px rgb(52 211 153 / 0.18);
+  --shadow-jira-dot: 0 0 0 3px rgb(101 84 192 / 0.18);
   --shadow-success-dot: 0 0 0 3px rgb(22 160 106 / 0.15);
 
   /* ---- Motion: entrance of a card (use as `motion-safe:animate-rise`) ---- */
@@ -245,6 +350,17 @@
     to {
       opacity: 1;
       transform: translateX(0);
+    }
+  }
+  --animate-bubble-in: bubble-in 260ms cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+  @keyframes bubble-in {
+    from {
+      opacity: 0;
+      transform: translateX(-10px) scale(0.94);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0) scale(1);
     }
   }
   --animate-fade-in: fade-in 220ms ease-out 90ms both;

@@ -87,22 +87,20 @@ describe('screen detail: the Edit button', () => {
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
   });
 
-  it('is disabled with the reason of the catalog while the screen is in review', async () => {
+  it('is not drawn while the screen is in review (its way out is the workflow buttons)', async () => {
     await renderScreens({ path: '/screens/12' });
     await screen.findByRole('heading', { name: 'Detalle', level: 1 });
 
-    const button = screen.getByRole('button', { name: 'Edit' });
-    expect(button).toBeDisabled();
-    expect(button).toHaveAttribute('title', REVIEW_REASON);
-    expect(button).toHaveAccessibleDescription(REVIEW_REASON);
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Withdraw from review' })).toBeInTheDocument();
   });
 
-  it('is disabled when the application is archived, before the reason of the screen', async () => {
+  it('is disabled when the application is archived', async () => {
     await renderScreens({
-      path: '/screens/12',
+      path: '/screens/13',
       applications: [makeApplication(1, { name: 'SAR', status: 'ARCHIVED' })],
     });
-    await screen.findByRole('heading', { name: 'Detalle', level: 1 });
+    await screen.findByRole('heading', { name: 'Busqueda', level: 1 });
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Edit' })).toBeDisabled();

@@ -1,12 +1,13 @@
 // CollectionsListPage: /collections (S-14; the Reader gets no create button and no row actions).
-// Page header with the counts ("4 collections · 1 not linked to any screen"), filter bar, table and pagination.
+// Page header (title, subtitle, "View on map" and "New"), the three counters (CollectionKpis), filter bar, table and
+// pagination.
 // Filters, sort and page live in the URL (useCollectionListParams), so the list can be shared; changing the
 // application resets them. Until the screens module exists almost every collection is "Not linked": that is what the
 // data says and it is shown as it is. Loading shows a skeleton only after 300 ms (Table 58); an empty list offers
 // "Clear filters" when filters are set; a failure shows the server error state with a retry. The page subtitle says
-// why writing is disabled when the application is archived (S-09b): the counts stay and the reason follows them.
-// The counts line is never blank: a skeleton while they load, "Couldn't load the counts." with a retry if they fail.
-import { Database, Eye, ListFilter, Pencil, Plus, Trash2, X } from 'lucide-react';
+// why writing is disabled when the application is archived (S-09b).
+// The counters show a dash while they load or if they cannot be read; the list keeps working either way.
+import { Database, Eye, ListFilter, Network, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 
@@ -16,21 +17,21 @@ import { useApplication } from '../../application/useApplication';
 import {
   ActionMenu,
   Button,
+  ButtonLink,
   EmptyState,
   ErrorState,
   ICON_STROKE_WIDTH,
-  PageHeader,
+  PageHero,
   Pagination,
-  SectionCard,
   SLOW_LOADING_MESSAGE,
-  Skeleton,
+  ToneCard,
   useDelayedLoading,
 } from '../../components/ui';
 import { ARCHIVED_WRITE_REASON } from '../../hooks/useWriteBlock';
 import { useCurrentUser } from '../../session/useCurrentUser';
-import { countText } from '../variables/variableLabels';
 
 import { CollectionFilters } from './CollectionFilters';
+import { CollectionKpis } from './CollectionKpis';
 import { CollectionTable } from './CollectionTable';
 import type { CollectionSummary } from './collectionTypes';
 import { CreateCollectionModal } from './CreateCollectionModal';
@@ -102,68 +103,56 @@ function CollectionsList() {
 
   return (
     <>
-      <PageHeader
+      <PageHero
+        tone="collection"
         icon={<Database size={20} strokeWidth={ICON_STROKE_WIDTH} />}
         title="Collections"
         description={
-          <>
-            {counts.status === 'error' ? (
-              <span>
-                Couldn&apos;t load the counts.{' '}
-                <button
-                  type="button"
-                  className="rounded-chip font-semibold text-primary hover:underline"
-                  onClick={counts.reload}
-                >
-                  Try again
-                </button>
-              </span>
-            ) : counts.data === null ? (
-              <Skeleton className="mt-1.5 h-4 w-56" />
-            ) : (
-              <span>
-                {countText(counts.data.total, 'collection')} ·{' '}
-                {counts.data.undocumented > 0 ? (
-                  <button
-                    type="button"
-                    aria-pressed={params.undocumented}
-                    className="rounded-chip font-semibold text-primary hover:underline"
-                    onClick={() => {
-                      setParams({ undocumented: !params.undocumented });
-                    }}
-                  >
-                    {counts.data.undocumented} not linked to any screen
-                  </button>
-                ) : (
-                  <span>0 not linked to any screen</span>
-                )}
-              </span>
-            )}
-            {archived && <span> · {ARCHIVED_WRITE_REASON}</span>}
-          </>
+          archived
+            ? ARCHIVED_WRITE_REASON
+            : `Collections of ${applicationName}, their fields and the variables they feed.`
         }
         actions={
-          canWrite && (
-            <Button
-              variant="primary"
-              disabled={archived}
-              title={archived ? ARCHIVED_WRITE_REASON : undefined}
-              iconLeft={<Plus aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
-              onClick={() => {
-                setCreating(true);
-              }}
+          <>
+            <ButtonLink
+              size="sm"
+              to="/dependency-map"
+              iconLeft={<Network aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
             >
-              New collection
-            </Button>
-          )
+              View on map
+            </ButtonLink>
+            {canWrite && (
+              <Button
+                size="sm"
+                variant="primary"
+                disabled={archived}
+                title={archived ? ARCHIVED_WRITE_REASON : undefined}
+                aria-label="New collection"
+                iconLeft={<Plus aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+                onClick={() => {
+                  setCreating(true);
+                }}
+              >
+                New
+              </Button>
+            )}
+          </>
         }
       />
 
-      <SectionCard
-        title="Collection list"
+      <CollectionKpis
+        counts={counts.data}
+        undocumentedActive={params.undocumented}
+        onToggleUndocumented={() => {
+          setParams({ undocumented: !params.undocumented });
+        }}
+      />
+
+      <ToneCard
+        title="List"
+        tone="collection"
         icon={<ListFilter size={16} strokeWidth={ICON_STROKE_WIDTH} />}
         description="Search, filter and sort the collections of this application"
-        count={list.status === 'ready' ? total : null}
         actions={
           hasFilters && total > 0 ? (
             <Button
@@ -222,6 +211,7 @@ function CollectionsList() {
                   ? (row) => (
                       <ActionMenu
                         label={`Actions for ${row.name}`}
+                        buttonLabel="Actions"
                         items={[
                           {
                             key: 'view',
@@ -277,7 +267,7 @@ function CollectionsList() {
             />
           </>
         )}
-      </SectionCard>
+      </ToneCard>
 
       {deleting !== null && (
         <DeleteCollectionModal

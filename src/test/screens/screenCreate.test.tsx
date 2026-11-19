@@ -11,7 +11,9 @@ import { setupUser, type User } from '../helpers/setupUser';
 
 /** The page once the selected application is known (the list is rebuilt when it becomes known). */
 async function appReady() {
-  await screen.findAllByText(/screens? ·|Read-only: the application is archived/);
+  await screen.findAllByText(
+    /their template and the variables and collections they use|Read-only: the application is archived/,
+  );
 }
 
 async function openModal(user: User) {

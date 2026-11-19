@@ -1,5 +1,5 @@
 // MapView: everything the dependency map shows and does once it has a source of data (FR-15, FR-16, NFR-11; frames S-27,
-// S-27b, S-27c, S-28): the header, the toolbar, the canvas, the side panel and the states.
+// S-27b, S-27c, S-28): the compact header (the hero of the redesigned pages in coral rose, with "Reset view"), the toolbar, the canvas, the side panel and the states.
 // Props: source ({ status, data, error, reload }: the graph, from the API in the page and from test data in /dev/map),
 // params / setParams / clearAll / clearFilters / clearFocus (the view, the filters and the focus, see useGraphParams), applicationId (the
 // selection belongs to the application it was made in), zoomToKey and zoomLevel (development only: center and zoom on a node
@@ -17,7 +17,7 @@
 // States (SDD Table 58): skeleton after 300 ms; "Nothing to map yet" when the application has only App (OnStart); "No
 // results" when the filters leave nothing; the failure of the read inside the block with "Try again". An archived
 // application is read normally: the page writes nothing.
-import { Network } from 'lucide-react';
+import { Network, RotateCcw } from 'lucide-react';
 import { useReactFlow } from '@xyflow/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -26,9 +26,10 @@ import { getErrorMessage } from '../../api/messages';
 import {
   Banner,
   Button,
+  cx,
   EmptyState,
   ICON_STROKE_WIDTH,
-  PageHeader,
+  PageHero,
   SegmentedControl,
   Skeleton,
   SLOW_LOADING_MESSAGE,
@@ -134,7 +135,18 @@ export function MapView({
     framed: string | null;
   }>({ focus: null, columns: NO_COLUMNS, framed: null });
 
-  const data = source.data;
+  // While another answer is on its way (a filter or the view changed) the map that is on screen stays, a little dimmed, and the new
+  // one fades in when it arrives: a soft change instead of an empty canvas and a jump. Only for the same application: the map of
+  // another one is never drawn under the selector of this one.
+  const answer = source.data;
+  const [held, setHeld] = useState<{ applicationId: number | null; data: GraphData } | null>(null);
+  if (answer !== null && held?.data !== answer) setHeld({ applicationId, data: answer });
+  const stale =
+    answer === null &&
+    source.status === 'loading' &&
+    held !== null &&
+    held.applicationId === applicationId;
+  const data = stale ? held.data : answer;
   const focus = params.focus;
   const focusKey = focus?.key ?? null;
   const focused = focus !== null;
@@ -323,10 +335,30 @@ export function MapView({
   return (
     <MapActionsContext.Provider value={actions}>
       <HighlightContext.Provider value={highlight?.nodes ?? null}>
-        <PageHeader
-          icon={<Network size={20} strokeWidth={ICON_STROKE_WIDTH} />}
+        <PageHero
+          tone="map"
+          compact
+          icon={<Network size={18} strokeWidth={ICON_STROKE_WIDTH} />}
           title="Dependency map"
-          description={description}
+          description={
+            <span key={description ?? ''} className="inline-block motion-safe:animate-fade-in">
+              {description ?? 'How the screens, variables and collections depend on each other.'}
+            </span>
+          }
+          className="py-3"
+          actions={
+            <Button
+              size="sm"
+              iconLeft={<RotateCcw aria-hidden="true" size={14} strokeWidth={ICON_STROKE_WIDTH} />}
+              onClick={() => {
+                clearAll();
+                setSelection(null);
+                setTrail([]);
+              }}
+            >
+              Reset view
+            </Button>
+          }
         />
 
         <GraphToolbar
@@ -335,11 +367,6 @@ export function MapView({
           nodes={shown?.nodes ?? []}
           selectedKey={selectedKey}
           onPick={pick}
-          onReset={() => {
-            clearAll();
-            setSelection(null);
-            setTrail([]);
-          }}
           disabled={shown === null}
           focused={focused}
         />
@@ -347,7 +374,7 @@ export function MapView({
         {focus !== null && (
           <section
             aria-label="Focus"
-            className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-info-border bg-info-bg px-4 py-2.5 text-info-ink"
+            className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-modal border border-info-border bg-info-bg px-4 py-2.5 text-info-ink"
           >
             <div className="flex flex-wrap items-center gap-3 text-body-lg">
               <Network aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />
@@ -408,7 +435,13 @@ export function MapView({
         )}
 
         <div className="flex min-h-128 flex-1 gap-4">
-          <div className="relative min-w-0 flex-1 overflow-hidden rounded-card border border-border-subtle bg-canvas">
+          <div
+            aria-busy={stale}
+            className={cx(
+              'relative min-w-0 flex-1 overflow-hidden rounded-modal border border-map-border bg-canvas shadow-card transition-opacity duration-200 motion-reduce:transition-none',
+              stale && 'opacity-60',
+            )}
+          >
             {source.status === 'error' && (
               <div className="p-4">
                 <Banner
@@ -426,7 +459,7 @@ export function MapView({
                 </Banner>
               </div>
             )}
-            {source.status === 'loading' && showSkeleton && (
+            {source.status === 'loading' && showSkeleton && data === null && (
               <div role="status" aria-label="Loading" className="flex h-full flex-col gap-3 p-6">
                 <Skeleton className="h-24 w-56" />
                 <Skeleton className="h-full w-full" />

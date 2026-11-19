@@ -72,7 +72,7 @@ describe('screen edit: loading', () => {
     expect(options.map((option) => option.textContent)).toContain('Busqueda');
   });
 
-  it('loads the links, with the origin row apart and read only', async () => {
+  it('loads the links, with the origin row apart: its tag and mode are read only and its Used in is a field', async () => {
     await openEdit({ tab: 'links' });
 
     expect(pickerValue('Variable (link 1)')).toBe('gRegistroSel');
@@ -87,13 +87,17 @@ describe('screen edit: loading', () => {
     expect(textbox('Used in (variable link 1)')).toHaveValue('btnGuardar.OnSelect');
     expect(pickerValue('Collection (link 1)')).toBe('colClientes');
     expect(textbox('Used in (collection link 1)')).toHaveValue('galClientes.Items');
-    // The origin row is not a control: no second link, no editable field for it.
+    // The origin row is not a link of the screen: no second picker, no Remove; only its Used in is a field.
     expect(screen.queryByRole('combobox', { name: 'Variable (link 2)' })).not.toBeInTheDocument();
     const table = screen.getByRole('table', { name: 'Variable links' });
     expect(within(table).getByRole('link', { name: 'locMostrarDetalle' })).toBeVisible();
-    expect(within(table).getByText('Maintained from the variable')).toBeVisible();
+    expect(within(table).getByText('Saved on the variable')).toBeVisible();
+    expect(within(table).getByText('Origin')).toBeVisible();
+    expect(textbox('Used in (origin locMostrarDetalle)')).toHaveValue('');
     expect(
-      screen.getByText("Origin rows come from the variable and can't be edited here."),
+      screen.getByText(
+        'The Origin row marks where a variable is created. Its Used in is saved on the variable.',
+      ),
     ).toBeVisible();
   });
 

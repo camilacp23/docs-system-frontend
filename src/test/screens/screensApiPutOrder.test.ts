@@ -298,6 +298,7 @@ describe('PUT /screens/{id} in the fake API: 422, 412 and 409', () => {
                 accessMode: 'READ' as const,
                 usedIn: 'OnVisible',
                 isOrigin: false,
+                originUsedIn: null,
               },
             ],
           }

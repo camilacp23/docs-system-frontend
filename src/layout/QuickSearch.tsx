@@ -134,7 +134,7 @@ export function QuickSearch() {
     >
       <div
         className={cx(
-          'flex h-full items-center gap-2.5 overflow-hidden rounded-card border border-border bg-search-bg pr-2 pl-3.5 shadow-field-inset focus-within:border-accent focus-within:ring-2 focus-within:ring-focus-ring',
+          'flex h-full items-center gap-2.5 overflow-hidden rounded-pill border border-border-subtle bg-search-bg pr-2.5 pl-4 transition-colors duration-150 focus-within:border-accent focus-within:bg-surface focus-within:ring-2 focus-within:ring-focus-ring hover:border-border motion-reduce:transition-none',
           disabled && 'opacity-60',
         )}
       >
@@ -173,14 +173,6 @@ export function QuickSearch() {
           onKeyDown={onKeyDown}
           className="min-w-0 flex-1 bg-transparent text-body-lg text-ink-900 outline-none placeholder:text-ink-500"
         />
-        {currentApplication !== null && (
-          <span
-            aria-hidden="true"
-            className="max-w-32 shrink-0 truncate rounded-chip border border-border bg-surface px-2 py-0.75 text-small/5 font-semibold text-ink-700"
-          >
-            in {currentApplication.name}
-          </span>
-        )}
         <kbd
           aria-hidden="true"
           className="shrink-0 rounded-keycap border border-b-2 border-border bg-surface px-1.75 py-1.25 font-mono text-micro/[11px] font-semibold whitespace-nowrap text-ink-700"

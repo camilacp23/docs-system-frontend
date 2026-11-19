@@ -33,6 +33,7 @@ const AJUSTES = makeScreenDetail(60, 'Ajustes', {
       accessMode: 'WRITE',
       usedIn: 'origin',
       isOrigin: true,
+      originUsedIn: null,
     },
     {
       id: 12,
@@ -40,6 +41,7 @@ const AJUSTES = makeScreenDetail(60, 'Ajustes', {
       accessMode: 'READ',
       usedIn: 'btnA.OnSelect',
       isOrigin: false,
+      originUsedIn: null,
     },
   ],
   collectionLinks: [
@@ -310,7 +312,9 @@ describe('delete screen: from the list', () => {
       screens: screensWithAjustes(),
       variables: [ORPHAN],
     });
-    await screen.findByText(/6 screens · 1 approved/);
+    await waitFor(() => {
+      expect(screen.getByRole('region', { name: 'Screen counts' })).toHaveTextContent(/6Screens/);
+    });
 
     const dialog = await openDeleteFromList(user, 'Ajustes');
     await dialog.findByText(/Its 2 components/);
@@ -324,7 +328,9 @@ describe('delete screen: from the list', () => {
     await waitFor(() => {
       expect(screen.queryByRole('link', { name: 'Ajustes' })).not.toBeInTheDocument();
     });
-    expect(await screen.findByText(/5 screens · 1 approved/)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('region', { name: 'Screen counts' })).toHaveTextContent(/5Screens/);
+    });
     expect(api.collectionsApi.variablesApi.state.variables[0]?.originScreen).toBeNull();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
@@ -403,13 +409,11 @@ describe('delete screen: disabled with the reason (Table 56)', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('disables the Delete button of the detail of a screen in review with the reason', async () => {
+  it('does not draw the Delete button of the detail of a screen in review', async () => {
     await renderScreens({ path: '/screens/12' });
     await screen.findByRole('heading', { name: 'Detalle', level: 1 });
 
-    const button = screen.getByRole('button', { name: 'Delete' });
-    expect(button).toBeDisabled();
-    expect(button).toHaveAccessibleDescription(REVIEW_REASON);
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
   });
 
   it('disables Delete with the archived reason, before the reason of the screen', async () => {

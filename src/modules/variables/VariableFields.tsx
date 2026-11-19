@@ -36,6 +36,9 @@ export const CONTEXT_APP_ORIGIN_TEXT = "Context variables can't originate in App
 export const CONTEXT_SCOPE_HELP =
   'Context variables exist only in the screen where they are created.';
 export const ORIGIN_HELP = 'Leave empty if unknown; the variable is then untraced.';
+export const ORIGIN_USED_IN_HELP =
+  'Where in the origin screen it is created, e.g. OnVisible or btnGuardar.OnSelect. Optional.';
+export const ORIGIN_USED_IN_NEEDS_ORIGIN = 'Choose the origin screen first, or leave this empty.';
 
 interface VariableFieldsProps {
   layout: 'modal' | 'page';
@@ -183,6 +186,30 @@ export function VariableFields({
     </FormField>
   );
 
+  const noOrigin = values.originScreenId === '';
+  const originUsedIn = (
+    <FormField
+      label={FIELD_LABEL.originUsedIn}
+      error={errors.originUsedIn}
+      help={noOrigin ? ORIGIN_USED_IN_NEEDS_ORIGIN : ORIGIN_USED_IN_HELP}
+    >
+      {(control) => (
+        <TextField
+          {...control}
+          mono
+          autoComplete="off"
+          spellCheck={false}
+          placeholder="OnVisible"
+          disabled={disabled || noOrigin}
+          value={noOrigin ? '' : values.originUsedIn}
+          onChange={(event) => {
+            set({ originUsedIn: event.target.value });
+          }}
+        />
+      )}
+    </FormField>
+  );
+
   const environments = (
     <EnvironmentsGroup
       layout={layout}
@@ -240,6 +267,7 @@ export function VariableFields({
             {dataType}
             <div className="col-span-2">{scope}</div>
             {origin}
+            <div className="col-span-2">{originUsedIn}</div>
           </div>
         </PageBand>
         <PageBand
@@ -281,6 +309,7 @@ export function VariableFields({
           {dataType}
           <div className="col-span-2">{scope}</div>
           <div className="col-span-2">{origin}</div>
+          <div className="col-span-2">{originUsedIn}</div>
         </div>
       </ModalGroup>
       <div className="flex flex-col gap-5 border-t border-divider pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-8">

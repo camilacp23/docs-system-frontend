@@ -1,5 +1,5 @@
-// CollectionDetailPage: /collections/:id (S-15a-c). Header with the name, environments and last update, the Edit
-// action and the row menu (Delete), both not for the Reader, and three tabs: Overview, Fields and Variable
+// CollectionDetailPage: /collections/:id (S-15a-c). Hero with the name (icon tile of the size of the edit page's), the Delete
+// and Edit actions, both not for the Reader, and three tabs: Overview, Fields and Variable
 // assignments. The tab is part of the URL (`?tab=fields`, `?tab=assignments`; Overview is the default and leaves no
 // parameter), so a tab can be linked and the back button returns to the previous one. The fields tab keeps its page
 // and page size in the URL too (`fpage`, `fsize`).
@@ -20,11 +20,10 @@ import {
   ButtonLink,
   ErrorState,
   ICON_STROKE_WIDTH,
-  PageHeader,
+  PageHero,
   PAGE_SIZES,
   Skeleton,
   Tabs,
-  Tag,
   tabPanelProps,
   useDelayedLoading,
 } from '../../components/ui';
@@ -32,7 +31,6 @@ import { ARCHIVED_WRITE_REASON } from '../../hooks/useWriteBlock';
 import { useBreadcrumbLabel } from '../../layout/breadcrumbContext';
 import { useCurrentUser } from '../../session/useCurrentUser';
 import { parseId } from '../variables/parseId';
-import { formatTimestamp } from '../variables/variableLabels';
 
 import { CollectionAssignmentsTab } from './CollectionAssignmentsTab';
 import { CollectionFieldsTab } from './CollectionFieldsTab';
@@ -132,26 +130,35 @@ export function CollectionDetailPage() {
 
   return (
     <>
-      <PageHeader
-        icon={<Database size={20} strokeWidth={ICON_STROKE_WIDTH} />}
-        title={loaded.name}
-        meta={
-          <>
-            {loaded.environments.map((environment) => (
-              <Tag key={environment} tone={environment === 'PROD' ? 'success' : 'neutral'}>
-                {environment}
-              </Tag>
-            ))}
-            <span className="text-label text-ink-500">
-              Updated {formatTimestamp(loaded.updatedAt)}
-            </span>
-          </>
-        }
+      <PageHero
+        tone="collection"
+        compact
+        icon={<Database size={18} strokeWidth={ICON_STROKE_WIDTH} />}
+        title={<span className="font-mono">{loaded.name}</span>}
         actions={
           canWrite && (
             <>
+              {archived ? (
+                <Button
+                  size="sm"
+                  disabled
+                  title={ARCHIVED_WRITE_REASON}
+                  iconLeft={<Pencil aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+                >
+                  Edit
+                </Button>
+              ) : (
+                <ButtonLink
+                  size="sm"
+                  to={`/collections/${loaded.id}/edit`}
+                  iconLeft={<Pencil aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+                >
+                  Edit
+                </ButtonLink>
+              )}
               <Button
-                variant="danger"
+                size="sm"
+                variant="danger-soft"
                 disabled={archived}
                 title={archived ? ARCHIVED_WRITE_REASON : undefined}
                 iconLeft={<Trash2 aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
@@ -161,24 +168,6 @@ export function CollectionDetailPage() {
               >
                 Delete
               </Button>
-              {archived ? (
-                <Button
-                  variant="primary"
-                  disabled
-                  title={ARCHIVED_WRITE_REASON}
-                  iconLeft={<Pencil aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
-                >
-                  Edit
-                </Button>
-              ) : (
-                <ButtonLink
-                  to={`/collections/${loaded.id}/edit`}
-                  variant="primary"
-                  iconLeft={<Pencil aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
-                >
-                  Edit
-                </ButtonLink>
-              )}
             </>
           )
         }

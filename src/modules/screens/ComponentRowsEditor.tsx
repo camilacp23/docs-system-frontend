@@ -14,7 +14,7 @@ import {
   Button,
   ICON_STROKE_WIDTH,
   SearchPicker,
-  SectionCard,
+  ToneCard,
   Select,
   Textarea,
   TextField,
@@ -77,6 +77,7 @@ export function ComponentRowsEditor({
     <Button
       ref={addRef}
       size="sm"
+      aria-label="Add component"
       disabled={disabled || rows.length >= MAX_COMPONENTS}
       iconLeft={<Plus aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
       onClick={() => {
@@ -85,13 +86,14 @@ export function ComponentRowsEditor({
         focusRow(row.key);
       }}
     >
-      Add component
+      Add
     </Button>
   );
 
   return (
-    <SectionCard
+    <ToneCard
       title="Components"
+      tone="screen"
       description="Controls of this screen and the variables or collections each one uses"
       icon={<Box size={16} strokeWidth={ICON_STROKE_WIDTH} />}
       count={rows.length}
@@ -246,7 +248,7 @@ export function ComponentRowsEditor({
           </div>
         )}
       </div>
-    </SectionCard>
+    </ToneCard>
   );
 }
 

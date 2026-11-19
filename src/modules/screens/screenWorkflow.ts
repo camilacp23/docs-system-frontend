@@ -2,13 +2,14 @@
 // workflowActions(status, role) -> the actions to draw, each with its label, how it is sent and where it goes:
 //   kind 'status'  PUT /screens/{id}/status with `to`   (every transition but the ones of a decision)
 //   kind 'review'  POST /screens/{id}/review, decision APPROVE or RETURN (Administrator, IN_REVIEW only)
-//   slot 'button'  a button next to Edit (`beforeEdit` tells whether it goes before or after Edit, as in the frame)
-//   slot 'menu'    an item of the "…" menu (the less frequent ones)
+// Every action is a visible button, in the order they are drawn: the steps back first (secondary buttons) and the step
+// forward last (the primary button), so the main action of a status is always the last one of the group and the one
+// closest to the page actions. There is no "…" menu: what used to hide in it (Back to undocumented, Back to draft, Withdraw
+// from review, Reopen) is as visible as the rest, because each status has one way back and it must be found.
 // Table 61 (Admin, Dev): UNDOCUMENTED -> DRAFT, DRAFT -> UNDOCUMENTED | IN_PROGRESS, IN_PROGRESS -> DRAFT | IN_REVIEW,
 // IN_REVIEW -> IN_PROGRESS (withdraw), APPROVED -> IN_PROGRESS (reopen). APPROVED is reached only by Approve, and
 // Return (IN_REVIEW -> IN_PROGRESS with a comment) is the Administrator's too. A Reader has no action.
-// The Developer has the Administrator's actions except Approve and Return (Table 61 and the contract; the frames
-// only draw some of them, the rest go in the menu). This is usability only: the API enforces the roles and the
+// The Developer has the Administrator's actions except Approve and Return (Table 61 and the contract). This is usability only: the API enforces the roles and the
 // transitions, and its refusal is shown if the state changed meanwhile.
 // workflowToast(action, name) -> the success notice, past tense with the object named (the pattern of Table 59).
 import type { Role } from '../../app/router/routes';
@@ -31,10 +32,7 @@ export type WorkflowStatusTarget = Exclude<ApiDocumentationStatus, 'APPROVED'>;
 interface ActionBase {
   key: WorkflowActionKey;
   label: string;
-  slot: 'button' | 'menu';
-  /** Buttons only: drawn before Edit (true) or after it (false), as in S-25b. */
-  beforeEdit: boolean;
-  /** The primary (gradient) button of the header. */
+  /** The primary (gradient) button of the header: the step forward of the status. */
   primary: boolean;
 }
 
@@ -46,18 +44,9 @@ function status(
   key: WorkflowActionKey,
   label: string,
   to: WorkflowStatusTarget,
-  slot: 'button' | 'menu',
-  extra: { beforeEdit?: boolean; primary?: boolean } = {},
+  primary: boolean,
 ): WorkflowAction {
-  return {
-    key,
-    label,
-    kind: 'status',
-    to,
-    slot,
-    beforeEdit: extra.beforeEdit ?? true,
-    primary: extra.primary ?? false,
-  };
+  return { key, label, kind: 'status', to, primary };
 }
 
 function review(
@@ -65,15 +54,7 @@ function review(
   label: string,
   decision: 'APPROVE' | 'RETURN',
 ): WorkflowAction {
-  return {
-    key,
-    label,
-    kind: 'review',
-    decision,
-    slot: 'button',
-    beforeEdit: false,
-    primary: decision === 'APPROVE',
-  };
+  return { key, label, kind: 'review', decision, primary: decision === 'APPROVE' };
 }
 
 export function workflowActions(
@@ -84,27 +65,30 @@ export function workflowActions(
   const isAdmin = role === 'ADMINISTRATOR';
   switch (documentationStatus) {
     case 'UNDOCUMENTED':
-      return [status('start-draft', 'Start draft', 'DRAFT', 'button')];
+      return [status('start-draft', 'Start draft', 'DRAFT', true)];
     case 'DRAFT':
       return [
-        status('mark-in-progress', 'Mark in progress', 'IN_PROGRESS', 'button'),
-        status('back-to-undocumented', 'Back to undocumented', 'UNDOCUMENTED', 'menu'),
+        status('back-to-undocumented', 'Back to undocumented', 'UNDOCUMENTED', false),
+        status('mark-in-progress', 'Mark in progress', 'IN_PROGRESS', true),
       ];
     case 'IN_PROGRESS':
       return [
-        status('submit', 'Submit for review', 'IN_REVIEW', 'button'),
-        status('back-to-draft', 'Back to draft', 'DRAFT', 'menu'),
+        status('back-to-draft', 'Back to draft', 'DRAFT', false),
+        status('submit', 'Submit for review', 'IN_REVIEW', true),
       ];
     case 'IN_REVIEW':
       return isAdmin
         ? [
+            status('withdraw', 'Withdraw from review', 'IN_PROGRESS', false),
             review('return', 'Return', 'RETURN'),
             review('approve', 'Approve', 'APPROVE'),
-            status('withdraw', 'Withdraw from review', 'IN_PROGRESS', 'menu'),
           ]
-        : [status('withdraw', 'Withdraw from review', 'IN_PROGRESS', 'button', { primary: true })];
+        : [status('withdraw', 'Withdraw from review', 'IN_PROGRESS', true)];
     case 'APPROVED':
-      return [status('reopen', 'Reopen', 'IN_PROGRESS', 'menu')];
+      return [status('reopen', 'Reopen', 'IN_PROGRESS', false)];
+    default:
+      // A status this version does not know (or a screen without one): no action, never a crash.
+      return [];
   }
 }
 

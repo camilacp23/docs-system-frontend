@@ -187,12 +187,18 @@ describe('an application with only App (OnStart)', () => {
       }),
     );
     expect(screen.getByText('No key screens yet')).toBeVisible();
-    await user.click(screen.getByRole('link', { name: /^Next:/ }));
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Onboarding steps' })).getByRole('link', {
+        name: /Critical variables/,
+      }),
+    );
     expect(screen.getByText('No global variables yet')).toBeVisible();
-    await user.click(screen.getByRole('link', { name: /^Next:/ }));
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Onboarding steps' })).getByRole('link', {
+        name: /Most used components/,
+      }),
+    );
     expect(screen.getByText('No components use variables or collections yet')).toBeVisible();
-    // The path still ends where it should.
-    expect(screen.getByRole('link', { name: 'Go to Dashboard' })).toBeVisible();
   });
 });
 
@@ -232,7 +238,6 @@ describe('the three roles and an archived application', () => {
 
     expect(await screen.findByRole('list', { name: 'Key screens in reading order' })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Onboarding · SAR', level: 1 })).toBeVisible();
-    expect(screen.getByRole('link', { name: /^Next: Critical variables/ })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Open Inicio' })).toBeVisible();
   });
 });

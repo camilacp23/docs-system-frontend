@@ -41,7 +41,7 @@ async function open(
   fixReviewClock();
   const view = await renderScreens({
     role: options.role ?? 'ADMINISTRATOR',
-    path: options.path ?? '/screens',
+    path: options.path ?? '/dashboard',
     screens: options.screens ?? reviewQueueScreens(),
     applications: options.applications,
     prepare: options.prepare,
@@ -315,6 +315,7 @@ describe('when the read fails', () => {
   it('hides the number without breaking the menu, and shows it again when a later read works', async () => {
     const user = setupUser();
     const view = await open({
+      path: '/screens',
       prepare: (api) => {
         const get = (api.client as unknown as { get: Mock }).get;
         const real = get.getMockImplementation() as (p: string, o?: unknown) => Promise<unknown>;

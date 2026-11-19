@@ -1,6 +1,6 @@
 // The path of /onboarding in the URL (D-147, D-148): `?step=` and the history (the browser's Back and Forward), an invalid step,
-// Back / Next / "Go to Dashboard", the stepper (aria-current, done marks, keyboard), the progress taken from the step, the focus
-// on the title of the step, one read per application and the return to step 1 when the application changes.
+// the stepper (aria-current, the done marks and the progress taken from the saved steps, keyboard), the focus
+// on the title of the step, one read per application and the restart of the path when the application changes.
 import { act, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
@@ -21,8 +21,11 @@ const title = (step: number) => screen.getByRole('heading', { name: TITLES[step]
 const stepper = () => screen.getByRole('navigation', { name: 'Onboarding steps' });
 const progress = () => screen.getByRole('progressbar', { name: 'Progress' });
 
-async function open(path: string) {
-  const view = await renderOnboarding({ path });
+async function open(path: string, saved?: number[]) {
+  const view = await renderOnboarding({
+    path,
+    ...(saved !== undefined && { progress: { 1: saved } }),
+  });
   await screen.findByRole('region', { name: 'Explore while you read' });
   return view;
 }
@@ -35,10 +38,7 @@ describe('the step in the URL', () => {
     expect(screen.getByText('Step 1 of 5')).toBeVisible();
     expect(router.state.location.search).toBe('');
     expect(screen.queryByRole('link', { name: 'Back' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /^Next: How the app starts/ })).toHaveAttribute(
-      'href',
-      '/onboarding?step=2',
-    );
+    expect(screen.queryByRole('link', { name: /^Next:/ })).not.toBeInTheDocument();
   });
 
   it.each([1, 2, 3, 4, 5])('shows step %i when the URL says so', async (step) => {
@@ -64,22 +64,19 @@ describe('the step in the URL', () => {
   );
 });
 
-describe('Back, Next and the history', () => {
-  it('Next goes to the next step and names it; Back returns', async () => {
+describe('the stepper and the history', () => {
+  it('a step of the stepper opens it as one history entry; there are no Back / Next buttons', async () => {
     const user = setupUser();
     const { router } = await open('/onboarding?step=3');
 
-    expect(screen.getByRole('link', { name: 'Back' })).toHaveAttribute(
-      'href',
-      '/onboarding?step=2',
-    );
-    await user.click(screen.getByRole('link', { name: /^Next: Critical variables/ }));
+    expect(screen.queryByRole('link', { name: 'Back' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^Next:/ })).not.toBeInTheDocument();
+    await user.click(within(stepper()).getByRole('link', { name: /Critical variables/ }));
     expect(router.state.location.search).toBe('?step=4');
     expect(router.state.historyAction).toBe('PUSH');
     expect(title(4)).toBeVisible();
-    expect(screen.getByRole('link', { name: /^Next: Most used components/ })).toBeVisible();
 
-    await user.click(screen.getByRole('link', { name: 'Back' }));
+    await user.click(within(stepper()).getByRole('link', { name: /Key screens/ }));
     expect(router.state.location.search).toBe('?step=3');
     expect(title(3)).toBeVisible();
   });
@@ -87,8 +84,8 @@ describe('Back, Next and the history', () => {
   it('the browser Back and Forward walk the steps', async () => {
     const user = setupUser();
     const { router } = await open('/onboarding');
-    await user.click(screen.getByRole('link', { name: /^Next:/ }));
-    await user.click(screen.getByRole('link', { name: /^Next:/ }));
+    await user.click(within(stepper()).getByRole('link', { name: /How the app starts/ }));
+    await user.click(within(stepper()).getByRole('link', { name: /Key screens/ }));
     expect(title(3)).toBeVisible();
 
     await act(async () => {
@@ -109,25 +106,12 @@ describe('Back, Next and the history', () => {
     expect(title(2)).toBeVisible();
   });
 
-  it('on step 5 there is no Next: "Go to Dashboard" takes its place', async () => {
-    const user = setupUser();
-    const { router } = await open('/onboarding?step=5');
-
-    expect(screen.queryByRole('link', { name: /^Next:/ })).not.toBeInTheDocument();
-    const link = screen.getByRole('link', { name: 'Go to Dashboard' });
-    expect(link).toHaveAttribute('href', '/dashboard');
-    await user.click(link);
-    expect(router.state.location.pathname).toBe('/dashboard');
-  });
-
   it('never reads the summary again while the steps change', async () => {
     const user = setupUser();
     const { api } = await open('/onboarding');
 
-    for (let step = 1; step < 5; step += 1) {
-      await user.click(screen.getByRole('link', { name: /^Next:/ }));
-    }
-    await user.click(screen.getByRole('link', { name: 'Back' }));
+    await user.click(within(stepper()).getByRole('link', { name: /Most used components/ }));
+    await user.click(within(stepper()).getByRole('link', { name: /Critical variables/ }));
     await user.click(within(stepper()).getByRole('link', { name: /^Overview/ }));
 
     expect(api.callsTo('GET /onboarding/summary')).toHaveLength(1);
@@ -135,8 +119,8 @@ describe('Back, Next and the history', () => {
 });
 
 describe('the stepper', () => {
-  it('marks the current step with aria-current and the earlier ones as completed', async () => {
-    await open('/onboarding?step=3');
+  it('marks the current step with aria-current and the steps the user completed as done', async () => {
+    await open('/onboarding?step=3', [1, 2]);
     const links = within(stepper()).getAllByRole('link');
 
     expect(links.map((link) => link.getAttribute('aria-current'))).toEqual([
@@ -201,16 +185,32 @@ describe('the stepper', () => {
     expect(within(stepper()).getByRole('link', { name: 'Key screens' })).toHaveFocus();
   });
 
+  it('marks only the steps that were saved, also when they have gaps', async () => {
+    await open('/onboarding?step=2', [1, 3]);
+
+    expect(within(stepper()).getByRole('link', { name: 'Overview (completed)' })).toBeVisible();
+    expect(within(stepper()).getByRole('link', { name: 'How the app starts' })).toBeVisible();
+    expect(within(stepper()).getByRole('link', { name: 'Key screens (completed)' })).toBeVisible();
+    expect(within(stepper()).getByRole('link', { name: 'Critical variables' })).toBeVisible();
+  });
+
+  it('marks no step before the saved progress arrives or when there is none', async () => {
+    await open('/onboarding?step=4');
+
+    expect(within(stepper()).queryByText('(completed)')).toBeNull();
+    expect(progress()).toHaveAttribute('aria-valuenow', '0');
+  });
+
   it.each([
-    [1, 0, '0 of 5 steps completed'],
-    [2, 20, '1 of 5 steps completed'],
-    [3, 40, '2 of 5 steps completed'],
-    [4, 60, '3 of 5 steps completed'],
-    [5, 80, '4 of 5 steps completed'],
+    [[], 0, '0 of 5 steps completed'],
+    [[1], 20, '1 of 5 steps completed'],
+    [[1, 3], 40, '2 of 5 steps completed'],
+    [[1, 2, 3, 4], 80, '4 of 5 steps completed'],
+    [[1, 2, 3, 4, 5], 100, '5 of 5 steps completed'],
   ])(
-    'shows the progress of step %i as %i %% (the steps before it over five)',
-    async (step, now, text) => {
-      await open(`/onboarding?step=${step}`);
+    'shows the progress of the saved steps %j as %i %%',
+    async (saved: number[], now: number, text: string) => {
+      await open('/onboarding?step=2', saved);
 
       expect(progress()).toHaveAttribute('aria-valuenow', String(now));
       expect(progress()).toHaveAttribute('aria-valuetext', text);
@@ -226,11 +226,11 @@ describe('the focus', () => {
     expect(document.body).toHaveFocus();
   });
 
-  it('goes to the title of the step when the step changes, with Next, the stepper and the history', async () => {
+  it('goes to the title of the step when the step changes, with the stepper and the history', async () => {
     const user = setupUser();
     const { router } = await open('/onboarding');
 
-    await user.click(screen.getByRole('link', { name: /^Next:/ }));
+    await user.click(within(stepper()).getByRole('link', { name: /How the app starts/ }));
     expect(title(2)).toHaveFocus();
 
     await user.click(within(stepper()).getByRole('link', { name: 'Most used components' }));
@@ -292,7 +292,8 @@ describe('the change of application', () => {
     expect(
       await screen.findByRole('heading', { name: 'Onboarding · Billing', level: 1 }),
     ).toBeVisible();
-    expect(router.state.location.search).toBe('?step=1');
+    // The path starts over: no step in the URL, so it opens where this user left off in Billing (step 1 here).
+    expect(router.state.location.search).toBe('');
     expect(router.state.historyAction).toBe('REPLACE');
     expect(
       await screen.findByRole('region', { name: 'What Billing is and how it is documented' }),

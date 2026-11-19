@@ -11,7 +11,9 @@ import { setupUser, type User } from '../helpers/setupUser';
 
 /** The page once the selected application is known (the list is rebuilt when it becomes known). */
 async function appReady() {
-  await screen.findAllByText(/collections? ·|Read-only: the application is archived/);
+  await screen.findAllByText(
+    /their fields and the variables they feed|Read-only: the application is archived/,
+  );
 }
 
 async function openModal(user: User) {
@@ -168,7 +170,11 @@ describe('New collection modal', () => {
     });
     expect(router.state.location.search).toBe('');
     expect(await screen.findByRole('link', { name: 'colPedidos' })).toBeInTheDocument();
-    expect(await screen.findByText(/5 collections/)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('region', { name: 'Collection counts' })).toHaveTextContent(
+        /5Collections/,
+      );
+    });
 
     await user.click(screen.getByRole('button', { name: 'Open' }));
     await waitFor(() => {

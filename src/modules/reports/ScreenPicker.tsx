@@ -4,9 +4,10 @@
 // are not included: the selection does not apply), invalid, errorPositions (positions in `value` the API refused, D-140),
 // describedBy (id of the error / help text), labelledBy (id of the label of the field; the button is named by it and by
 // its own text), id (of the button that opens the list).
-// Closed it looks like the select of the frame ("All screens", or "3 screens selected") and the chosen screens are chips
-// under it, kept while the search changes. Open, it shows a search box and the matches as checkboxes in a list of at most 80 px
-// that scrolls inside itself (the dialog never grows past the window); the keyboard moves through the checkboxes with Tab. Up to 500 screens
+// Closed it looks like the select of the frame ("All screens", or "3 screens selected"). The chosen screens are chips in ONE row of a
+// fixed height under it (it scrolls sideways when there are many; it says so when there is none), so the dialog never changes size.
+// Open, the list is a panel that floats ABOVE the field, over the dialog, with a search box and the matches as checkboxes (it scrolls
+// inside, 20 at a time with "Load more"). Up to 500 screens
 // (the contract's limit): a 501st is refused with a message. Escape closes the list and returns to the button, without
 // closing the dialog. Nothing is read from the API until the list is opened.
 import { ChevronDown, X } from 'lucide-react';
@@ -27,6 +28,7 @@ import {
   SCREEN_NONE_TEXT,
   SCREEN_PANEL_LABEL,
   SCREEN_SEARCH_LABEL,
+  SCREENS_EMPTY_BOX_TEXT,
   SCREENS_PLACEHOLDER,
   screensSelected,
 } from './reportTexts';
@@ -101,7 +103,7 @@ export function ScreenPicker({
   };
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="relative flex flex-col gap-2">
       <button
         ref={buttonRef}
         type="button"
@@ -127,11 +129,15 @@ export function ScreenPicker({
           aria-hidden="true"
           size={16}
           strokeWidth={ICON_STROKE_WIDTH}
-          className="shrink-0 text-ink-500"
+          className={cx(
+            'shrink-0 text-ink-500 transition-transform duration-150',
+            open && 'rotate-180',
+          )}
         />
       </button>
 
       {open && !disabled && (
+        // The list opens ABOVE the field, over the dialog, instead of pushing it: the dialog keeps its size.
         // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the keys come from the controls inside; the group itself is not interactive
         <div
           id={panelId}
@@ -144,7 +150,7 @@ export function ScreenPicker({
             event.preventDefault();
             close();
           }}
-          className="flex flex-col gap-2 rounded-control border border-border-subtle bg-surface p-2 shadow-card"
+          className="absolute right-0 bottom-full left-0 z-30 mb-2 flex max-h-72 flex-col gap-2 rounded-card border border-border-subtle bg-surface p-2.5 shadow-modal motion-safe:animate-fade-in"
         >
           <TextField
             ref={searchRef}
@@ -155,47 +161,55 @@ export function ScreenPicker({
               setTyped(event.target.value);
             }}
           />
-          <ul aria-label={SCREEN_LIST_LABEL} className="flex max-h-20 flex-col overflow-y-auto">
-            {results.items.map((screen) => (
-              <li key={screen.id} className="px-1 py-1">
-                <Checkbox
-                  label={screen.name}
-                  checked={chosen.has(screen.id)}
-                  onChange={(event) => {
-                    toggle({ id: screen.id, name: screen.name }, event.target.checked);
-                  }}
-                />
-              </li>
-            ))}
-          </ul>
-          <div role="status" className="px-1 text-small text-ink-500 empty:hidden">
-            {results.status === 'loading' && SCREEN_LOADING_TEXT}
-            {results.status === 'error' && results.error && (getErrorMessage(results.error) ?? '')}
-            {results.status === 'ready' && results.items.length === 0 && SCREEN_NONE_TEXT}
-          </div>
-          {limitReached && (
-            <p role="alert" className="px-1 text-small text-danger">
-              {SCREEN_LIMIT_TEXT}
-            </p>
-          )}
-          {results.hasMore && (
-            <div>
-              <Button size="sm" loading={results.loadingMore} onClick={results.loadMore}>
-                {LOAD_MORE_LABEL}
-              </Button>
+          <div className="flex min-h-0 flex-1 [scrollbar-width:thin] flex-col overflow-y-auto">
+            <ul aria-label={SCREEN_LIST_LABEL} className="flex flex-col">
+              {results.items.map((screen) => (
+                <li key={screen.id} className="rounded-chip px-1.5 py-1 hover:bg-report-soft">
+                  <Checkbox
+                    label={screen.name}
+                    checked={chosen.has(screen.id)}
+                    onChange={(event) => {
+                      toggle({ id: screen.id, name: screen.name }, event.target.checked);
+                    }}
+                  />
+                </li>
+              ))}
+            </ul>
+            <div role="status" className="px-1 text-small text-ink-500 empty:hidden">
+              {results.status === 'loading' && SCREEN_LOADING_TEXT}
+              {results.status === 'error' &&
+                results.error &&
+                (getErrorMessage(results.error) ?? '')}
+              {results.status === 'ready' && results.items.length === 0 && SCREEN_NONE_TEXT}
             </div>
-          )}
+            {limitReached && (
+              <p role="alert" className="px-1 text-small text-danger">
+                {SCREEN_LIMIT_TEXT}
+              </p>
+            )}
+            {results.hasMore && (
+              <div className="px-1 py-1">
+                <Button size="sm" loading={results.loadingMore} onClick={results.loadMore}>
+                  {LOAD_MORE_LABEL}
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {value.length > 0 && (
-        <ul aria-label="Selected screens" className="flex flex-wrap items-center gap-2">
+      {/* The chosen screens: ONE row that scrolls sideways, of a fixed height, so choosing any number never changes the size of the dialog. */}
+      {value.length > 0 ? (
+        <ul
+          aria-label="Selected screens"
+          className="flex h-11 [scrollbar-width:thin] items-center gap-2 overflow-x-auto rounded-card border border-border-subtle bg-surface px-2"
+        >
           {value.map((screen, position) => (
             <li
               key={screen.id}
               className={cx(
-                'inline-flex h-7 items-center gap-1 rounded-pill border bg-empty-icon-bg pr-1 pl-3 text-label font-medium text-primary',
-                errorPositions?.has(position) ? 'border-danger' : 'border-primary',
+                'inline-flex h-7 shrink-0 items-center gap-1 rounded-pill border bg-report-soft pr-1 pl-3 text-label font-medium text-report-ink',
+                errorPositions?.has(position) ? 'border-danger' : 'border-report-border',
               )}
             >
               <span>{screen.name}</span>
@@ -206,13 +220,13 @@ export function ScreenPicker({
                 onClick={() => {
                   toggle(screen, false);
                 }}
-                className="flex size-5 items-center justify-center rounded-pill"
+                className="flex size-5 items-center justify-center rounded-pill hover:bg-surface"
               >
                 <X aria-hidden="true" size={14} strokeWidth={ICON_STROKE_WIDTH} />
               </button>
             </li>
           ))}
-          <li>
+          <li className="shrink-0">
             <Button
               size="sm"
               variant="ghost"
@@ -226,6 +240,10 @@ export function ScreenPicker({
             </Button>
           </li>
         </ul>
+      ) : (
+        <div className="flex h-11 items-center rounded-card border border-dashed border-border-subtle px-3 text-small text-ink-500">
+          {SCREENS_EMPTY_BOX_TEXT}
+        </div>
       )}
     </div>
   );

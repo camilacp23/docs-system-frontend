@@ -67,6 +67,7 @@ export function VariableEditPage() {
   const { blocked, reason } = useWriteBlock();
   const { applications, currentApplication } = useApplication();
   const reasonId = useId();
+  const formId = useId();
   const formRef = useRef<HTMLFormElement>(null);
   const errorBannerRef = useRef<HTMLDivElement>(null);
 
@@ -221,7 +222,28 @@ export function VariableEditPage() {
           </>
         }
         description="Update the details below and save your changes."
+        actions={
+          <>
+            <ButtonLink to={`/variables/${loaded.id}`}>Cancel</ButtonLink>
+            <Button
+              type="submit"
+              form={formId}
+              variant="primary"
+              loading={saving}
+              disabled={blocked || conflict !== null}
+              aria-describedby={saveReason ? reasonId : undefined}
+              aria-label="Save changes"
+            >
+              Save
+            </Button>
+          </>
+        }
       />
+      {saveReason && (
+        <p id={reasonId} className="-mt-2 text-right text-small text-warning-ink">
+          {saveReason}
+        </p>
+      )}
 
       {conflict !== null && !conflictHidden && (
         <Banner
@@ -266,6 +288,7 @@ export function VariableEditPage() {
       )}
 
       <form
+        id={formId}
         ref={formRef}
         noValidate
         onSubmit={(event) => {
@@ -288,23 +311,6 @@ export function VariableEditPage() {
           }
           disabled={saving}
         />
-        <div className="flex items-center justify-end gap-3">
-          {saveReason && (
-            <p id={reasonId} className="mr-auto text-small text-warning-ink">
-              {saveReason}
-            </p>
-          )}
-          <ButtonLink to={`/variables/${loaded.id}`}>Cancel</ButtonLink>
-          <Button
-            type="submit"
-            variant="primary"
-            loading={saving}
-            disabled={blocked || conflict !== null}
-            aria-describedby={saveReason ? reasonId : undefined}
-          >
-            Save changes
-          </Button>
-        </div>
       </form>
     </>
   );

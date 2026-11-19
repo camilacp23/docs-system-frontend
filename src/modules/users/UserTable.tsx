@@ -1,4 +1,5 @@
-// UserTable: the table of the user list (S-02).
+// UserTable: the table of the user list (S-02), in the look of the Variables table: a plum header band, a round avatar with the
+// initials before each name, soft hover rows and the "Actions" button at the end of the row.
 // Props: rows (User[]), sort (current `sort`), onSort(next), loading (rows are being replaced), showSkeleton (draw
 // placeholder rows instead of the rows), currentUserId (that row says "(you)"), renderActions (the content of the
 // last column for a row).
@@ -6,9 +7,17 @@
 // columns of the contract whitelist that the table shows).
 import type { ReactNode } from 'react';
 
-import { Skeleton, SortableHeader, Tag, cx } from '../../components/ui';
+import { Skeleton, SortableHeader, Tag, cx, getInitials } from '../../components/ui';
+import type { TagTone } from '../../components/ui';
 
-import { ROLE_LABEL, STATUS_LABEL, formatDate, formatLastSignIn, type User } from './userLabels';
+import {
+  ROLE_LABEL,
+  STATUS_LABEL,
+  formatDate,
+  formatLastSignIn,
+  type User,
+  type UserRole,
+} from './userLabels';
 
 interface UserTableProps {
   rows: readonly User[];
@@ -21,9 +30,16 @@ interface UserTableProps {
 }
 
 const HEAD_CLASS =
-  'px-3 py-2.5 text-left text-micro font-bold tracking-wider text-ink-500 uppercase';
+  'px-3 py-3 text-left text-micro font-bold tracking-wider text-people-ink uppercase';
 const SKELETON_ROWS = 5;
 const SKELETON_WIDTHS = ['w-48', 'w-56', 'w-24', 'w-20', 'w-32', 'w-24'] as const;
+
+/** The administrator stands out; the other roles are neutral. */
+const ROLE_TONE: Record<UserRole, TagTone> = {
+  ADMINISTRATOR: 'info',
+  DEVELOPER: 'neutral',
+  READER: 'neutral',
+};
 
 export function UserTable({
   rows,
@@ -36,11 +52,17 @@ export function UserTable({
 }: UserTableProps) {
   const hasActions = renderActions !== undefined;
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto border-t border-border-subtle">
       <table aria-label="Users" aria-busy={loading} className="w-full text-left">
-        <thead className="bg-search-bg">
+        <thead className="bg-people-soft/60">
           <tr>
-            <SortableHeader label="Name" sortKey="name" sort={sort} onSort={onSort} />
+            <SortableHeader
+              label="Name"
+              sortKey="name"
+              sort={sort}
+              onSort={onSort}
+              className="py-3 pl-5 text-people-ink"
+            />
             <th scope="col" className={HEAD_CLASS}>
               Email
             </th>
@@ -55,10 +77,17 @@ export function UserTable({
               sortKey="lastLoginAt"
               sort={sort}
               onSort={onSort}
+              className="py-3 text-people-ink"
             />
-            <SortableHeader label="Created" sortKey="createdAt" sort={sort} onSort={onSort} />
+            <SortableHeader
+              label="Created"
+              sortKey="createdAt"
+              sort={sort}
+              onSort={onSort}
+              className="py-3 text-people-ink"
+            />
             {hasActions && (
-              <th scope="col" className={HEAD_CLASS}>
+              <th scope="col" className={cx(HEAD_CLASS, 'pr-8')}>
                 <span className="sr-only">Actions</span>
               </th>
             )}
@@ -69,7 +98,7 @@ export function UserTable({
             ? Array.from({ length: SKELETON_ROWS }, (_, index) => (
                 <tr key={index} aria-hidden="true" className="border-t border-divider">
                   {SKELETON_WIDTHS.map((width, cell) => (
-                    <td key={cell} className="px-3 py-3.5">
+                    <td key={cell} className={cx('py-3.5', cell === 0 ? 'pr-3 pl-5' : 'px-3')}>
                       <Skeleton className={cx('h-5', width)} />
                     </td>
                   ))}
@@ -81,16 +110,29 @@ export function UserTable({
                 </tr>
               ))
             : rows.map((row) => (
-                <tr key={row.id} className="border-t border-divider hover:bg-control-hover">
-                  <th scope="row" className="px-3 py-3 text-left text-body-lg font-semibold">
-                    {row.name}
-                    {row.id === currentUserId && (
-                      <span className="font-semibold text-ink-900"> (you)</span>
-                    )}
+                <tr
+                  key={row.id}
+                  className="border-t border-divider transition-colors duration-150 hover:bg-people-soft/40 motion-reduce:transition-none"
+                >
+                  <th scope="row" className="py-3 pr-3 pl-5 text-left text-body-lg font-semibold">
+                    <span className="flex items-center gap-3">
+                      {/* The letters are drawn by CSS (data-initials), so they are not part of the text of the name. */}
+                      <span
+                        aria-hidden="true"
+                        data-initials={getInitials(row.name)}
+                        className="flex size-9 shrink-0 items-center justify-center rounded-pill bg-(image:--gradient-avatar) text-tag font-bold text-avatar-ink before:content-[attr(data-initials)]"
+                      />
+                      <span>
+                        {row.name}
+                        {row.id === currentUserId && (
+                          <span className="font-semibold text-ink-900"> (you)</span>
+                        )}
+                      </span>
+                    </span>
                   </th>
-                  <td className="px-3 py-3 text-body-lg text-ink-900">{row.email}</td>
+                  <td className="px-3 py-3 text-body-lg text-ink-700">{row.email}</td>
                   <td className="px-3 py-3">
-                    <Tag>{ROLE_LABEL[row.role]}</Tag>
+                    <Tag tone={ROLE_TONE[row.role]}>{ROLE_LABEL[row.role]}</Tag>
                   </td>
                   <td className="px-3 py-3">
                     <Tag tone={row.status === 'ACTIVE' ? 'success' : 'danger'}>
@@ -103,7 +145,9 @@ export function UserTable({
                   <td className="px-3 py-3 text-label whitespace-nowrap text-ink-700">
                     {formatDate(row.createdAt)}
                   </td>
-                  {hasActions && <td className="px-3 py-3 text-right">{renderActions(row)}</td>}
+                  {hasActions && (
+                    <td className="py-3 pr-8 pl-3 text-right">{renderActions(row)}</td>
+                  )}
                 </tr>
               ))}
         </tbody>

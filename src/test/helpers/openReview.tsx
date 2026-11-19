@@ -53,6 +53,7 @@ export function reviewQueueScreens(): Screen[] {
         accessMode: 'READ' as const,
         usedIn: 'a',
         isOrigin: false,
+        originUsedIn: null,
       },
       {
         id: 2,
@@ -60,6 +61,7 @@ export function reviewQueueScreens(): Screen[] {
         accessMode: 'WRITE' as const,
         usedIn: 'b',
         isOrigin: true,
+        originUsedIn: null,
       },
       {
         id: 3,
@@ -67,6 +69,7 @@ export function reviewQueueScreens(): Screen[] {
         accessMode: 'READ' as const,
         usedIn: 'c',
         isOrigin: false,
+        originUsedIn: null,
       },
     ],
     collectionLinks: [

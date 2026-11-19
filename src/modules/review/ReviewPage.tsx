@@ -15,7 +15,7 @@
 // The queue is read again, with no polling, when the browser tab becomes visible again. Changing the application starts the
 // page over. Loading shows a skeleton after 300 ms; a failed first read shows the server-error state with a retry; a failed
 // re-read keeps the list and says so.
-import { ClipboardCheck } from 'lucide-react';
+import { Check, ClipboardCheck, CornerUpLeft } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { getErrorMessage } from '../../api/messages';
@@ -26,7 +26,7 @@ import {
   EmptyState,
   ErrorState,
   ICON_STROKE_WIDTH,
-  PageHeader,
+  PageHero,
   Skeleton,
   useDelayedLoading,
   useToast,
@@ -40,10 +40,13 @@ import { ReviewPanel } from './ReviewPanel';
 import { ReviewQueueList } from './ReviewQueueList';
 import { nextSelection } from './reviewModel';
 import {
+  APPROVE_LABEL,
   EMPTY_QUEUE_TEXT,
   EMPTY_QUEUE_TITLE,
   queueSubtitle,
+  RETURN_FOR_CHANGES_LABEL,
   REVIEW_TITLE,
+  WRITE_REASON_ID,
   WAITING_TITLE,
 } from './reviewTexts';
 import { useReviewQueue } from './useReviewQueue';
@@ -117,14 +120,52 @@ function ReviewQueuePage({ applicationId }: { applicationId: number | null }) {
   }
 
   const loadingFirst = queue.status === 'loading' && queue.rows.length === 0;
+  const decide = (decision: 'APPROVE' | 'RETURN') => {
+    setProblem(null);
+    setDeciding(decision);
+  };
 
   return (
     <>
-      <PageHeader
+      <PageHero
+        tone="review"
         icon={<ClipboardCheck size={20} strokeWidth={ICON_STROKE_WIDTH} />}
         title={REVIEW_TITLE}
         titleRef={titleRef}
         description={loadingFirst ? ' ' : queueSubtitle(queue.total)}
+        actions={
+          canDecide && selected !== null ? (
+            <>
+              <Button
+                size="sm"
+                disabled={writeReason !== null}
+                title={writeReason ?? undefined}
+                aria-describedby={WRITE_REASON_ID}
+                iconLeft={
+                  <CornerUpLeft aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />
+                }
+                onClick={() => {
+                  decide('RETURN');
+                }}
+              >
+                {RETURN_FOR_CHANGES_LABEL}
+              </Button>
+              <Button
+                size="sm"
+                variant="primary"
+                disabled={writeReason !== null}
+                title={writeReason ?? undefined}
+                aria-describedby={WRITE_REASON_ID}
+                iconLeft={<Check aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+                onClick={() => {
+                  decide('APPROVE');
+                }}
+              >
+                {APPROVE_LABEL}
+              </Button>
+            </>
+          ) : undefined
+        }
       />
 
       {problem !== null && (
@@ -161,7 +202,7 @@ function ReviewQueuePage({ applicationId }: { applicationId: number | null }) {
       ) : selected === null ? (
         <section
           aria-label={WAITING_TITLE}
-          className="rounded-card border border-border-subtle bg-surface shadow-card"
+          className="rounded-modal border border-review-border bg-surface shadow-card"
         >
           <EmptyState
             icon={<ClipboardCheck strokeWidth={ICON_STROKE_WIDTH} />}
@@ -171,30 +212,16 @@ function ReviewQueuePage({ applicationId }: { applicationId: number | null }) {
         </section>
       ) : (
         <div className="grid flex-1 grid-cols-[minmax(0,22rem)_minmax(0,1fr)] items-stretch gap-4">
-          <section
-            aria-labelledby="review-waiting-title"
-            className="overflow-hidden rounded-card border border-border-subtle bg-surface shadow-card"
-          >
-            <header className="flex items-center justify-between border-b border-border-subtle px-5 py-4">
-              <h2 id="review-waiting-title" className="text-card-title font-bold text-ink-900">
-                {WAITING_TITLE}
-              </h2>
-              <span className="rounded-pill bg-badge-warning-bg px-2 text-tag font-bold text-badge-warning-ink">
-                {queue.total}
-              </span>
-            </header>
-            <ReviewQueueList
-              rows={queue.rows}
-              total={queue.total}
-              selectedId={selected.id}
-              onSelect={setSelectedId}
-              hasMore={queue.hasMore}
-              loadingMore={queue.loadingMore}
-              moreFailed={queue.moreFailed}
-              onLoadMore={queue.loadMore}
-              now={now}
-            />
-          </section>
+          <ReviewQueueList
+            rows={queue.rows}
+            total={queue.total}
+            selectedId={selected.id}
+            onSelect={setSelectedId}
+            hasMore={queue.hasMore}
+            loadingMore={queue.loadingMore}
+            moreFailed={queue.moreFailed}
+            onLoadMore={queue.loadMore}
+          />
           <ReviewPanel
             key={selected.id}
             row={selected}
@@ -202,10 +229,6 @@ function ReviewQueuePage({ applicationId }: { applicationId: number | null }) {
             writeReason={writeReason}
             headingRef={panelTitleRef}
             now={now}
-            onDecide={(decision) => {
-              setProblem(null);
-              setDeciding(decision);
-            }}
           />
         </div>
       )}

@@ -43,6 +43,7 @@ export function sampleScreens(): Screen[] {
           accessMode: 'WRITE',
           usedIn: 'origin',
           isOrigin: true,
+          originUsedIn: null,
         },
       ],
     }),
@@ -102,6 +103,7 @@ export function sampleScreens(): Screen[] {
           accessMode: 'WRITE',
           usedIn: 'origin',
           isOrigin: true,
+          originUsedIn: null,
         },
         {
           id: 502,
@@ -109,6 +111,7 @@ export function sampleScreens(): Screen[] {
           accessMode: 'READ_WRITE',
           usedIn: 'btnGuardar.OnSelect',
           isOrigin: false,
+          originUsedIn: null,
         },
       ],
       collectionLinks: [

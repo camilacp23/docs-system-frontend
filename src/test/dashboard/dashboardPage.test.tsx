@@ -314,6 +314,6 @@ describe('dashboard: layout of the row of figures', () => {
     const wrapper = screen.getByRole('heading', { level: 1 }).closest('[class~="@container"]');
     expect(wrapper).not.toBeNull();
     const blocks = screen.getByRole('region', { name: 'Documentation by status' }).parentElement;
-    expect(blocks).toHaveClass('@min-[900px]:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]');
+    expect(blocks).toHaveClass('@min-[900px]:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]');
   });
 });

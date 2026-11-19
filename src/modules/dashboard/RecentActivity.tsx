@@ -4,33 +4,27 @@
 // with the label in IBM Plex Mono, a link to its page when the type has one, and under it "<Type> · <time>" in the local
 // time of the browser; a record of another day says the day too ("Screen · Oct 4, 10:21"). The API sends no values, so
 // there is nothing else to show. A null actor is a write outside the API ("Outside the application"). The color of the
-// dot at the right is the one of the action in the audit log (created, updated, deleted, event); the sentence says the
-// action, so the dot is decoration.
+// round icon at the left is the one of the action in the audit log (a plus for created, a pencil for updated, a trash can for
+// deleted, a check circle for events, each in its color); the sentence says the action, so the icon is decoration.
+// On a wide page (container of 900 px or more) the card spans the page and the rows are in two columns.
 // The Reader never gets this card: the API does not send the key (D-34) and DashboardView does not draw it.
-import { Database } from 'lucide-react';
 import { Link } from 'react-router';
 
-import { Avatar, cx, ICON_STROKE_WIDTH } from '../../components/ui';
+import { cx } from '../../components/ui';
+import { AuditActionIcon } from '../audit/AuditActionIcon';
 import {
+  ACTION_TONE,
   actionPhrase,
   actorText,
   ENTITY_TYPE_LABEL,
   elementLabel,
   elementPath,
-  type AuditAction,
 } from '../audit/auditLabels';
 import { todayIn } from '../audit/auditDates';
 
 import { activityTime, type ActivitySummary } from './dashboardModel';
 
 export const NO_ACTIVITY_TEXT = 'No recent activity yet.';
-
-const DOT_CLASS: Record<AuditAction, string> = {
-  CREATE: 'bg-success',
-  UPDATE: 'bg-accent',
-  DELETE: 'bg-danger',
-  EVENT: 'bg-ink-500',
-};
 
 const MONO_CLASS = 'font-mono text-label font-semibold text-identifier';
 
@@ -45,25 +39,24 @@ export function RecentActivity({ entries, timeZone }: RecentActivityProps) {
   }
   const today = todayIn(timeZone);
   return (
-    <ul>
+    <ul className="grid @min-[900px]:grid-cols-2 @min-[900px]:gap-x-6">
       {entries.map((entry, index) => {
         const path = elementPath(entry);
         const label = elementLabel(entry);
         return (
           <li
             key={`${entry.createdAt}-${entry.entityType}-${entry.entityId}-${index}`}
-            className="flex items-center gap-3 border-b border-divider py-2.5 last:border-b-0"
+            className="flex items-center gap-3 border-b border-divider py-2.5 last:border-b-0 @min-[900px]:rounded-control @min-[900px]:border-b-0 @min-[900px]:px-2 @min-[900px]:hover:bg-control-hover"
           >
-            {entry.actor === null ? (
-              <span
-                aria-hidden="true"
-                className="flex size-8 shrink-0 items-center justify-center rounded-pill bg-disabled-bg text-ink-700"
-              >
-                <Database size={16} strokeWidth={ICON_STROKE_WIDTH} />
-              </span>
-            ) : (
-              <Avatar name={entry.actor.name} decorative className="size-8" />
-            )}
+            <span
+              aria-hidden="true"
+              className={cx(
+                'flex size-8 shrink-0 items-center justify-center rounded-pill',
+                ACTION_TONE[entry.action],
+              )}
+            >
+              <AuditActionIcon action={entry.action} size={16} />
+            </span>
             <div className="min-w-0 flex-1">
               <p className="text-label break-words text-ink-900">
                 <span className="font-bold">{actorText(entry, false)}</span> {actionPhrase(entry)}{' '}
@@ -82,10 +75,6 @@ export function RecentActivity({ entries, timeZone }: RecentActivityProps) {
                 </time>
               </p>
             </div>
-            <span
-              aria-hidden="true"
-              className={cx('size-2 shrink-0 rounded-chip', DOT_CLASS[entry.action])}
-            />
           </li>
         );
       })}
