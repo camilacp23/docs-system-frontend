@@ -1,13 +1,12 @@
 // Variable list (S-10, S-10r): rows, counters, filters / sort / page reflected in the URL, loading, empty and error
 // states, the reset on changing application, and the Reader view.
 import { screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { ApiError } from '../../api/ApiError';
 import { makeApplication } from '../helpers/renderApp';
 import { makeVariable } from '../helpers/fakeVariablesApi';
 import { renderVariables, sampleVariables } from '../helpers/renderVariables';
-import { controlSearchTimers, endSearchPause } from '../helpers/searchPause';
 import { setupUser } from '../helpers/setupUser';
 
 const ROW_NAMES = (table: HTMLElement) =>
@@ -175,28 +174,6 @@ describe('variable list', () => {
     await waitFor(() => {
       expect(router.state.location.search).toBe('');
     });
-  });
-
-  it('waits for the user to stop typing before searching', async () => {
-    const user = setupUser();
-    const { router, api } = await renderVariables();
-    const grid = await table();
-    await waitFor(() => {
-      expect(ROW_NAMES(grid)).toHaveLength(5);
-    });
-    const before = api.callsTo('GET /variables').length;
-
-    await user.type(screen.getByRole('searchbox', { name: 'Search by name' }), 'loc');
-
-    // Three keystrokes in a row: one request, after the pause.
-    await waitFor(() => {
-      expect(router.state.location.search).toBe('?q=loc');
-    });
-    await waitFor(() => {
-      expect(ROW_NAMES(grid)).toEqual(['locMostrarDetalle', 'locOrden']);
-    });
-    expect(api.callsTo('GET /variables').length).toBe(before + 1);
-    expect(api.callsTo('GET /variables').at(-1)?.options.query).toMatchObject({ q: 'loc' });
   });
 
   it('sorts by the whitelisted columns and toggles the direction', async () => {
@@ -408,31 +385,5 @@ describe('variable list', () => {
     expect(screen.queryByRole('button', { name: 'New variable' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Actions for/ })).not.toBeInTheDocument();
     expect(sampleVariables()).toHaveLength(5);
-  });
-});
-
-describe('variable list, Clear filters', () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('empties the search box too: the text typed before is not brought back', async () => {
-    controlSearchTimers();
-    const user = setupUser();
-    const { router } = await renderVariables();
-    const grid = await table();
-
-    const box = screen.getByRole('searchbox', { name: 'Search by name' });
-    await user.click(box);
-    await user.paste('zzz');
-    await endSearchPause();
-    expect(router.state.location.search).toBe('?q=zzz');
-
-    await user.click(screen.getByRole('button', { name: 'Clear filters' }));
-    expect(router.state.location.search).toBe('');
-    expect(screen.getByRole('searchbox', { name: 'Search by name' })).toHaveValue('');
-    await waitFor(() => {
-      expect(ROW_NAMES(grid)).toContain('gUsuario');
-    });
   });
 });

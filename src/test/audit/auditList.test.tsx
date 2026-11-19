@@ -126,7 +126,7 @@ describe('audit log, days and records', () => {
       within(chips)
         .getAllByRole('listitem')
         .map((chip) => chip.textContent),
-    ).toEqual(['workingProcess', 'knownIssues']);
+    ).toEqual(['Working process', 'Known issues']);
     expect(
       within(recordText('locOrden')).queryByRole('list', { name: 'Changed fields' }),
     ).toBeNull();

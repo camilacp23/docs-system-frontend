@@ -10,37 +10,33 @@ import {
   type WorkflowActionKey,
 } from '../../modules/screens/screenWorkflow';
 
-interface Expected {
-  buttons: string[];
-  menu: string[];
-}
+// The actions in the order they are drawn: the steps back first (secondary), the step forward last (primary). There is no menu.
+const NONE: string[] = [];
 
-const NONE: Expected = { buttons: [], menu: [] };
-
-const MATRIX: Record<ApiDocumentationStatus, Record<Role, Expected>> = {
+const MATRIX: Record<ApiDocumentationStatus, Record<Role, string[]>> = {
   UNDOCUMENTED: {
-    ADMINISTRATOR: { buttons: ['Start draft'], menu: [] },
-    DEVELOPER: { buttons: ['Start draft'], menu: [] },
+    ADMINISTRATOR: ['Start draft'],
+    DEVELOPER: ['Start draft'],
     READER: NONE,
   },
   DRAFT: {
-    ADMINISTRATOR: { buttons: ['Mark in progress'], menu: ['Back to undocumented'] },
-    DEVELOPER: { buttons: ['Mark in progress'], menu: ['Back to undocumented'] },
+    ADMINISTRATOR: ['Back to undocumented', 'Mark in progress'],
+    DEVELOPER: ['Back to undocumented', 'Mark in progress'],
     READER: NONE,
   },
   IN_PROGRESS: {
-    ADMINISTRATOR: { buttons: ['Submit for review'], menu: ['Back to draft'] },
-    DEVELOPER: { buttons: ['Submit for review'], menu: ['Back to draft'] },
+    ADMINISTRATOR: ['Back to draft', 'Submit for review'],
+    DEVELOPER: ['Back to draft', 'Submit for review'],
     READER: NONE,
   },
   IN_REVIEW: {
-    ADMINISTRATOR: { buttons: ['Return', 'Approve'], menu: ['Withdraw from review'] },
-    DEVELOPER: { buttons: ['Withdraw from review'], menu: [] },
+    ADMINISTRATOR: ['Withdraw from review', 'Return', 'Approve'],
+    DEVELOPER: ['Withdraw from review'],
     READER: NONE,
   },
   APPROVED: {
-    ADMINISTRATOR: { buttons: [], menu: ['Reopen'] },
-    DEVELOPER: { buttons: [], menu: ['Reopen'] },
+    ADMINISTRATOR: ['Reopen'],
+    DEVELOPER: ['Reopen'],
     READER: NONE,
   },
 };
@@ -52,11 +48,7 @@ describe('workflowActions', () => {
   for (const status of STATUSES) {
     for (const role of ROLES) {
       it(`${status} as ${role}`, () => {
-        const actions = workflowActions(status, role);
-        expect({
-          buttons: actions.filter((a) => a.slot === 'button').map((a) => a.label),
-          menu: actions.filter((a) => a.slot === 'menu').map((a) => a.label),
-        }).toEqual(MATRIX[status][role]);
+        expect(workflowActions(status, role).map((a) => a.label)).toEqual(MATRIX[status][role]);
       });
     }
   }
@@ -99,13 +91,22 @@ describe('workflowActions', () => {
     }
   });
 
-  it('makes withdraw the primary button of the Developer in review and Approve the Administrator’s', () => {
-    const primary = (role: Role) =>
-      workflowActions('IN_REVIEW', role)
-        .filter((a) => a.primary)
-        .map((a) => a.label);
-    expect(primary('DEVELOPER')).toEqual(['Withdraw from review']);
-    expect(primary('ADMINISTRATOR')).toEqual(['Approve']);
+  it('makes the step forward of each status the one primary button, and the last one of the group', () => {
+    for (const status of STATUSES) {
+      for (const role of ['ADMINISTRATOR', 'DEVELOPER'] as const) {
+        const actions = workflowActions(status, role);
+        const primary = actions.filter((a) => a.primary);
+        // APPROVED only goes back (Reopen): nothing is forward, so nothing is primary.
+        if (status === 'APPROVED') expect(primary).toEqual([]);
+        // The Developer in review can only withdraw: it is the one action, so it is the primary button.
+        else if (status === 'IN_REVIEW' && role === 'DEVELOPER')
+          expect(primary.map((a) => a.label)).toEqual(['Withdraw from review']);
+        else {
+          expect(primary).toHaveLength(1);
+          expect(actions.at(-1)?.primary).toBe(true);
+        }
+      }
+    }
   });
 });
 

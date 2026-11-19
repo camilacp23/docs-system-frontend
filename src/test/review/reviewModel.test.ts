@@ -52,6 +52,7 @@ describe('reviewSummary', () => {
             accessMode: 'READ',
             usedIn: 'u',
             isOrigin: false,
+            originUsedIn: null,
           },
           {
             id: 2,
@@ -59,6 +60,7 @@ describe('reviewSummary', () => {
             accessMode: 'WRITE',
             usedIn: 'v',
             isOrigin: false,
+            originUsedIn: null,
           },
           {
             id: 3,
@@ -66,6 +68,7 @@ describe('reviewSummary', () => {
             accessMode: 'READ',
             usedIn: 'w',
             isOrigin: false,
+            originUsedIn: null,
           },
         ],
         collectionLinks: [

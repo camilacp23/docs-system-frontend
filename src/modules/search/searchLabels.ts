@@ -5,8 +5,7 @@
 //                              "Matched in <label>". `template` is the only name of the seven template fields the
 //                              API gives, so the field is not named.
 //   MATCHED_IN_MONO            the places whose text is a Power Apps identifier or formula (IBM Plex Mono, Table 54).
-//   NOTE_ENVIRONMENT / NOTE_STATUS / NOTE_SCOPE   what each filter applies to, under the filter (D-48): the other
-//                              types stay in the results.
+//   FILTER_NOTE                what each filter applies to, under the filters (D-48): the other types stay in the results.
 import type { ElementType } from '../../components/ui';
 import { countText } from '../variables/variableLabels';
 
@@ -53,10 +52,13 @@ export const MATCHED_IN_MONO: readonly string[] = [
   'usedIn',
 ];
 
+/** What each filter applies to, read with its select (D-48): the other types stay in the results. */
 export const NOTE_ENVIRONMENT =
   'Applies to variables and collections; other types stay in the results.';
 export const NOTE_STATUS = 'Applies to screens; other types stay in the results.';
 export const NOTE_SCOPE = 'Applies to variables; other types stay in the results.';
+export const FILTER_NOTE =
+  'Environment applies to variables and collections, Status to screens and Scope to variables; the other types stay in the results.';
 
 /** "Matched in Name"; an unknown place (a newer API) is shown as the API names it. */
 export function matchedInText(matchedIn: string): string {

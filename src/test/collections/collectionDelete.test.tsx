@@ -94,7 +94,11 @@ describe('delete collection', () => {
     await waitFor(() => {
       expect(screen.queryByRole('link', { name: 'colClientes' })).not.toBeInTheDocument();
     });
-    expect(await screen.findByText(/3 collections/)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('region', { name: 'Collection counts' })).toHaveTextContent(
+        /3Collections/,
+      );
+    });
     expect(router.state.location.pathname).toBe('/collections');
   });
 

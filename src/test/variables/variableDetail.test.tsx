@@ -56,8 +56,8 @@ describe('variable detail', () => {
     await open();
 
     expect(await screen.findByRole('heading', { name: 'gUsuario', level: 1 })).toBeInTheDocument();
-    expect(screen.getByText('Updated 2026-10-03 09:14')).toBeInTheDocument();
     const details = within(screen.getByRole('region', { name: 'Details' }));
+    expect(details.getByText('2026-10-03 09:14')).toBeInTheDocument();
     expect(details.getByText('Record')).toBeInTheDocument();
     expect(details.getByText('Global (Set)')).toBeInTheDocument();
     expect(details.getByRole('link', { name: 'App (OnStart)' })).toHaveAttribute(
@@ -121,6 +121,20 @@ describe('variable detail', () => {
 
     expect(screens.getByRole('link', { name: 'Inicio' })).toHaveClass('font-mono');
     expect(screens.getByText('OnVisible')).toHaveClass('font-mono');
+  });
+
+  it('says where the variable is created in its origin screen when it is described, and says nothing when it is not', async () => {
+    await open('/variables/1', {
+      variables: sampleVariables().map((v) => (v.id === 1 ? { ...v, originUsedIn: 'OnStart' } : v)),
+    });
+    const details = within(await screen.findByRole('region', { name: 'Details' }));
+    expect(details.getByText('Used in OnStart')).toHaveClass('font-mono');
+  });
+
+  it('draws no "Used in" for a variable without it', async () => {
+    await open('/variables/1');
+    const details = within(await screen.findByRole('region', { name: 'Details' }));
+    expect(details.queryByText(/^Used in/)).toBeNull();
   });
 
   it('shows a message for each empty list and the untraced tag', async () => {

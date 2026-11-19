@@ -3,6 +3,8 @@
 // opens. Types come from the contract (AuditEntry, AuditEntityType); nothing here is sent to the API.
 import type { components, operations } from '../../api/schema';
 
+import { humanKey } from './auditFormat';
+
 export type AuditEntry = components['schemas']['AuditEntry'];
 export type AuditEntityType = components['schemas']['AuditEntityType'];
 export type AuditAction = AuditEntry['action'];
@@ -115,11 +117,9 @@ export function elementPath(entry: Pick<AuditEntry, 'entityType' | 'entityId'>):
 /** Columns whose value the API never stores and the client never draws (it only says they changed). */
 export const REDACTED_FIELDS: readonly string[] = ['passwordHash'];
 
-const FIELD_LABEL: Record<string, string> = { passwordHash: 'Password' };
-
-/** The name of a field as the timeline shows it: the key as the API sends it, "Password" for passwordHash. */
+/** The name of a field as the timeline shows it, written as words ("dataType" -> "Data type", "passwordHash" -> "Password"). */
 export function fieldLabel(key: string): string {
-  return FIELD_LABEL[key] ?? key;
+  return humanKey(key);
 }
 
 export function isRedacted(key: string): boolean {
@@ -135,10 +135,10 @@ export function actorText(entry: Pick<AuditEntry, 'actor'>, ownView: boolean): s
   return ownView ? 'You' : entry.actor.name;
 }
 
-/** The classes of the round icon of each action: success, info, danger and neutral (the colors of the totals panel). */
+/** The classes of the round icon of each action: success, info, danger and violet (the colors of the totals panel). */
 export const ACTION_TONE: Record<AuditAction, string> = {
   CREATE: 'bg-success-bg text-success-ink',
   UPDATE: 'bg-info-bg text-info-ink',
   DELETE: 'bg-danger-bg text-danger',
-  EVENT: 'bg-disabled-bg text-ink-700',
+  EVENT: 'bg-jira-soft text-jira-ink',
 };

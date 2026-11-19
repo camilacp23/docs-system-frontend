@@ -3,7 +3,6 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import pkg from '../../../package.json';
 import { ApiError } from '../../api/ApiError';
 import { NO_APPLICATIONS_TEXT } from '../../layout/AppShell';
 import { SIGN_OUT_FAILED_TEXT } from '../../layout/TopBar';
@@ -50,6 +49,20 @@ describe('sidebar', () => {
     window.localStorage.removeItem('sidebar-collapsed');
   });
 
+  it('starts a new page at the top: <main> keeps its scroll position when the route changes, so it is reset', async () => {
+    const user = setupUser();
+    await renderApp({ path: '/dashboard' });
+    const nav = await screen.findByRole('navigation', { name: 'Main' });
+    const main = screen.getByRole('main');
+    main.scrollTop = 300;
+
+    await user.click(within(nav).getByRole('link', { name: 'Variables' }));
+
+    await waitFor(() => {
+      expect(main.scrollTop).toBe(0);
+    });
+  });
+
   it('lists the exact labels in order (Administrator)', async () => {
     await renderApp();
     const labels = (await navLinks()).map((link) => link.textContent);
@@ -81,19 +94,18 @@ describe('sidebar', () => {
     expect(screen.queryByText('Administration')).not.toBeInTheDocument();
   });
 
-  it('marks the item of the current route (also on detail routes) and shows the version', async () => {
+  it('marks the item of the current route (also on detail routes) ', async () => {
     await renderApp({ path: '/variables/3' });
     const links = await navLinks();
     const current = links.filter((link) => link.getAttribute('aria-current') === 'page');
     expect(current.map((link) => link.textContent)).toEqual(['Variables']);
-    expect(screen.getByText(`v${pkg.version}`)).toBeInTheDocument();
   });
 
   it('does not render the items that depend on modules that do not exist yet', async () => {
     await renderApp();
     await navLinks();
     // The quick search (S-30) has its module now: its tests are in quickSearch.test.tsx.
-    for (const text of ['Jira connected', 'Collapse']) {
+    for (const text of ['Jira connected']) {
       expect(screen.queryByText(text)).not.toBeInTheDocument();
     }
     expect(screen.queryByRole('button', { name: 'Help' })).not.toBeInTheDocument();

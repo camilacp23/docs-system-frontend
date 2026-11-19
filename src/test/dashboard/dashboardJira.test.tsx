@@ -13,6 +13,8 @@ import { settle, setupUser } from '../helpers/setupUser';
 const SYNCED_AT = '2026-10-05T14:40:00.000Z';
 const synced = () => syncedText(SYNCED_AT, browserTimeZone()) as string;
 const pending = () => screen.getByRole('article', { name: 'Pending to-dos' });
+// The age of the copy is a chip in the header of the by-screen card, not in the figure card.
+const byScreen = () => screen.getByRole('region', { name: 'Pending to-dos by screen' });
 const pill = () => document.querySelector('[data-jira-status]') as HTMLElement;
 
 describe('Jira available', () => {
@@ -30,8 +32,9 @@ describe('Jira available', () => {
     expect(card.getByText('6')).toBeInTheDocument();
     expect(card.getByText('Subtasks not Done in Jira')).toBeInTheDocument();
     // One short line: a clock and the date; "Last synced" is for screen readers.
-    expect(pending()).toHaveTextContent(`Last synced ${synced()}`);
-    expect(card.getByText(synced()).tagName).toBe('TIME');
+    expect(byScreen()).toHaveTextContent(`Last synced ${synced()}`);
+    expect(within(byScreen()).getByText(synced()).tagName).toBe('TIME');
+    expect(pending()).not.toHaveTextContent('Last synced');
     expect(card.queryByText('Stale')).not.toBeInTheDocument();
     expect(screen.queryByText("Jira isn't responding.")).not.toBeInTheDocument();
     expect(pill()).toHaveTextContent('Jira connected');
@@ -47,7 +50,7 @@ describe('Jira available', () => {
       },
     });
 
-    expect(within(pending()).getByText('Never synced')).toBeInTheDocument();
+    expect(within(byScreen()).getByText('Never synced')).toBeInTheDocument();
     expect(screen.queryByText("Jira isn't responding.")).not.toBeInTheDocument();
   });
 });

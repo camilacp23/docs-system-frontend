@@ -72,7 +72,7 @@ export function AuditTimeline({
           <section key={group.day} aria-labelledby={headingId}>
             <h2
               id={headingId}
-              className="px-5 pt-5 pb-1 text-micro font-bold tracking-wider text-ink-500 uppercase"
+              className="mx-5 mt-5 mb-1 w-fit rounded-pill bg-audit-soft px-3 py-1 text-micro font-bold tracking-wider text-audit-ink uppercase"
             >
               {dayHeading(group.day, today)}
             </h2>

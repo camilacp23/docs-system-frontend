@@ -5,10 +5,26 @@ export const ONBOARDING_TITLE = 'Onboarding';
 export const STEPPER_LABEL = 'Onboarding steps';
 export const STEPPER_HEADING = 'Your path';
 export const PROGRESS_LABEL = 'Progress';
-export const BACK_LABEL = 'Back';
-export const DASHBOARD_LABEL = 'Go to Dashboard';
 export const LOADING_LABEL = 'Loading the onboarding';
 export const DONE_HINT = 'completed';
+
+// The saved progress (contract 0.4.0): the button of each step, the completed state, the restart and the refusals.
+export const MARK_COMPLETE_LABEL = 'Mark step as complete';
+export const STEP_COMPLETED_LABEL = 'Step completed';
+export const STEP_PENDING_HINT = 'Mark it complete when you have read it: your progress is saved.';
+export const ONBOARDING_COMPLETED_LABEL = 'Onboarding completed';
+export const RESTART_LABEL = 'Restart onboarding';
+export const RESTART_TITLE = 'Restart the onboarding?';
+export const RESTART_CANCEL_LABEL = 'Cancel';
+export const PROGRESS_FAILED_TEXT = "Your progress couldn't be loaded.";
+export const PROGRESS_RETRY_LABEL = 'Try again';
+export function stepCompletedToastOf(step: number): string {
+  return `Step ${step} completed.`;
+}
+export const RESTARTED_TOAST = 'Onboarding restarted.';
+export function restartTextOf(applicationName: string): string {
+  return `Your completed steps in ${applicationName} are forgotten and you start again from step 1. Only your progress is removed, nothing else.`;
+}
 
 export function subtitleOf(applicationName: string): string {
   return `For developers new to the team: how ${applicationName} is built, read from its own documentation.`;
@@ -20,10 +36,6 @@ export function pageTitleOf(applicationName: string): string {
 
 export function stepCounterOf(step: number, total: number): string {
   return `Step ${step} of ${total}`;
-}
-
-export function nextLabelOf(label: string): string {
-  return `Next: ${label}`;
 }
 
 export function progressTextOf(done: number, total: number): string {

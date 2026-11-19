@@ -27,6 +27,7 @@ const variable: Variable = {
   fullTraceability: true,
   environments: ['PROD'],
   description: null,
+  originUsedIn: null,
   environmentDetails: [{ environment: 'PROD', notes: 'Loaded from the production list.' }],
   createdAt: '2026-10-03T09:14:00.000Z',
   updatedAt: '2026-10-03T09:14:00.000Z',
@@ -63,6 +64,7 @@ describe('form values', () => {
       scope: 'GLOBAL',
       description: null,
       originScreenId: 11,
+      originUsedIn: null,
       environments: [{ environment: 'PROD', notes: 'Loaded from the production list.' }],
     });
     const second = { ...values, originScreenId: '', description: 'Text' };
@@ -73,6 +75,7 @@ describe('form values', () => {
     expect(toVariableWrite(second)).toMatchObject({
       description: 'Text',
       originScreenId: null,
+      originUsedIn: null,
       environments: [
         { environment: 'DEV', notes: null },
         { environment: 'PROD', notes: 'n' },
@@ -303,5 +306,51 @@ describe('scopeConflictImpact', () => {
 
   it('is null when the error names no function', () => {
     expect(scopeConflictImpact(apiError('SCOPE_CONFLICT', 422), dependencies)).toBeNull();
+  });
+});
+
+describe('originUsedIn: where the variable is created in its origin screen (contract 0.5.0)', () => {
+  const base = valuesFromVariable({ ...variable, originUsedIn: 'OnVisible' });
+
+  it('is read from the variable and is empty when the variable has none', () => {
+    expect(base.originUsedIn).toBe('OnVisible');
+    expect(valuesFromVariable(variable).originUsedIn).toBe('');
+  });
+
+  it('travels trimmed, and as null (never "") when it is empty', () => {
+    expect(toVariableWrite({ ...base, originUsedIn: '  btnGuardar.OnSelect ' }).originUsedIn).toBe(
+      'btnGuardar.OnSelect',
+    );
+    expect(toVariableWrite({ ...base, originUsedIn: '' }).originUsedIn).toBeNull();
+    expect(toVariableWrite({ ...base, originUsedIn: '   ' }).originUsedIn).toBeNull();
+  });
+
+  it('travels as null when there is no origin screen, whatever the field holds (the API answers 400 otherwise)', () => {
+    expect(toVariableWrite({ ...base, originScreenId: '' }).originUsedIn).toBeNull();
+  });
+
+  it('accepts the format of usedIn and refuses the rest, only when there is an origin screen', () => {
+    const errorOf = (text: string, originScreenId = '11') =>
+      validateVariable({ ...base, originScreenId, originUsedIn: text }).originUsedIn;
+    expect(errorOf('OnVisible')).toBeUndefined();
+    expect(errorOf('btnGuardar.OnSelect')).toBeUndefined();
+    expect(errorOf('')).toBeUndefined();
+    expect(errorOf('has space')).toBe("Used in isn't in a valid format.");
+    expect(errorOf('origin')).toBe("Used in isn't in a valid format.");
+    expect(errorOf('9starts')).toBe("Used in isn't in a valid format.");
+    expect(errorOf('a'.repeat(201))).toBe('Used in is too long.');
+    // Without an origin screen the field is off and is not judged.
+    expect(errorOf('has space', '')).toBeUndefined();
+  });
+
+  it('puts the 400 "requires" of the API on the field, with the catalog text', () => {
+    const error = new ApiError({
+      status: 400,
+      code: 'VALIDATION_ERROR',
+      details: { fields: [{ field: 'originUsedIn', rule: 'requires', message: 'x' }] },
+    });
+    expect(mapVariableError(error, toVariableWrite(base))).toEqual({
+      originUsedIn: 'Choose the origin screen first, or leave this empty.',
+    });
   });
 });

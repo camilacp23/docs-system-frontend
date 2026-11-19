@@ -120,6 +120,16 @@ describe('New user modal', () => {
     expect(api.callsTo('POST /users')).toHaveLength(0);
   });
 
+  it('draws the same key icon on "Generate" here and in the edit modal', async () => {
+    const user = setupUser();
+    await renderUsers();
+    const dialog = await openModal(user);
+
+    const icon = dialog.getByRole('button', { name: 'Generate' }).querySelector('svg');
+    expect(icon).not.toBeNull();
+    expect(icon).toHaveClass('lucide-key-round');
+  });
+
   it('generates a password that meets the policy and shows it as typed', async () => {
     const user = setupUser();
     await renderUsers();

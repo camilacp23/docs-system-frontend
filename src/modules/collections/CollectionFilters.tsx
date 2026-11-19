@@ -1,12 +1,12 @@
-// CollectionFilters: the filter bar of the collection list (S-14): search by name (the URL changes after the user
-// stops typing, useSearchDraft), environment and the "Not linked to any screen" toggle, all in one row (the search is the longest).
-// "Clear filters" lives in the header of the list card. Props: params (current filters), setParams (writes the
-// URL). Every control has an accessible name; the changes reach the URL, never a local copy.
-import { Funnel, Search } from 'lucide-react';
-import { useCallback } from 'react';
+// CollectionFilters: the filter strip of the collection list (S-14): one centered pill, the environment select, on a soft
+// royal-blue band. The "Not linked to any screen" filter is the last counter card above the list (CollectionKpis). There is
+// no search by name here: the search of the top bar covers it (the `q` parameter of the URL still filters if a link
+// carries it). "Clear filters" lives in the header of the list card.
+// Props: params (current filters), setParams (writes the URL). Every control has an accessible name; the changes reach the
+// URL, never a local copy.
+import { Server } from 'lucide-react';
 
-import { Button, ICON_STROKE_WIDTH, Select, TextField } from '../../components/ui';
-import { useSearchDraft } from '../../hooks/useSearchDraft';
+import { FilterSelect, ICON_STROKE_WIDTH } from '../../components/ui';
 import { ENVIRONMENTS } from '../variables/variableLabels';
 import type { Environment } from '../variables/variableTypes';
 
@@ -18,55 +18,24 @@ interface CollectionFiltersProps {
 }
 
 export function CollectionFilters({ params, setParams }: CollectionFiltersProps) {
-  const [text, setText] = useSearchDraft(
-    params.q,
-    useCallback(
-      (q: string) => {
-        setParams({ q }, { replace: true });
-      },
-      [setParams],
-    ),
-  );
-
   return (
-    <div className="flex flex-wrap items-center gap-3 border-b border-divider bg-search-bg/60 p-4">
-      <div className="min-w-64 flex-1">
-        <TextField
-          type="search"
-          icon={<Search size={16} strokeWidth={ICON_STROKE_WIDTH} />}
-          aria-label="Search by name"
-          placeholder="Search collections by name…"
-          maxLength={100}
-          value={text}
-          onChange={(event) => {
-            setText(event.target.value);
-          }}
-        />
-      </div>
-      <Select
-        aria-label="Environment"
-        className="w-40"
+    <div className="flex flex-wrap items-center justify-center gap-2.5 border-b border-collection-border/60 bg-collection-soft/50 px-5 py-3">
+      <FilterSelect
+        label="Environment"
+        tone="collection"
+        icon={<Server size={15} strokeWidth={ICON_STROKE_WIDTH} />}
         value={params.environment}
-        onChange={(event) => {
-          setParams({ environment: event.target.value as Environment | '' });
+        onChange={(next) => {
+          setParams({ environment: next as Environment | '' });
         }}
       >
-        <option value="">Environment</option>
+        <option value="">All</option>
         {ENVIRONMENTS.map((environment) => (
           <option key={environment} value={environment}>
             {environment}
           </option>
         ))}
-      </Select>
-      <Button
-        aria-pressed={params.undocumented}
-        iconLeft={<Funnel aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
-        onClick={() => {
-          setParams({ undocumented: !params.undocumented });
-        }}
-      >
-        Not linked to any screen
-      </Button>
+      </FilterSelect>
     </div>
   );
 }

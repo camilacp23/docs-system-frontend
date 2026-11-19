@@ -1,6 +1,8 @@
 // ApplicationFormModal: "Register application" (S-08) and "Edit application" over the list. Rendered only while it is
 // open (its state starts fresh each time). Props: applicationId (omit to register), onClose, onSaved (the list and
 // the applications of the shell are read again).
+// Layout (the one of the New variable modal): wide, two columns of headed groups: Basics (name, platform) on the left, Jira and
+// Documentation on the right; registering says in the footer that the App (OnStart) screen is created for it.
 // Fields: Name (n/120, "Unique in the department."), Platform (n/60), Jira project key (empty = the department
 // default project) and Description. Client checks cover what the contract declares; DUPLICATE_NAME goes under the
 // name with "Documentación técnica" as the scope (D-63), the other refusals in the banner of the form.
@@ -8,7 +10,7 @@
 // as it is. 412 (S-44): the form keeps what was typed, Save is disabled and the banner offers "Reload" (reads the
 // other person's version) or "Keep my changes visible". Saving is disabled with the reason while offline. It does
 // NOT depend on the selected application being active: PUT /applications is the write an archived one accepts.
-import { LayoutGrid, Plus } from 'lucide-react';
+import { Blocks, FileText, Info, ListTree, Plus, Ticket } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 
@@ -28,6 +30,7 @@ import {
   useToast,
 } from '../../components/ui';
 import { useOfflineBlock } from '../../hooks/useOfflineBlock';
+import { ModalGroup } from '../shared/ModalGroup';
 import { focusFirstInvalid } from '../variables/focusFirstInvalid';
 
 import {
@@ -102,7 +105,7 @@ function EditApplication({
       open
       onClose={onClose}
       size="md"
-      icon={<LayoutGrid size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+      icon={<Blocks size={16} strokeWidth={ICON_STROKE_WIDTH} />}
       title="Edit application"
     >
       {resource.status === 'error' ? (
@@ -220,19 +223,33 @@ function ApplicationForm({ current, etag, onClose, onSaved, onReload }: Applicat
       onClose={() => {
         if (!saving) onClose();
       }}
-      size="md"
+      size="xl"
       initialFocusRef={nameRef}
-      icon={<LayoutGrid size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+      icon={<Blocks size={16} strokeWidth={ICON_STROKE_WIDTH} />}
       title={editing ? 'Edit application' : 'Register application'}
-      description={editing ? `Last updated ${formatTimestamp(current.updatedAt)}` : undefined}
+      description={
+        editing
+          ? `Last updated ${formatTimestamp(current.updatedAt)}`
+          : 'Name, platform and Jira project of the application'
+      }
       footer={
         <div className="flex w-full items-center justify-between gap-4">
           {saveReason ? (
             <p id={reasonId} className="text-small text-warning-ink">
               {saveReason}
             </p>
-          ) : (
+          ) : editing ? (
             <span />
+          ) : (
+            <p className="flex items-start gap-2 text-small text-ink-500">
+              <Info
+                aria-hidden="true"
+                size={16}
+                strokeWidth={ICON_STROKE_WIDTH}
+                className="mt-px shrink-0"
+              />
+              <span>An App (OnStart) screen is created automatically for the new application.</span>
+            </p>
           )}
           <span className="flex shrink-0 items-center gap-2">
             <Button onClick={onClose} disabled={saving}>
@@ -245,13 +262,14 @@ function ApplicationForm({ current, etag, onClose, onSaved, onReload }: Applicat
               loading={saving}
               disabled={blocked || conflict !== null}
               aria-describedby={saveReason ? reasonId : undefined}
+              aria-label={editing ? 'Save changes' : 'Register application'}
               iconLeft={
                 editing ? undefined : (
                   <Plus aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />
                 )
               }
             >
-              {editing ? 'Save changes' : 'Register application'}
+              {editing ? 'Save' : 'Register'}
             </Button>
           </span>
         </div>
@@ -289,98 +307,106 @@ function ApplicationForm({ current, etag, onClose, onSaved, onReload }: Applicat
           </Banner>
         )}
         {errors.form && <Banner tone="danger">{errors.form}</Banner>}
-        <FormField
-          label={FIELD_LABEL.name}
-          required
-          error={errors.name}
-          help={
-            <span className="flex justify-between gap-2">
-              <span>Unique in the department.</span>
-              <span aria-hidden="true">
-                {values.name.length}/{NAME_MAX}
-              </span>
-            </span>
-          }
-        >
-          {(control) => (
-            <TextField
-              {...control}
-              ref={nameRef}
-              autoComplete="off"
-              maxLength={NAME_MAX}
-              disabled={saving}
-              value={values.name}
-              onChange={(event) => {
-                change({ name: event.target.value });
-              }}
-            />
-          )}
-        </FormField>
-        <FormField
-          label={FIELD_LABEL.platform}
-          required
-          error={errors.platform}
-          help={
-            <span className="flex justify-between gap-2">
-              <span>e.g. Power Apps</span>
-              <span aria-hidden="true">
-                {values.platform.length}/{PLATFORM_MAX}
-              </span>
-            </span>
-          }
-        >
-          {(control) => (
-            <TextField
-              {...control}
-              autoComplete="off"
-              maxLength={PLATFORM_MAX}
-              disabled={saving}
-              value={values.platform}
-              onChange={(event) => {
-                change({ platform: event.target.value });
-              }}
-            />
-          )}
-        </FormField>
-        <FormField
-          label={FIELD_LABEL.jiraProjectKey}
-          error={errors.jiraProjectKey}
-          help="Leave empty to use the default project (TECHEA)."
-        >
-          {(control) => (
-            <TextField
-              {...control}
-              mono
-              autoComplete="off"
-              spellCheck={false}
-              disabled={saving}
-              value={values.jiraProjectKey}
-              onChange={(event) => {
-                change({ jiraProjectKey: event.target.value });
-              }}
-            />
-          )}
-        </FormField>
-        <FormField label={FIELD_LABEL.description} error={errors.description}>
-          {(control) => (
-            <Textarea
-              {...control}
-              rows={3}
-              maxLength={DESCRIPTION_MAX}
-              placeholder="What the application does and who uses it"
-              disabled={saving}
-              value={values.description}
-              onChange={(event) => {
-                change({ description: event.target.value });
-              }}
-            />
-          )}
-        </FormField>
-        {!editing && (
-          <Banner tone="info">
-            An App (OnStart) screen is created automatically for the new application.
-          </Banner>
-        )}
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-x-8">
+          <ModalGroup title="Basics" icon={<ListTree size={13} strokeWidth={ICON_STROKE_WIDTH} />}>
+            <FormField
+              label={FIELD_LABEL.name}
+              required
+              error={errors.name}
+              help={
+                <span className="flex justify-between gap-2">
+                  <span>Unique in the department.</span>
+                  <span aria-hidden="true">
+                    {values.name.length}/{NAME_MAX}
+                  </span>
+                </span>
+              }
+            >
+              {(control) => (
+                <TextField
+                  {...control}
+                  ref={nameRef}
+                  autoComplete="off"
+                  maxLength={NAME_MAX}
+                  disabled={saving}
+                  value={values.name}
+                  onChange={(event) => {
+                    change({ name: event.target.value });
+                  }}
+                />
+              )}
+            </FormField>
+            <FormField
+              label={FIELD_LABEL.platform}
+              required
+              error={errors.platform}
+              help={
+                <span className="flex justify-between gap-2">
+                  <span>e.g. Power Apps</span>
+                  <span aria-hidden="true">
+                    {values.platform.length}/{PLATFORM_MAX}
+                  </span>
+                </span>
+              }
+            >
+              {(control) => (
+                <TextField
+                  {...control}
+                  autoComplete="off"
+                  maxLength={PLATFORM_MAX}
+                  disabled={saving}
+                  value={values.platform}
+                  onChange={(event) => {
+                    change({ platform: event.target.value });
+                  }}
+                />
+              )}
+            </FormField>
+          </ModalGroup>
+          <div className="flex flex-col gap-5 border-t border-divider pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-8">
+            <ModalGroup title="Jira" icon={<Ticket size={13} strokeWidth={ICON_STROKE_WIDTH} />}>
+              <FormField
+                label={FIELD_LABEL.jiraProjectKey}
+                error={errors.jiraProjectKey}
+                help="Leave empty to use the default project (TECHEA)."
+              >
+                {(control) => (
+                  <TextField
+                    {...control}
+                    mono
+                    autoComplete="off"
+                    spellCheck={false}
+                    disabled={saving}
+                    value={values.jiraProjectKey}
+                    onChange={(event) => {
+                      change({ jiraProjectKey: event.target.value });
+                    }}
+                  />
+                )}
+              </FormField>
+            </ModalGroup>
+            <ModalGroup
+              title="Documentation"
+              icon={<FileText size={13} strokeWidth={ICON_STROKE_WIDTH} />}
+            >
+              <FormField label={FIELD_LABEL.description} error={errors.description}>
+                {(control) => (
+                  <Textarea
+                    {...control}
+                    rows={3}
+                    maxLength={DESCRIPTION_MAX}
+                    placeholder="What the application does and who uses it"
+                    disabled={saving}
+                    value={values.description}
+                    onChange={(event) => {
+                      change({ description: event.target.value });
+                    }}
+                  />
+                )}
+              </FormField>
+            </ModalGroup>
+          </div>
+        </div>
       </form>
     </Modal>
   );

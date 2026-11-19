@@ -48,7 +48,7 @@ export function StatusChart({ rows, total }: StatusChartProps) {
           role="img"
           aria-label={donutSummary(rows, total)}
           viewBox={`0 0 ${DONUT_SIZE} ${DONUT_SIZE}`}
-          className="size-55"
+          className="size-48"
         >
           {total === 0 && (
             <circle

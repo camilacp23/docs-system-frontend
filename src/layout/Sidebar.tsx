@@ -1,7 +1,7 @@
-// Sidebar: the navigation column (S-31): application card, groups of items by role and the version of the
-// app at the foot (package.json). The active item follows the route. It is 268 px wide, or 72 px when collapsed:
+// Sidebar: the navigation column (S-31): application card, groups of items by role. The active item follows the route. It is 268 px wide, or 72 px when collapsed:
 // then only the icons remain (each item keeps its accessible name and shows a tooltip on hover / focus). The
-// collapse button is a small round chevron on the right edge of the column.
+// collapse button is the last row of the column ("Collapse" + chevron).
+// The active item has a soft blue wash, a bar on its left edge and a blue icon (no filled tile).
 // Props: role (decides the items, SDD Table 56), collapsed, onToggle (collapse / expand button), onExpand.
 // The Review item carries the number of screens In review of the selected application (useReviewCount) in an amber badge
 // (S-36); it is left out when the count is 0, unknown or could not be read. The number is never the only signal: the
@@ -10,11 +10,10 @@ import { ChevronLeft } from 'lucide-react';
 import { useState } from 'react';
 import { NavLink } from 'react-router';
 
-import pkg from '../../package.json';
 import type { Role } from '../app/router/routes';
 import { useApplication } from '../application/useApplication';
 import { useReviewCount } from '../application/useReviewCount';
-import { cx } from '../components/ui';
+import { cx, ICON_STROKE_WIDTH } from '../components/ui';
 
 import { ApplicationCard } from './ApplicationCard';
 import { getNavGroups, REVIEW_PATH, type NavItem } from './navConfig';
@@ -70,7 +69,7 @@ function SidebarItem({
         cx(
           'relative flex items-center rounded-control transition-colors duration-150 motion-reduce:transition-none',
           'h-9 gap-2.75 px-2',
-          isActive ? 'bg-(image:--gradient-nav-active)' : 'hover:bg-sidebar-tile',
+          isActive ? 'bg-(image:--gradient-nav-active)' : 'hover:bg-sidebar-hover',
         )
       }
     >
@@ -79,19 +78,13 @@ function SidebarItem({
           {isActive && (
             <span
               aria-hidden="true"
-              className={cx(
-                'absolute inset-y-2.25 w-0.75 rounded-r-indicator bg-sidebar-active-indicator',
-                '-left-3.5',
-              )}
+              className="absolute inset-y-1.5 left-0 w-0.75 rounded-pill bg-sidebar-active-indicator"
             />
           )}
           <span
             className={cx(
-              'flex items-center justify-center rounded-chip',
-              'size-7',
-              isActive
-                ? 'bg-accent text-on-primary shadow-nav-tile'
-                : 'bg-sidebar-tile text-sidebar-text',
+              'flex size-7 items-center justify-center',
+              isActive ? 'text-sidebar-active-icon' : 'text-sidebar-text',
             )}
           >
             {item.icon}
@@ -166,6 +159,7 @@ export function Sidebar({ role, collapsed, onToggle, onExpand }: SidebarProps) {
         )}
       >
         <ApplicationCard collapsed={collapsed} onExpand={onExpand} />
+        <div aria-hidden="true" className="mx-2 mb-1.5 h-px shrink-0 bg-sidebar-divider" />
         <nav aria-label="Main" className="flex flex-col gap-1">
           {groups.map((group) => (
             <div key={group.section ?? 'root'} className="flex flex-col gap-1.5">
@@ -191,34 +185,35 @@ export function Sidebar({ role, collapsed, onToggle, onExpand }: SidebarProps) {
             </div>
           ))}
         </nav>
-        <div
-          className={cx(
-            'mt-auto border-t border-sidebar-divider pt-3 text-tag/5 text-sidebar-muted-3',
-            collapsed ? 'text-center' : 'px-2',
-          )}
-        >
-          v{pkg.version}
+        <div className="mt-auto flex flex-col gap-1.5 border-t border-sidebar-divider pt-3">
+          <button
+            type="button"
+            aria-label={toggleLabel}
+            aria-expanded={!collapsed}
+            aria-controls={SIDEBAR_ID}
+            title={toggleLabel}
+            onClick={onToggle}
+            className="flex h-9 items-center gap-2.75 rounded-control px-2 text-sidebar-text transition-colors duration-150 hover:bg-sidebar-hover hover:text-on-primary motion-reduce:transition-none"
+          >
+            <span className="flex size-7 shrink-0 items-center justify-center">
+              <ChevronLeft
+                size={16}
+                strokeWidth={ICON_STROKE_WIDTH}
+                aria-hidden="true"
+                className={cx(
+                  'transition-transform duration-200 motion-reduce:transition-none',
+                  collapsed && 'rotate-180',
+                )}
+              />
+            </span>
+            {!collapsed && (
+              <span className="text-body font-medium whitespace-nowrap motion-safe:animate-fade-in">
+                Collapse
+              </span>
+            )}
+          </button>
         </div>
       </aside>
-      <button
-        type="button"
-        aria-label={toggleLabel}
-        aria-expanded={!collapsed}
-        aria-controls={SIDEBAR_ID}
-        title={toggleLabel}
-        onClick={onToggle}
-        className="absolute top-5.5 -right-3 flex size-6 items-center justify-center rounded-pill border border-border bg-surface text-ink-500 shadow-button transition-colors duration-150 hover:border-accent hover:bg-accent hover:text-on-primary motion-reduce:transition-none"
-      >
-        <ChevronLeft
-          size={14}
-          strokeWidth={2.25}
-          aria-hidden="true"
-          className={cx(
-            'transition-transform duration-200 motion-reduce:transition-none',
-            collapsed && 'rotate-180',
-          )}
-        />
-      </button>
     </div>
   );
 }

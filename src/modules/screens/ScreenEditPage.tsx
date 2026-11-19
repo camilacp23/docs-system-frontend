@@ -41,7 +41,6 @@ import {
   ICON_STROKE_WIDTH,
   PageHeader,
   Skeleton,
-  StatusTag,
   Tabs,
   tabPanelProps,
   useDelayedLoading,
@@ -54,8 +53,8 @@ import { useVariableOptions } from '../collections/useVariableOptions';
 import { invalidFields, type InvalidField } from '../collections/invalidFields';
 import { focusFirstInvalid } from '../variables/focusFirstInvalid';
 import { parseId } from '../variables/parseId';
+import { toVariableWrite, valuesFromVariable } from '../variables/variableForm';
 import { useScreenOptions } from '../variables/useScreenOptions';
-import { formatTimestamp } from '../variables/variableLabels';
 
 import { ComponentRowsEditor } from './ComponentRowsEditor';
 import {
@@ -69,6 +68,7 @@ import { LinkRowsEditor, type LinkRow, type LinkRowErrors } from './LinkRowsEdit
 import { NavigationRowsEditor } from './NavigationRowsEditor';
 import { editBlockReason } from './screenActionBlock';
 import {
+  changedOrigins,
   EDIT_TABS,
   errorTab,
   hasErrors,
@@ -78,6 +78,7 @@ import {
   valuesFromScreen,
   type CollectionLinkRow,
   type EditTab,
+  type OriginLink,
   type ScreenEditErrors,
   type ScreenEditValues,
   type VariableLinkRow,
@@ -207,6 +208,20 @@ export function ScreenEditPage() {
 
   const blockReason = loaded === null ? null : editBlockReason(loaded, writeReason);
 
+  /** The "Used in" of an origin row goes to its variable: the variable is read (its ETag and what the PUT replaces) and written back. */
+  const saveOriginUsedIn = async (origin: OriginLink) => {
+    const current = await client.get('/variables/{id}', { path: { id: origin.variable.id } });
+    const variable = current.body.data;
+    await client.put('/variables/{id}', {
+      path: { id: variable.id },
+      ifMatch: current.etag ?? undefined,
+      body: toVariableWrite({
+        ...valuesFromVariable(variable),
+        originUsedIn: origin.originUsedIn,
+      }),
+    });
+  };
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (blockReason !== null || saving || conflict !== null || loaded === null || values === null)
@@ -229,6 +244,53 @@ export function ScreenEditPage() {
         body,
       });
       const saved = result.body.data;
+      // The origin rows are not part of the PUT of the screen: the "Used in" the user changed goes to its VARIABLE, one call each
+      // (contract 0.5.0). The screen is already saved, so a failure here keeps the page open on that row.
+      const failures: Array<{ origin: OriginLink; message: string }> = [];
+      const stored = new Set<number>();
+      for (const origin of changedOrigins(values, loaded)) {
+        try {
+          await saveOriginUsedIn(origin);
+          stored.add(origin.id);
+        } catch (thrown) {
+          failures.push({
+            origin,
+            message: getThrownMessage(thrown, { element: 'variable' }),
+          });
+        }
+      }
+      if (failures.length > 0) {
+        // The saved screen is now the copy on screen (its new ETag), with what the user typed kept in the rows that failed.
+        const copy = {
+          ...saved,
+          variableLinks: saved.variableLinks.map((link) => {
+            const typed = values.origins.find((origin) => origin.id === link.id);
+            return link.isOrigin && typed !== undefined && stored.has(link.id)
+              ? {
+                  ...link,
+                  originUsedIn: typed.originUsedIn.trim() === '' ? null : typed.originUsedIn.trim(),
+                }
+              : link;
+          }),
+        };
+        screen.apply(copy, result.etag);
+        setDraft({
+          key: `${result.etag ?? ''}|${copy.updatedAt}`,
+          values: { ...valuesFromScreen(copy), origins: values.origins },
+        });
+        fail({
+          originRows: Object.fromEntries(
+            failures.map((failure) => [failure.origin.id, failure.message]),
+          ),
+        });
+        toast.show({
+          tone: 'warning',
+          message: `Screen saved, but the "Used in" of ${failures
+            .map((failure) => failure.origin.variable.name)
+            .join(', ')} could not be saved.`,
+        });
+        return;
+      }
       // An update that changes nothing answers with the same status (D-71): only then there is nothing to add.
       const statusChanged = saved.documentationStatus !== loaded.documentationStatus;
       toast.show({
@@ -336,14 +398,7 @@ export function ScreenEditPage() {
             Edit <span className="font-mono text-body-lg font-semibold">{loaded.name}</span>
           </>
         }
-        meta={
-          <>
-            <StatusTag status={toTagStatus(loaded.documentationStatus)} />
-            <span className="text-label text-ink-500">
-              Author {loaded.author.name} · Updated {formatTimestamp(loaded.updatedAt)}
-            </span>
-          </>
-        }
+        description="Update the details below and save your changes."
         actions={
           <>
             <ButtonLink to={`/screens/${loaded.id}`}>Cancel</ButtonLink>
@@ -353,8 +408,9 @@ export function ScreenEditPage() {
               loading={saving}
               disabled={blockReason !== null || conflict !== null}
               aria-describedby={saveReason ? reasonId : undefined}
+              aria-label="Save changes"
             >
-              Save changes
+              Save
             </Button>
           </>
         }
@@ -414,7 +470,7 @@ export function ScreenEditPage() {
               tone="danger"
               lead={`${summary.length} ${summary.length === 1 ? 'field needs' : 'fields need'} attention.`}
             >
-              <span className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+              <span className="inline-flex flex-wrap items-baseline gap-x-4 gap-y-1">
                 {summary.map((entry, index) => (
                   <button
                     key={`${entry.label}-${index}`}
@@ -516,6 +572,15 @@ export function ScreenEditPage() {
                 )
               }
               origins={values.origins}
+              onOriginChange={(originId, usedIn) => {
+                edit({
+                  ...values,
+                  origins: values.origins.map((origin) =>
+                    origin.id === originId ? { ...origin, originUsedIn: usedIn } : origin,
+                  ),
+                });
+              }}
+              originErrors={errors.originRows}
               loadingOptions={variables.loading}
               disabled={saving}
             />

@@ -13,7 +13,7 @@ import {
   FileText,
   History,
   LayoutDashboard,
-  LayoutGrid,
+  Blocks,
   Monitor,
   Network,
   Search,
@@ -62,7 +62,7 @@ const NAV: Array<{ section?: string; items: NavItem[] }> = [
     section: 'Administration',
     items: [
       { label: 'Users & roles', icon: <Users {...iconProps} /> },
-      { label: 'Applications', icon: <LayoutGrid {...iconProps} /> },
+      { label: 'Applications', icon: <Blocks {...iconProps} /> },
     ],
   },
 ];

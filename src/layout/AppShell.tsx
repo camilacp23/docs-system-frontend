@@ -4,6 +4,7 @@
 // application registered (neutral empty state), except on /admin/applications where one is registered.
 // No props; the user comes from the session (the last user while the "session ended" dialog is open).
 import { Archive, CircleAlert, Database } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { Outlet, useLocation } from 'react-router';
 
 import { useApplication } from '../application/useApplication';
@@ -11,6 +12,9 @@ import { cx, EmptyState, ErrorState, ICON_STROKE_WIDTH } from '../components/ui'
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed';
 import { useCurrentUser } from '../session/useCurrentUser';
+
+import { OnboardingBubble } from '../modules/onboarding/OnboardingBubble';
+import { OnboardingTrailProvider } from '../modules/onboarding/OnboardingTrailProvider';
 
 import { BreadcrumbProvider } from './BreadcrumbProvider';
 import { JiraStatusProvider } from './JiraStatusProvider';
@@ -60,6 +64,13 @@ export function AppShell() {
   const online = useOnlineStatus();
   const { currentApplication } = useApplication();
   const [collapsed, toggleSidebar, setCollapsed] = useSidebarCollapsed();
+  const { pathname } = useLocation();
+  const mainRef = useRef<HTMLElement>(null);
+  // The page scrolls inside <main>, which keeps its scroll position when the route changes: a new page (not a change of
+  // the query of the same page) starts at the top.
+  useEffect(() => {
+    if (mainRef.current) mainRef.current.scrollTop = 0;
+  }, [pathname]);
 
   if (user === null) return null;
   const archived = currentApplication?.status === 'ARCHIVED';
@@ -68,41 +79,47 @@ export function AppShell() {
   return (
     <JiraStatusProvider>
       <BreadcrumbProvider>
-        <div
-          className={cx(
-            'grid h-dvh grid-rows-[68px_auto_minmax(0,1fr)] overflow-hidden bg-canvas transition-[grid-template-columns] duration-300 ease-in-out motion-reduce:transition-none',
-            collapsed ? 'grid-cols-[72px_minmax(0,1fr)]' : 'grid-cols-[268px_minmax(0,1fr)]',
-          )}
-        >
-          <Sidebar
-            role={user.role}
-            collapsed={collapsed}
-            onToggle={toggleSidebar}
-            onExpand={() => {
-              setCollapsed(false);
-            }}
-          />
-          <TopBar user={user} />
-          <div className="col-start-2">
-            {!online && (
-              <StatusStrip icon={<CircleAlert {...iconProps} />} lead="You're offline.">
-                {OFFLINE_TEXT}
-              </StatusStrip>
+        <OnboardingTrailProvider>
+          <div
+            className={cx(
+              'grid h-dvh grid-rows-[68px_auto_minmax(0,1fr)] overflow-hidden bg-canvas transition-[grid-template-columns] duration-300 ease-in-out motion-reduce:transition-none',
+              collapsed ? 'grid-cols-[72px_minmax(0,1fr)]' : 'grid-cols-[268px_minmax(0,1fr)]',
             )}
-            {archived && (
-              <StatusStrip
-                icon={<Archive {...iconProps} />}
-                lead="This application is archived."
-                action={user.role === 'ADMINISTRATOR' ? <UnarchiveButton /> : undefined}
-              >
-                {ARCHIVED_TEXT}
-              </StatusStrip>
-            )}
+          >
+            <Sidebar
+              role={user.role}
+              collapsed={collapsed}
+              onToggle={toggleSidebar}
+              onExpand={() => {
+                setCollapsed(false);
+              }}
+            />
+            <TopBar user={user} />
+            <div className="col-start-2">
+              {!online && (
+                <StatusStrip icon={<CircleAlert {...iconProps} />} lead="You're offline.">
+                  {OFFLINE_TEXT}
+                </StatusStrip>
+              )}
+              {archived && (
+                <StatusStrip
+                  icon={<Archive {...iconProps} />}
+                  lead="This application is archived."
+                  action={user.role === 'ADMINISTRATOR' ? <UnarchiveButton /> : undefined}
+                >
+                  {ARCHIVED_TEXT}
+                </StatusStrip>
+              )}
+            </div>
+            <main
+              ref={mainRef}
+              className="col-start-2 flex min-h-0 [scrollbar-width:thin] flex-col gap-4 overflow-y-auto overscroll-contain px-6 py-5"
+            >
+              <ShellContent />
+            </main>
           </div>
-          <main className="col-start-2 flex min-h-0 [scrollbar-width:thin] flex-col gap-4 overflow-y-auto overscroll-contain px-6 py-5">
-            <ShellContent />
-          </main>
-        </div>
+          <OnboardingBubble />
+        </OnboardingTrailProvider>
       </BreadcrumbProvider>
     </JiraStatusProvider>
   );

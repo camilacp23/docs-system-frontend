@@ -1,5 +1,6 @@
 // ActionMenu: the "…" button of a row or page header and its menu of actions.
-// Props: label (accessible name of the button, e.g. "Actions for gUsuario"), items ({ key, label, onSelect,
+// Props: label (accessible name of the button, e.g. "Actions for gUsuario"), buttonLabel (optional visible text: then the
+// button is a pill "Actions ⌄" that says what it is, instead of a bare "…"; the accessible name stays `label`), items ({ key, label, onSelect,
 // icon?, danger?, disabled?, reason? }). Items are drawn with their icon and a thin divider between them. A disabled item stays focusable with aria-disabled, shows `reason` as its title
 // and does nothing, so the reason is reachable by keyboard. Arrow keys move, Home / End jump, Escape closes and
 // returns focus to the button, as does choosing an item.
@@ -7,7 +8,7 @@
 // `overflow` (the scrolling table of a list, the shell) can clip it. It opens below the button, aligned to its right
 // edge; when there is no room below it opens above, and it never leaves the window horizontally. Scrolling or
 // resizing closes it (its coordinates would be stale).
-import { Ellipsis } from 'lucide-react';
+import { ChevronDown, Ellipsis } from 'lucide-react';
 import { Fragment, useEffect, useId, useLayoutEffect, useRef } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -30,10 +31,11 @@ export interface ActionMenuItem {
 
 export interface ActionMenuProps {
   label: string;
+  buttonLabel?: string;
   items: readonly ActionMenuItem[];
 }
 
-export function ActionMenu({ label, items }: ActionMenuProps) {
+export function ActionMenu({ label, buttonLabel, items }: ActionMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const { open, setOpen, containerRef, triggerRef } = usePopover(menuRef);
   const menuId = useId();
@@ -99,9 +101,21 @@ export function ActionMenu({ label, items }: ActionMenuProps) {
         onClick={() => {
           setOpen((current) => !current);
         }}
-        className="flex size-8 items-center justify-center rounded-chip border border-border-control bg-surface text-ink-700 transition-[background-color,border-color,color,transform] duration-200 hover:-translate-y-0.5 hover:border-accent hover:bg-accent-soft hover:text-accent-ink active:translate-y-0 active:scale-95 aria-expanded:border-accent aria-expanded:bg-accent-soft aria-expanded:text-accent-ink motion-reduce:transform-none motion-reduce:transition-none"
+        className={cx(
+          'flex items-center justify-center border border-border-control bg-surface text-ink-700 transition-[background-color,border-color,color,transform] duration-200 hover:-translate-y-0.5 hover:border-accent hover:bg-accent-soft hover:text-accent-ink active:translate-y-0 active:scale-95 aria-expanded:border-accent aria-expanded:bg-accent-soft aria-expanded:text-accent-ink motion-reduce:transform-none motion-reduce:transition-none',
+          buttonLabel === undefined
+            ? 'size-8 rounded-chip'
+            : 'h-8 gap-1.5 rounded-pill pr-2.5 pl-3.5 text-label font-semibold shadow-button',
+        )}
       >
-        <Ellipsis aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />
+        {buttonLabel === undefined ? (
+          <Ellipsis aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />
+        ) : (
+          <>
+            {buttonLabel}
+            <ChevronDown aria-hidden="true" size={14} strokeWidth={ICON_STROKE_WIDTH} />
+          </>
+        )}
       </button>
       {open &&
         createPortal(

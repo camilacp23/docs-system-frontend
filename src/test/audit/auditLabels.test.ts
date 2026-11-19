@@ -64,8 +64,11 @@ describe('the element', () => {
 });
 
 describe('fields', () => {
-  it('shows the key as it comes, and the password as "Password"', () => {
-    expect(fieldLabel('documentationStatus')).toBe('documentationStatus');
+  it('writes the key as words, and the password as "Password"', () => {
+    expect(fieldLabel('documentationStatus')).toBe('Documentation status');
+    expect(fieldLabel('miro_link')).toBe('Miro link');
+    expect(fieldLabel('commentId')).toBe('Comment ID');
+    expect(fieldLabel('onStart')).toBe('OnStart');
     expect(fieldLabel('passwordHash')).toBe('Password');
     expect(isRedacted('passwordHash')).toBe(true);
     expect(isRedacted('name')).toBe(false);

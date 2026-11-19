@@ -93,7 +93,8 @@ describe('Add to-do: the roles and the reasons that disable it', () => {
   it('is allowed on a screen in review', async () => {
     await open();
 
-    expect(screen.getAllByText('In review').length).toBeGreaterThan(0);
+    // Detalle is In review (the sample data); the status is not drawn on this tab, the page is the screen of that name.
+    expect(await screen.findByRole('heading', { name: 'Detalle', level: 1 })).toBeInTheDocument();
     expect(await addButton()).toBeEnabled();
   });
 

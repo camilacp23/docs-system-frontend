@@ -11,7 +11,7 @@ import {
   Button,
   ICON_STROKE_WIDTH,
   SearchPicker,
-  SectionCard,
+  ToneCard,
   TextField,
   type SearchPickerOption,
 } from '../../components/ui';
@@ -53,17 +53,18 @@ export function NavigationRowsEditor({
   };
 
   return (
-    <SectionCard
+    <ToneCard
       title="Navigates to"
       description="Screens reached from this one"
       icon={<Navigation size={16} strokeWidth={ICON_STROKE_WIDTH} />}
-      tone="success"
+      tone="teal"
       count={rows.length}
       flush
       actions={
         <Button
           ref={addRef}
           size="sm"
+          aria-label="Add navigation"
           disabled={disabled || rows.length >= MAX_NAVIGATIONS}
           iconLeft={<Plus aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
           onClick={() => {
@@ -72,7 +73,7 @@ export function NavigationRowsEditor({
             focusRow(row.key);
           }}
         >
-          Add navigation
+          Add
         </Button>
       }
     >
@@ -164,6 +165,6 @@ export function NavigationRowsEditor({
           </div>
         )}
       </div>
-    </SectionCard>
+    </ToneCard>
   );
 }

@@ -1,7 +1,8 @@
 // CommentsTab: the Comments tab of the screen detail (S-35), for the three roles.
 // Props: screen (the detail: id, author, status and the `commentCount` the thread is read from), onCountChange(total) (the
 // thread's count changed: the tab badge and the side card follow it, without waiting for the detail to be read again).
-// A two-column page: the thread and its composer on the left, "About this discussion" on the right.
+// A two-column page: the thread and its composer on the left, "About this discussion" on the right. The side panel keeps
+// its own height (it does not stretch with a long thread) and stays in view while the page scrolls.
 //  - The thread is a labelled list (`ol`) in the order of the API, oldest first, read from the newest end (useComments,
 //    D-144); "Load earlier comments" puts older ones above. A failing read shows its error and a retry here, not on the
 //    whole page. An empty thread says so.
@@ -70,7 +71,7 @@ export function CommentsTab({ screen, onCountChange }: CommentsTabProps) {
   const ready = thread.status === 'ready';
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,20rem)] items-stretch gap-4">
+    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,20rem)] items-start gap-4">
       <section
         aria-label="Discussion"
         className="flex min-h-96 flex-col gap-4 rounded-card border border-border-subtle bg-surface p-5 shadow-card"

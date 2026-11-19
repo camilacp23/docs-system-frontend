@@ -88,7 +88,7 @@ describe('audit log, element type, element id and action', () => {
       .getAllByRole('option')
       .map((option) => option.textContent);
     expect(options).toEqual([
-      'Element type',
+      'All types',
       'Screen',
       'Variable',
       'Collection',
@@ -127,7 +127,7 @@ describe('audit log, element type, element id and action', () => {
     expect(search(view).get('application')).toBe('all');
     expect(
       within(screen.getByRole('combobox', { name: 'Application' })).getByRole('option', {
-        name: 'Application: SAR',
+        name: 'SAR (selected)',
       }),
     ).toBeInTheDocument();
   });

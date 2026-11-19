@@ -322,3 +322,9 @@ Contrast computed per WCAG 2.x (text ≥ 4.5:1, components and focus ≥ 3:1).
 
 The Figma border of inputs and secondary buttons (`#d3d9e2`, 1.4:1 on white) does not meet WCAG 1.4.11 (3:1 for component
 boundaries); `--color-border-control` replaces it on those controls only. To confirm in design or in SDD v1.4.
+
+### Sidebar refresh (requested by the user, pending design confirmation)
+
+Deeper blue sidebar: `--color-sidebar-from` `#0f1b66` → `--color-sidebar-to` `#080f3f` (glow `#2540b8`), also used by the sign-in brand panel.
+Active item: wash `--gradient-nav-active`, 3 px bar `--color-sidebar-active-indicator` `#5b95ff`, icon `--color-sidebar-active-icon` `#6ea2ff` (no filled tile).
+"Collapse" is a footer row (was a round button on the edge). The application list is a floating panel (`--color-sidebar-panel` `#131f73`) in a portal.

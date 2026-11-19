@@ -31,7 +31,7 @@ const sidebar = () => within(screen.getByRole('complementary', { name: 'Sidebar'
 
 async function selectInSidebar(user: User, name: string) {
   await user.click(await sidebar().findByRole('button', { name: 'Switch application' }));
-  const list = within(await sidebar().findByRole('list', { name: 'Applications' }));
+  const list = within(await screen.findByRole('list', { name: 'Applications' }));
   await user.click(await list.findByRole('button', { name: new RegExp(name) }));
 }
 

@@ -10,9 +10,11 @@
 // without Screens or Components (and are cleared), nothing past 500 screens, and Generate checks that the title is not
 // blank and that something is included. Whatever the API still refuses is shown in its field (a 400 with the position
 // of the item: the chip of that status or screen is marked; a 404 for a screen the same) and the rest in a banner.
+// Layout (the one of the New variable modal): wide, two columns of headed groups: Basics (title, format) and Options
+// (dependencies, publish) on the left, Content (types, statuses, screens) on the right.
 // After a failed submit a danger banner says "N fields need attention." with a link to each field (Table 58).
 // Generating is allowed in an archived application (D-47): only being offline disables it, with the reason.
-import { Clock, FileText, Sparkles } from 'lucide-react';
+import { Clock, FileText, Layers, ListTree, SlidersHorizontal, Sparkles } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 
@@ -39,6 +41,8 @@ import {
 import { useOfflineBlock } from '../../hooks/useOfflineBlock';
 import { invalidFields, type InvalidField } from '../collections/invalidFields';
 import type { ApiDocumentationStatus } from '../screens/screenTypes';
+
+import { ModalGroup } from '../shared/ModalGroup';
 
 import { createReport } from './createReport';
 import {
@@ -118,6 +122,8 @@ const FIELD_LABELS: Record<string, string> = {
   publish: PUBLISH_LABEL,
 };
 
+/** Each field of the Content group sits in its own soft box, so the right column reads as three blocks. */
+const CONTENT_BOX = 'rounded-card border border-border-subtle bg-search-bg/50 p-4';
 const FORMATS: readonly ReportFormat[] = ['PDF', 'XLSX'];
 const FORMAT_TILE_CLASS: Record<ReportFormat, string> = {
   PDF: 'bg-danger-bg text-danger',
@@ -313,14 +319,14 @@ export function GenerateReportModal({
       onClose={() => {
         if (!submitting) onClose();
       }}
-      size="form"
+      size="xl"
       initialFocusRef={titleRef}
       icon={<FileText size={16} strokeWidth={ICON_STROKE_WIDTH} />}
       title={DIALOG_TITLE}
       description={dialogDescription(applicationName)}
       footer={
         <div className="flex w-full items-center justify-between gap-4">
-          <div className="flex min-w-0 items-start gap-2.5 text-ink-700">
+          <div className="flex min-w-0 flex-1 items-start gap-2.5 text-ink-700">
             <Clock
               aria-hidden="true"
               size={18}
@@ -328,7 +334,11 @@ export function GenerateReportModal({
               className="mt-0.5 shrink-0 text-ink-500"
             />
             <div className="min-w-0">
-              <p id={summaryId} className="text-label font-semibold [overflow-wrap:anywhere]">
+              <p
+                id={summaryId}
+                title={summaryText(form)}
+                className="truncate text-label font-semibold"
+              >
                 {summaryText(form)}
               </p>
               {reason ? (
@@ -388,172 +398,194 @@ export function GenerateReportModal({
         )}
         {banner !== null && <Banner tone="danger">{banner}</Banner>}
 
-        <FormField
-          label={TITLE_LABEL}
-          required
-          error={texts.title}
-          help={
-            <span className="flex justify-end" aria-hidden="true">
-              {form.title.length}/{TITLE_MAX}
-            </span>
-          }
-        >
-          {(control) => (
-            <TextField
-              {...control}
-              ref={titleRef}
-              autoComplete="off"
-              maxLength={TITLE_MAX}
-              disabled={submitting}
-              value={form.title}
-              onChange={(event) => {
-                change({ title: event.target.value }, ['title']);
-              }}
-            />
-          )}
-        </FormField>
-
-        <GroupField label={FORMAT_FIELD_LABEL} required role="radiogroup">
-          {() => (
-            <div className="grid grid-cols-2 gap-4">
-              {FORMATS.map((format) => (
-                <ChoiceCard
-                  key={format}
-                  name="report-format"
-                  value={format}
-                  checked={form.format === format}
-                  disabled={submitting}
-                  onChange={(next) => {
-                    change({ format: next });
-                  }}
-                  title={FORMAT_LABEL[format]}
-                  description={FORMAT_DESCRIPTION[format]}
-                  badge={
-                    <span
-                      className={cx(
-                        'flex size-10 items-center justify-center rounded-control font-mono text-micro font-bold',
-                        FORMAT_TILE_CLASS[format],
-                      )}
-                    >
-                      {FORMAT_TILE[format]}
-                    </span>
-                  }
-                />
-              ))}
-            </div>
-          )}
-        </GroupField>
-
-        <div className="grid grid-cols-2 items-start gap-4">
-          <GroupField label={INCLUDE_LABEL} required error={texts.include} invalid={typesInvalid}>
-            {(describedBy) => (
-              <>
-                <div className="flex flex-wrap gap-2">
-                  {ELEMENT_OPTIONS.map((option) => (
-                    <ToggleChip
-                      key={option.value}
-                      pressed={form.elementTypes.includes(option.value)}
-                      invalid={typesInvalid}
-                      disabled={submitting}
-                      aria-describedby={describedBy}
-                      onChange={(on) => {
-                        setForm((current) => toggleElement(current, option.value, on));
-                        setTexts((current) => ({ ...current, include: undefined }));
-                      }}
-                    >
-                      {option.label}
-                    </ToggleChip>
-                  ))}
-                </div>
-                <Switch
-                  checked={form.includeStatusSummary}
-                  label={STATUS_SUMMARY_LABEL}
-                  description={STATUS_SUMMARY_HELP}
-                  disabled={submitting}
-                  onChange={(next) => {
-                    change({ includeStatusSummary: next }, ['include']);
-                  }}
-                />
-              </>
-            )}
-          </GroupField>
-
-          <GroupField
-            label={STATUS_FIELD_LABEL}
-            help={applies ? STATUS_HELP : STATUS_DISABLED_HELP}
-            error={texts.statuses}
-            invalid={texts.statuses !== undefined}
-          >
-            {(describedBy) => (
-              <div className="flex flex-wrap gap-2">
-                {STATUS_OPTIONS.map((option) => (
-                  <ToggleChip
-                    key={option.value}
-                    pressed={form.documentationStatus.includes(option.value)}
-                    invalid={marked.statuses.has(option.value)}
-                    disabled={!applies || submitting}
-                    aria-describedby={describedBy}
-                    onChange={(on) => {
-                      setForm((current) => toggleStatus(current, option.value, on));
-                      setTexts((current) => ({ ...current, statuses: undefined }));
-                      setMarked((current) => ({ ...current, statuses: new Set() }));
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-x-8">
+          <div className="flex flex-col gap-5">
+            <ModalGroup
+              title="Basics"
+              icon={<ListTree size={13} strokeWidth={ICON_STROKE_WIDTH} />}
+            >
+              <FormField
+                label={TITLE_LABEL}
+                required
+                error={texts.title}
+                help={
+                  <span className="flex justify-end" aria-hidden="true">
+                    {form.title.length}/{TITLE_MAX}
+                  </span>
+                }
+              >
+                {(control) => (
+                  <TextField
+                    {...control}
+                    ref={titleRef}
+                    autoComplete="off"
+                    maxLength={TITLE_MAX}
+                    disabled={submitting}
+                    value={form.title}
+                    onChange={(event) => {
+                      change({ title: event.target.value }, ['title']);
                     }}
-                  >
-                    {option.label}
-                  </ToggleChip>
-                ))}
+                  />
+                )}
+              </FormField>
+
+              <GroupField label={FORMAT_FIELD_LABEL} required role="radiogroup">
+                {() => (
+                  <div className="grid grid-cols-2 gap-4">
+                    {FORMATS.map((format) => (
+                      <ChoiceCard
+                        key={format}
+                        name="report-format"
+                        value={format}
+                        checked={form.format === format}
+                        disabled={submitting}
+                        onChange={(next) => {
+                          change({ format: next });
+                        }}
+                        title={FORMAT_LABEL[format]}
+                        description={FORMAT_DESCRIPTION[format]}
+                        badge={
+                          <span
+                            className={cx(
+                              'flex size-10 items-center justify-center rounded-control font-mono text-micro font-bold',
+                              FORMAT_TILE_CLASS[format],
+                            )}
+                          >
+                            {FORMAT_TILE[format]}
+                          </span>
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
+              </GroupField>
+            </ModalGroup>
+            <ModalGroup
+              title="Options"
+              icon={<SlidersHorizontal size={13} strokeWidth={ICON_STROKE_WIDTH} />}
+            >
+              <div className="flex flex-col gap-3">
+                <div className="rounded-control border border-border-control bg-surface px-3.5 py-3">
+                  <Switch
+                    reverse
+                    checked={form.includeDependencies}
+                    label={DEPENDENCIES_LABEL}
+                    description={DEPENDENCIES_HELP}
+                    disabled={submitting}
+                    onChange={(next) => {
+                      change({ includeDependencies: next });
+                    }}
+                  />
+                </div>
+                <div className="rounded-control border border-border-control bg-surface px-3.5 py-3">
+                  <Switch
+                    reverse
+                    checked={form.publish}
+                    label={PUBLISH_LABEL}
+                    description={PUBLISH_HELP}
+                    disabled={submitting}
+                    onChange={(next) => {
+                      change({ publish: next });
+                    }}
+                  />
+                </div>
               </div>
-            )}
-          </GroupField>
-        </div>
-
-        <GroupField
-          label={SCREENS_LABEL}
-          help={applies ? SCREENS_HELP : STATUS_DISABLED_HELP}
-          error={texts.screens}
-          invalid={texts.screens !== undefined}
-        >
-          {(describedBy, labelId) => (
-            <ScreenPicker
-              applicationId={applicationId}
-              labelledBy={labelId}
-              value={form.screens}
-              disabled={!applies || submitting}
-              invalid={texts.screens !== undefined}
-              errorPositions={marked.screens}
-              describedBy={describedBy}
-              onChange={(screens) => {
-                change({ screens }, ['screens']);
-                setMarked((current) => ({ ...current, screens: new Set() }));
-              }}
-            />
-          )}
-        </GroupField>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="rounded-control border border-border-control bg-surface px-3.5 py-3">
-            <Switch
-              reverse
-              checked={form.includeDependencies}
-              label={DEPENDENCIES_LABEL}
-              description={DEPENDENCIES_HELP}
-              disabled={submitting}
-              onChange={(next) => {
-                change({ includeDependencies: next });
-              }}
-            />
+            </ModalGroup>
           </div>
-          <div className="rounded-control border border-border-control bg-surface px-3.5 py-3">
-            <Switch
-              reverse
-              checked={form.publish}
-              label={PUBLISH_LABEL}
-              description={PUBLISH_HELP}
-              disabled={submitting}
-              onChange={(next) => {
-                change({ publish: next });
-              }}
-            />
+          <div className="flex flex-col gap-5 border-t border-divider pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-8">
+            <ModalGroup title="Content" icon={<Layers size={13} strokeWidth={ICON_STROKE_WIDTH} />}>
+              <GroupField
+                label={INCLUDE_LABEL}
+                required
+                error={texts.include}
+                invalid={typesInvalid}
+                className={CONTENT_BOX}
+              >
+                {(describedBy) => (
+                  <>
+                    <div className="flex flex-wrap gap-2">
+                      {ELEMENT_OPTIONS.map((option) => (
+                        <ToggleChip
+                          key={option.value}
+                          pressed={form.elementTypes.includes(option.value)}
+                          invalid={typesInvalid}
+                          disabled={submitting}
+                          aria-describedby={describedBy}
+                          onChange={(on) => {
+                            setForm((current) => toggleElement(current, option.value, on));
+                            setTexts((current) => ({ ...current, include: undefined }));
+                          }}
+                        >
+                          {option.label}
+                        </ToggleChip>
+                      ))}
+                    </div>
+                    <Switch
+                      checked={form.includeStatusSummary}
+                      label={STATUS_SUMMARY_LABEL}
+                      description={STATUS_SUMMARY_HELP}
+                      disabled={submitting}
+                      onChange={(next) => {
+                        change({ includeStatusSummary: next }, ['include']);
+                      }}
+                    />
+                  </>
+                )}
+              </GroupField>
+
+              <GroupField
+                label={STATUS_FIELD_LABEL}
+                help={applies ? STATUS_HELP : STATUS_DISABLED_HELP}
+                error={texts.statuses}
+                invalid={texts.statuses !== undefined}
+                className={CONTENT_BOX}
+              >
+                {(describedBy) => (
+                  <div className="flex flex-wrap gap-2">
+                    {STATUS_OPTIONS.map((option) => (
+                      <ToggleChip
+                        key={option.value}
+                        pressed={form.documentationStatus.includes(option.value)}
+                        invalid={marked.statuses.has(option.value)}
+                        disabled={!applies || submitting}
+                        aria-describedby={describedBy}
+                        onChange={(on) => {
+                          setForm((current) => toggleStatus(current, option.value, on));
+                          setTexts((current) => ({ ...current, statuses: undefined }));
+                          setMarked((current) => ({ ...current, statuses: new Set() }));
+                        }}
+                      >
+                        {option.label}
+                      </ToggleChip>
+                    ))}
+                  </div>
+                )}
+              </GroupField>
+
+              <GroupField
+                label={SCREENS_LABEL}
+                help={applies ? SCREENS_HELP : STATUS_DISABLED_HELP}
+                error={texts.screens}
+                invalid={texts.screens !== undefined}
+                className={CONTENT_BOX}
+              >
+                {(describedBy, labelId) => (
+                  <ScreenPicker
+                    applicationId={applicationId}
+                    labelledBy={labelId}
+                    value={form.screens}
+                    disabled={!applies || submitting}
+                    invalid={texts.screens !== undefined}
+                    errorPositions={marked.screens}
+                    describedBy={describedBy}
+                    onChange={(screens) => {
+                      change({ screens }, ['screens']);
+                      setMarked((current) => ({ ...current, screens: new Set() }));
+                    }}
+                  />
+                )}
+              </GroupField>
+            </ModalGroup>
           </div>
         </div>
       </form>

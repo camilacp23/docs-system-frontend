@@ -361,7 +361,7 @@ describe('Future to do: degraded state (S-23b)', () => {
     expect(screen.getByText('Stale')).toBeVisible();
     // The tree and the rest of the screen are still there: never a global alarm.
     expect(await table()).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Withdraw from review' })).toBeInTheDocument();
     expect(screen.getAllByRole('alert')).toHaveLength(1);
     expect(screen.getByRole('navigation', { name: 'Main' })).toBeVisible();
   });

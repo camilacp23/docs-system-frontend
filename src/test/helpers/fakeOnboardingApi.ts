@@ -1,5 +1,8 @@
 // fakeOnboardingApi: in-memory fake of GET /onboarding/summary (and the screens read of the shell) behind the API client
 // (no fetch).
+// It also answers the three calls of the saved progress (contract 0.4.0): GET /onboarding/progress, PUT /onboarding/progress/steps/{step}
+// (idempotent, answers the whole progress) and DELETE /onboarding/progress (204), per application: `state.progress` holds the completed
+// steps by application id (init `progress`, default none).
 // makeOnboardingApi(apps, init) -> { state, client, calls, callsTo, failNext, hold, screens }
 //   init: summaries (what each application answers, by id; default: application 1 with `makeSummary()`), plus the screens
 //   fake options. It answers like the server (SDD 7.2.7, D-124): 404 NOT_FOUND for an application that does not exist, a
@@ -129,6 +132,8 @@ export function makeEmptySummary(overrides: Partial<SummaryData> = {}): SummaryD
 export interface OnboardingApiInit extends ScreensApiInit {
   /** What each application answers, by id. Application 1 answers `makeSummary()` when it is not given. */
   summaries?: Record<number, SummaryData>;
+  /** The steps each application has completed for the signed-in user, by application id (default none). */
+  progress?: Record<number, number[]>;
 }
 
 function notFound(id: unknown): ApiError {
@@ -140,8 +145,12 @@ export function makeOnboardingApi(
   init: OnboardingApiInit = {},
 ) {
   const screens = makeScreensApi(apps, init);
-  const state = { summaries: init.summaries ?? { 1: makeSummary() } };
+  const state = {
+    summaries: init.summaries ?? { 1: makeSummary() },
+    progress: { ...(init.progress ?? {}) } as Record<number, number[]>,
+  };
   const calls: RecordedApiCall[] = [];
+  const progressCalls: Array<RecordedApiCall & { operation: string }> = [];
   const failures = new Map<string, ApiError[]>();
   const holds: Array<{ predicate: (call: RecordedApiCall) => boolean; gate: Promise<void> }> = [];
 
@@ -177,14 +186,81 @@ export function makeOnboardingApi(
     };
   }
 
+  function progressBody(applicationId: number) {
+    const data = {
+      applicationId,
+      totalSteps: 5,
+      completedSteps: [...new Set(state.progress[applicationId] ?? [])].sort((a, b) => a - b),
+    };
+    return {
+      body: { data },
+      status: 200,
+      etag: `W/"progress-${String(applicationId)}-${data.completedSteps.join('')}"`,
+      location: null,
+    };
+  }
+
+  async function progressCall(
+    method: 'GET' | 'PUT' | 'DELETE',
+    path: string,
+    operation: string,
+    options: RecordedApiCall['options'],
+  ) {
+    const call = { method, path, options, operation };
+    progressCalls.push(call);
+    for (const held of holds) if (held.predicate(call)) await held.gate;
+    const failure = failures.get(operation)?.shift();
+    if (failure) throw failure;
+    const applicationId = options.query?.applicationId;
+    if (
+      !apps.state.applications.some((a) => a.id === applicationId) ||
+      typeof applicationId !== 'number'
+    ) {
+      throw notFound(applicationId);
+    }
+    if (method === 'GET') return progressBody(applicationId);
+    if (method === 'PUT') {
+      const step = Number((options.path as { step?: unknown } | undefined)?.step);
+      if (!Number.isInteger(step) || step < 1 || step > 5) {
+        throw new ApiError({ status: 400, code: 'VALIDATION_ERROR' });
+      }
+      state.progress[applicationId] = [
+        ...new Set([...(state.progress[applicationId] ?? []), step]),
+      ];
+      return progressBody(applicationId);
+    }
+    state.progress[applicationId] = [];
+    return { body: undefined, status: 204, etag: null, location: null };
+  }
+
   const get = vi.fn((path: string, options: RecordedApiCall['options'] = {}) => {
     if (path === '/onboarding/summary') return getSummary(options);
+    if (path === '/onboarding/progress') {
+      return progressCall('GET', path, 'GET /onboarding/progress', options);
+    }
     return (screens.client.get as (p: string, o?: unknown) => Promise<unknown>)(path, options);
   });
-  const client = { ...screens.client, get } as unknown as ApiClient;
+  const put = vi.fn((path: string, options: RecordedApiCall['options'] = {}) => {
+    if (path === '/onboarding/progress/steps/{step}') {
+      return progressCall('PUT', path, 'PUT /onboarding/progress/steps/{step}', options);
+    }
+    return (screens.client.put as (p: string, o?: unknown) => Promise<unknown>)(path, options);
+  });
+  const del = vi.fn((path: string, options: RecordedApiCall['options'] = {}) => {
+    if (path === '/onboarding/progress') {
+      return progressCall('DELETE', path, 'DELETE /onboarding/progress', options);
+    }
+    return (screens.client.delete as (p: string, o?: unknown) => Promise<unknown>)(path, options);
+  });
+  const client = { ...screens.client, get, put, delete: del } as unknown as ApiClient;
 
-  const callsTo = (operation: string) =>
-    operation === 'GET /onboarding/summary' ? calls : screens.callsTo(operation);
+  const callsTo = (operation: string) => {
+    if (operation === 'GET /onboarding/summary') return calls;
+    if (operation.includes('/onboarding/progress')) {
+      return progressCalls.filter((call) => call.operation === operation);
+    }
+    return screens.callsTo(operation);
+  };
 
   return { state, client, calls, callsTo, failNext, hold, screens };
 }

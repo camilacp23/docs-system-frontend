@@ -87,7 +87,7 @@ export function ReportCard({
   const switchOff = status !== 'READY' || writeBlockReason !== null;
 
   return (
-    <li className="flex flex-col rounded-card border border-border-subtle bg-surface shadow-card">
+    <li className="flex flex-col overflow-hidden rounded-modal border border-report-border bg-surface shadow-card transition-shadow duration-200 hover:shadow-button-hover motion-reduce:transition-none">
       <div className="flex gap-3 p-4">
         <div
           aria-hidden="true"
@@ -118,7 +118,7 @@ export function ReportCard({
           {status === 'PENDING' && !timedOut && (
             <div className="mt-1 flex flex-col gap-1.5">
               <div aria-hidden="true" className="h-1 overflow-hidden rounded-pill bg-disabled-bg">
-                <div className="h-full w-1/3 rounded-pill bg-accent" />
+                <div className="h-full w-1/3 rounded-pill bg-report" />
               </div>
               <p className="text-small text-ink-500">{BUILDING_TEXT}</p>
             </div>
@@ -140,7 +140,7 @@ export function ReportCard({
         </div>
       </div>
 
-      <div className="mt-auto flex items-center justify-between gap-3 border-t border-divider px-4 py-3">
+      <div className="mt-auto flex items-center justify-between gap-3 border-t border-report-border/60 bg-report-soft/40 px-4 py-3">
         {canWrite ? (
           <Switch
             checked={report.isPublished}

@@ -27,13 +27,13 @@ afterEach(() => {
 });
 
 /**
- * The pages a result leads to are not served by this fake, so the screen page fails to draw (a screen without a status).
+ * The pages a result leads to are not served by this fake, so the screen page fails to draw (a screen without the data of its template).
  * Only that error is accepted; any other console.error fails the test.
  */
 function quietDestination() {
   expectConsoleError(
-    /Cannot read properties of undefined \(reading 'toLowerCase'\)/,
-    /The above error occurred in the <ScreenDetailPage> component/,
+    /Cannot read properties of undefined \(reading '(toLowerCase|filter|onStart)'\)/,
+    /The above error occurred in the <(ScreenDetailPage|ScreenTemplateTab)> component/,
   );
 }
 
@@ -95,7 +95,7 @@ async function keyDown(init: KeyboardEventInit) {
 }
 
 describe('opening', () => {
-  it('is a combobox named "Quick search" with the frame placeholder, the application chip and the shortcut', async () => {
+  it('is a combobox named "Quick search" with the frame placeholder, no application chip and the shortcut', async () => {
     await open();
     expect(field()).toHaveAttribute(
       'placeholder',
@@ -103,7 +103,7 @@ describe('opening', () => {
     );
     expect(field()).toHaveAttribute('aria-expanded', 'false');
     expect(field()).toHaveAttribute('aria-autocomplete', 'list');
-    expect(screen.getByText('in SAR')).toBeInTheDocument();
+    expect(screen.queryByText('in SAR')).not.toBeInTheDocument();
     expect(screen.getByText('Ctrl K')).toBeInTheDocument();
   });
 
@@ -128,7 +128,7 @@ describe('opening', () => {
 
   it('Cmd+K does the same, from a field of the page', async () => {
     const view = await open();
-    await view.user.click(screen.getByRole('searchbox', { name: /search/i }));
+    await view.user.click(screen.getByRole('combobox', { name: 'Data type' }));
     await keyDown({ key: 'k', metaKey: true });
     expect(field()).toHaveFocus();
     expect(field()).toHaveAttribute('aria-expanded', 'true');

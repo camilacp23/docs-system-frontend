@@ -33,6 +33,47 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe('New variable modal: where it is created (contract 0.5.0)', () => {
+  it('keeps Used in off until an origin screen is chosen, then sends it with the POST', async () => {
+    const user = setupUser();
+    const { api } = await renderVariables();
+    const dialog = await openModal(user);
+    await user.click(dialog.getByRole('checkbox', { name: 'DEV' }));
+    const usedIn = dialog.getByLabelText('Used in');
+    expect(usedIn).toBeDisabled();
+    expect(dialog.getByText('Choose the origin screen first, or leave this empty.')).toBeVisible();
+
+    await fill(user, dialog.getByLabelText(/^Name/), 'locNueva');
+    await user.selectOptions(dialog.getByLabelText('Origin screen'), 'Inicio');
+    expect(usedIn).toBeEnabled();
+    await fill(user, usedIn, 'btnGuardar.OnSelect');
+    await user.click(dialog.getByRole('button', { name: 'Create variable' }));
+
+    await waitFor(() => {
+      expect(api.callsTo('POST /variables')).toHaveLength(1);
+    });
+    expect(api.callsTo('POST /variables')[0]?.options.body).toMatchObject({
+      originScreenId: 11,
+      originUsedIn: 'btnGuardar.OnSelect',
+    });
+  });
+
+  it('sends null when it is left empty', async () => {
+    const user = setupUser();
+    const { api } = await renderVariables();
+    const dialog = await openModal(user);
+    await user.click(dialog.getByRole('checkbox', { name: 'DEV' }));
+    await fill(user, dialog.getByLabelText(/^Name/), 'locSola');
+    await user.selectOptions(dialog.getByLabelText('Origin screen'), 'Inicio');
+    await user.click(dialog.getByRole('button', { name: 'Create variable' }));
+
+    await waitFor(() => {
+      expect(api.callsTo('POST /variables')).toHaveLength(1);
+    });
+    expect(api.callsTo('POST /variables')[0]?.options.body).toMatchObject({ originUsedIn: null });
+  });
+});
+
 describe('New variable modal', () => {
   it('opens over the list with the name focused and closes with Cancel returning the focus', async () => {
     const user = setupUser();
@@ -158,6 +199,7 @@ describe('New variable modal', () => {
       scope: 'GLOBAL',
       description: 'Filter date',
       originScreenId: 11,
+      originUsedIn: null,
       environments: [
         { environment: 'DEV', notes: null },
         { environment: 'PROD', notes: 'Loaded from the production list.' },

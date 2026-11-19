@@ -170,7 +170,7 @@ describe('Register application modal', () => {
 
     const sidebar = within(screen.getByRole('complementary', { name: 'Sidebar' }));
     await user.click(await sidebar.findByRole('button', { name: 'Switch application' }));
-    const list = within(await sidebar.findByRole('list', { name: 'Applications' }));
+    const list = within(await screen.findByRole('list', { name: 'Applications' }));
     expect(await list.findByRole('button', { name: /Application D/ })).toBeInTheDocument();
     // The shell read the list again; nothing reloaded the page.
     expect(api.callsTo('GET /applications').length).toBeGreaterThan(2);

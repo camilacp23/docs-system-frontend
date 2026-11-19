@@ -1,12 +1,12 @@
 openapi: 3.1.0
 info:
   title: Technical Documentation System API
-  version: 0.3.8
+  version: 0.5.0
   summary: REST API contracts — SDD Interface Viewpoint (Bitácora 3, Activities 5 and 6)
   description: |
     Contracts of the eleven modules (41 operations of SRS Table 25), the
-    Applications resource (NFR-16), the saved-reports operations (FR-22), and
-    the Jira Cloud webhook.
+    Applications resource (NFR-16), the saved-reports operations (FR-22), the
+    onboarding progress of the user (FR-25), and the Jira Cloud webhook.
 
     Conventions (SDD Section 7.1):
     - Base path `/api/v1`, HTTPS only (NFR-04), JSON UTF-8, fields in camelCase.
@@ -177,6 +177,20 @@ info:
     `applicationId` in the audit log; the 400 of the comments list. `ReportScope.elementTypes`
     no longer uses `uniqueItems`, so a repeated value is reported with its position. No
     operation was added or removed (50); no `x-roles` or `x-rule` changed.
+
+    Changes in 0.4.0 (onboarding progress, D-133): three operations are added, `GET /onboarding/progress`,
+    `PUT /onboarding/progress/steps/{step}` and `DELETE /onboarding/progress`, so the onboarding remembers the
+    steps (1 to 5) that the user completed in each application. The progress is personal: it always belongs to
+    the user of the token, every role may use it, and it is allowed on an archived application. No existing
+    operation, `x-roles` or `x-rule` changed (53 operations).
+
+    Changes in 0.5.0 (where a variable is created inside its origin screen, D-134): `VariableWrite` accepts the optional
+    `originUsedIn` (the event or property of the origin screen where the variable is created, for example `OnVisible`;
+    same format as `UsedIn`, `null` or absent = not described) and `Variable` returns it. A screen returns it in the
+    `variableLinks[]` item with `isOrigin = true` (`null` in the others). The origin row itself does not change: it keeps
+    `usedIn = origin` and stays read-only in `PUT /screens/{id}`, so the variable is still understood as created there;
+    `originUsedIn` is edited with `PUT /variables/{id}`. Without `originScreenId` it is a 400 (`originUsedIn`, rule
+    `requires`). The change is additive: no operation, `x-roles` or `x-rule` changed (53 operations).
 
     Error catalog (`code` -> HTTP status: `message`):
 
@@ -763,6 +777,9 @@ paths:
         name must be free where DUPLICATE_NAME says (global variable: in the
         application; context variable: in its origin screen, or in the application
         when it has none); a repeated environment is a 400 with its position.
+        `originUsedIn` (optional) describes where the variable is created inside its origin
+        screen; without `originScreenId` it is a 400 with `details.fields[].field` =
+        `originUsedIn`. It does not change the `origin` link of the screen.
       requestBody:
         required: true
         content:
@@ -841,6 +858,9 @@ paths:
         `POST /variables`), SCOPE_CONFLICT, CONTEXT_SCREEN_MISMATCH. The name must be
         free where DUPLICATE_NAME says (409). The environments are replaced by
         difference, and a change in them also moves the `ETag`.
+        `originUsedIn` is replaced like the other fields (omitted = null) and also moves
+        the `ETag`; without `originScreenId` it is a 400 with `details.fields[].field` =
+        `originUsedIn`, and when the origin screen is removed it is cleared by the database.
       parameters:
         - $ref: '#/components/parameters/IfMatch'
       requestBody:
@@ -1327,7 +1347,8 @@ paths:
         Links with `usedIn = origin` are maintained by the variables module: they come
         back with `isOrigin = true`, are never read as editable, and are never updated
         or deleted here, even when they are missing from the body. `usedIn = origin` in
-        the body is a 400.
+        the body is a 400. The origin row also carries `originUsedIn` (where the variable is
+        created in this screen); it is read-only here and is edited with `PUT /variables/{id}`.
         `If-Match` is always checked when sent, also when the body changes nothing.
         Only its `updatedAt` part is compared, inside the transaction: a change of
         `pendingSubtasks` or `commentCount` between the read and the save is not a 412.
@@ -2640,6 +2661,89 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /onboarding/progress:
+    get:
+      tags: [Onboarding]
+      operationId: getOnboardingProgress
+      x-capability: 'Onboarding (FR-25, no row in Table 26)'
+      x-roles: [ADMINISTRATOR, DEVELOPER, READER]
+      summary: Steps of the onboarding that the user completed in an application (FR-25)
+      description: |
+        Roles: all. The progress is personal: it is the one of the user of the token, and a user
+        never sees the progress of another. An `applicationId` that does not exist (or is outside
+        the `integer` range) is a 404. An archived application can be read.
+
+        `completedSteps` lists the steps (1 to `totalSteps`) that the user completed, ascending and
+        without repeats; it is empty when the user has not completed any. `totalSteps` is always 5.
+        The `ETag` is a weak hash of the body, so the 304 works as in the summary.
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200':
+          description: Progress of the user
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OnboardingProgressEnvelope' }
+              example: { data: { applicationId: 1, totalSteps: 5, completedSteps: [1, 2] } }
+        '304': { $ref: '#/components/responses/NotModified' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Onboarding]
+      operationId: resetOnboardingProgress
+      x-capability: 'Onboarding (FR-25, no row in Table 26)'
+      x-roles: [ADMINISTRATOR, DEVELOPER, READER]
+      summary: Forget the steps that the user completed in an application (FR-25)
+      description: |
+        Roles: all. Deletes every completed step of the user of the token in the application, so the
+        onboarding starts again. It never touches the progress of another user. Idempotent: it answers
+        204 also when the user had completed nothing. An `applicationId` that does not exist (or is
+        outside the `integer` range) is a 404. It is allowed on an archived application: the progress
+        is not documentation (D-47 does not apply).
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      responses:
+        '204': { description: Progress deleted, headers: { X-Request-Id: { $ref: '#/components/headers/XRequestId' } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /onboarding/progress/steps/{step}:
+    put:
+      tags: [Onboarding]
+      operationId: completeOnboardingStep
+      x-capability: 'Onboarding (FR-25, no row in Table 26)'
+      x-roles: [ADMINISTRATOR, DEVELOPER, READER]
+      summary: Mark a step of the onboarding as completed (FR-25)
+      description: |
+        Roles: all. Marks `step` (1 to 5) as completed for the user of the token in the application and
+        answers 200 with the whole progress. Idempotent: a step that was already completed stays as it
+        is and the answer is the same 200, also when two requests arrive at the same time. There is no
+        body. A `step` outside 1 to 5 or an `applicationId` that is missing is a 400; an `applicationId`
+        that does not exist (or is outside the `integer` range) is a 404. It is allowed on an archived
+        application: the progress is not documentation (D-47 does not apply).
+      parameters:
+        - $ref: '#/components/parameters/OnboardingStep'
+        - $ref: '#/components/parameters/ApplicationId'
+      responses:
+        '200':
+          description: Progress of the user after the change
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OnboardingProgressEnvelope' }
+              example: { data: { applicationId: 1, totalSteps: 5, completedSteps: [1, 2, 3] } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   # ---------------------------------------------------------- Jira webhook
   /integrations/jira/webhook:
     post:
@@ -2766,6 +2870,12 @@ components:
       required: true
       description: Application whose elements are listed (NFR-16).
       schema: { type: integer, minimum: 1 }
+    OnboardingStep:
+      name: step
+      in: path
+      required: true
+      description: Step of the onboarding (FR-25), from 1 to 5.
+      schema: { type: integer, minimum: 1, maximum: 5 }
     Page:
       name: page
       in: query
@@ -3439,6 +3549,11 @@ components:
           type: [integer, 'null']
           minimum: 1
           description: Screen where the variable is created; null = without full traceability. A CONTEXT variable cannot originate in the App (OnStart) screen.
+        originUsedIn:
+          description: Event or property of the origin screen where the variable is created (e.g. OnVisible). Optional; requires `originScreenId` (400 otherwise). The `origin` link of the screen is not affected.
+          oneOf:
+            - $ref: '#/components/schemas/UsedIn'
+            - type: 'null'
         environments:
           type: array
           minItems: 1
@@ -3475,9 +3590,10 @@ components:
       allOf:
         - $ref: '#/components/schemas/VariableSummary'
         - type: object
-          required: [description, environmentDetails]
+          required: [description, originUsedIn, environmentDetails]
           properties:
             description: { type: [string, 'null'] }
+            originUsedIn: { type: [string, 'null'], description: 'Where the variable is created inside its origin screen (D-134); null when not described or without origin screen' }
             environmentDetails: { type: array, items: { $ref: '#/components/schemas/EnvironmentPresence' } }
     VariableEnvelope:
       type: object
@@ -3803,13 +3919,14 @@ components:
               type: array
               items:
                 type: object
-                required: [id, variable, accessMode, usedIn, isOrigin]
+                required: [id, variable, accessMode, usedIn, isOrigin, originUsedIn]
                 properties:
                   id: { type: integer }
                   variable: { $ref: '#/components/schemas/Ref' }
                   accessMode: { $ref: '#/components/schemas/AccessMode' }
                   usedIn: { type: string }
                   isOrigin: { type: boolean, description: 'Row maintained by the variables module (read-only here): a write never updates or deletes it and does not reconcile it' }
+                  originUsedIn: { type: [string, 'null'], description: 'Only on the origin row (isOrigin = true): where the variable is created in this screen, edited with PUT /variables/{id}; null in the other rows or when not described (D-134)' }
             collectionLinks:
               type: array
               items:
@@ -4537,3 +4654,22 @@ components:
                   component: { $ref: '#/components/schemas/Ref' }
                   screen: { $ref: '#/components/schemas/Ref' }
                   uses: { type: integer, minimum: 1 }
+    OnboardingProgressEnvelope:
+      type: object
+      required: [data]
+      additionalProperties: false
+      properties:
+        data:
+          type: object
+          description: The steps of the onboarding that the user of the token completed in the application (D-133).
+          required: [applicationId, totalSteps, completedSteps]
+          additionalProperties: false
+          properties:
+            applicationId: { type: integer, minimum: 1 }
+            totalSteps: { type: integer, const: 5, description: Number of steps of the onboarding }
+            completedSteps:
+              type: array
+              description: Completed steps, ascending and without repeats; empty when none was completed.
+              maxItems: 5
+              uniqueItems: true
+              items: { type: integer, minimum: 1, maximum: 5 }

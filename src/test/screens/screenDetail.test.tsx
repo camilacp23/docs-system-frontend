@@ -23,16 +23,10 @@ describe('screen detail: header', () => {
     const heading = screen.getByRole('heading', { name: 'Detalle', level: 1 });
     expect(heading).toBeVisible();
     expect(screen.getAllByText('In review').length).toBeGreaterThan(0);
-    expect(screen.getByText(/Author Sample Developer A · Updated 2026-10-04 16:02/)).toBeVisible();
+    const facts = within(screen.getByRole('region', { name: 'Template progress' }));
+    expect(facts.getByText('Sample Developer A')).toBeVisible();
+    expect(facts.getByText('2026-10-04 16:02')).toBeVisible();
     expect(screen.queryByText('Reserved')).not.toBeInTheDocument();
-  });
-
-  it('marks App (OnStart) as Reserved', async () => {
-    await renderScreens({ path: '/screens/10' });
-
-    expect(await screen.findByRole('heading', { name: 'App (OnStart)', level: 1 })).toBeVisible();
-    expect(screen.getByText('Reserved')).toBeInTheDocument();
-    expect(screen.getByText(/Author Camila Castillo/)).toBeInTheDocument();
   });
 
   it('opens the Miro diagram in another tab without leaking the opener', async () => {
@@ -171,9 +165,7 @@ describe('screen detail: Template tab', () => {
       'aria-valuenow',
       '5',
     );
-    expect(
-      screen.getByText('Known issues and Risks are needed to submit for review.'),
-    ).toBeInTheDocument();
+    expect(screen.queryByText(/needed to submit for review/)).not.toBeInTheDocument();
   });
 
   it('shows the text of each field, OnStart in monospace, and "Not documented yet." where there is none', async () => {
@@ -342,7 +334,9 @@ describe('screen detail: Variables & collections tab', () => {
       '/variables/4',
     );
     expect(
-      screen.getByText("Origin rows come from the variable and can't be edited here."),
+      screen.getByText(
+        'The Origin row marks where a variable is created. Its Used in is saved on the variable.',
+      ),
     ).toBeInTheDocument();
     // Read only: no control in any row.
     expect(within(row).queryByRole('button')).not.toBeInTheDocument();
@@ -366,7 +360,7 @@ describe('screen detail: Variables & collections tab', () => {
 
     expect(await screen.findByText('No variables linked yet.')).toBeInTheDocument();
     expect(screen.getByText('No collections linked yet.')).toBeInTheDocument();
-    expect(screen.queryByText(/Origin rows come from the variable/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/The Origin row marks where/)).not.toBeInTheDocument();
   });
 
   it('shows App (OnStart) origin rows like those of any other screen', async () => {

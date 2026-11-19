@@ -3,7 +3,7 @@
 // Drawing: the names and the values are an HTML list (every row has a fixed height); the bars are ONE SVG laid over the
 // middle column, role="img" with the figures of every row in its aria-label, so the list is the text alternative and
 // each name is a link to the To-do tab of its screen (the accessible name adds the count: "Detalle, 3 pending to-dos").
-// Length is relative to the longest bar. The bar goes from `primary` to `accent` over a track (frame S-31): both read
+// Length is relative to the longest bar. The bar goes from `jira` to `jira-light` (purple: it is Jira data) over a track: both read
 // 3:1 or more against the track. The entrance (fade) is skipped under prefers-reduced-motion.
 import { useId } from 'react';
 import { Link } from 'react-router';
@@ -51,8 +51,8 @@ export function PendingBars({ rows }: PendingBarsProps) {
       >
         <defs>
           <linearGradient id={gradientId} x1="0" x2="1" y1="0" y2="0">
-            <stop offset="0" style={{ stopColor: 'var(--color-primary)' }} />
-            <stop offset="1" style={{ stopColor: 'var(--color-accent)' }} />
+            <stop offset="0" style={{ stopColor: 'var(--color-jira)' }} />
+            <stop offset="1" style={{ stopColor: 'var(--color-jira-light)' }} />
           </linearGradient>
         </defs>
         <g className="motion-safe:animate-fade-in">

@@ -30,7 +30,9 @@ function panel() {
 }
 
 function figure(label: string) {
-  return within(panel()).getByText(label).closest('li') as HTMLElement;
+  return within(panel())
+    .getByText(label === 'Records' ? label : `${label} · filter`)
+    .closest('li') as HTMLElement;
 }
 
 describe('audit log, totals', () => {
@@ -41,10 +43,10 @@ describe('audit log, totals', () => {
     await waitFor(() => {
       expect(figure('Records')).toHaveTextContent(/Records\s*6/);
     });
-    expect(figure('Created')).toHaveTextContent(/Created\s*1/);
-    expect(figure('Updated')).toHaveTextContent(/Updated\s*3/);
-    expect(figure('Deleted')).toHaveTextContent(/Deleted\s*1/);
-    expect(figure('Events')).toHaveTextContent(/Events\s*1/);
+    expect(figure('Created')).toHaveTextContent(/1\s*Created/);
+    expect(figure('Updated')).toHaveTextContent(/3\s*Updated/);
+    expect(figure('Deleted')).toHaveTextContent(/1\s*Deleted/);
+    expect(figure('Events')).toHaveTextContent(/1\s*Events/);
   });
 
   it('asks for one record at a time, one call for the total and one for each action', async () => {
@@ -79,8 +81,8 @@ describe('audit log, totals', () => {
       });
     }
     // The action filter narrows the timeline but not the figures: they still tell how the period splits.
-    expect(figure('Created')).toHaveTextContent(/Created\s*0/);
-    expect(figure('Updated')).toHaveTextContent(/Updated\s*1/);
+    expect(figure('Created')).toHaveTextContent(/0\s*Created/);
+    expect(figure('Updated')).toHaveTextContent(/1\s*Updated/);
     expect(figure('Records')).toHaveTextContent(/Records\s*2/);
   });
 
@@ -98,7 +100,7 @@ describe('audit log, totals', () => {
       expect(figure('Records')).toHaveTextContent(/Records\s*1/);
     });
     expect(totalCalls(api).length).toBe(before + 5);
-    expect(figure('Created')).toHaveTextContent(/Created\s*1/);
+    expect(figure('Created')).toHaveTextContent(/1\s*Created/);
   });
 
   it('filters the timeline by the action of the figure that is chosen, and clears it when chosen again', async () => {
@@ -140,13 +142,13 @@ describe('audit log, a figure that fails', () => {
       expect(within(panel()).getByRole('alert')).toHaveTextContent("Couldn't load the totals.");
     });
     expect(within(figure('Deleted')).getByLabelText('Unavailable')).toBeInTheDocument();
-    expect(figure('Created')).toHaveTextContent(/Created\s*1/);
+    expect(figure('Created')).toHaveTextContent(/1\s*Created/);
     // The timeline is untouched.
     expect(screen.getByText('Fax')).toBeInTheDocument();
 
     await user.click(within(panel()).getByRole('button', { name: 'Try again' }));
     await waitFor(() => {
-      expect(figure('Deleted')).toHaveTextContent(/Deleted\s*1/);
+      expect(figure('Deleted')).toHaveTextContent(/1\s*Deleted/);
     });
     expect(within(panel()).queryByRole('alert')).toBeNull();
   });
