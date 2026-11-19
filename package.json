@@ -11,6 +11,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
+    "check:dist": "node scripts/check-dist.mjs",
     "typecheck": "tsc -b",
     "contract:sync": "node scripts/sync-contract.mjs",
     "contract:types": "openapi-typescript contract/openapi.yaml -o src/api/schema.d.ts",
