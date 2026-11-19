@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Technical Documentation System API
-  version: 0.5.0
+  version: 0.5.1
   summary: REST API contracts — SDD Interface Viewpoint (Bitácora 3, Activities 5 and 6)
   description: |
     Contracts of the eleven modules (41 operations of SRS Table 25), the
@@ -19,7 +19,8 @@ info:
     - Every GET returns an `ETag`. Send it back in `If-None-Match`: when nothing
       changed the answer is 304 with no body.
     - Screens are the exception to the format of the `ETag`: the one of a screen
-      also carries its two counters, `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"`,
+      also carries its two counters and a fingerprint of the items that come from other
+      rows, `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>-<fingerprint>"`,
       and `If-Match` of a screen compares only the `updatedAt` part (see
       `GET /screens/{id}`).
     - Every response, success or error, carries the `X-Request-Id` header. A
@@ -178,19 +179,32 @@ info:
     no longer uses `uniqueItems`, so a repeated value is reported with its position. No
     operation was added or removed (50); no `x-roles` or `x-rule` changed.
 
-    Changes in 0.4.0 (onboarding progress, D-133): three operations are added, `GET /onboarding/progress`,
+    Changes in 0.4.0 (onboarding progress, D-149): three operations are added, `GET /onboarding/progress`,
     `PUT /onboarding/progress/steps/{step}` and `DELETE /onboarding/progress`, so the onboarding remembers the
     steps (1 to 5) that the user completed in each application. The progress is personal: it always belongs to
     the user of the token, every role may use it, and it is allowed on an archived application. No existing
     operation, `x-roles` or `x-rule` changed (53 operations).
 
-    Changes in 0.5.0 (where a variable is created inside its origin screen, D-134): `VariableWrite` accepts the optional
+    Changes in 0.5.0 (where a variable is created inside its origin screen, D-150): `VariableWrite` accepts the optional
     `originUsedIn` (the event or property of the origin screen where the variable is created, for example `OnVisible`;
     same format as `UsedIn`, `null` or absent = not described) and `Variable` returns it. A screen returns it in the
     `variableLinks[]` item with `isOrigin = true` (`null` in the others). The origin row itself does not change: it keeps
     `usedIn = origin` and stays read-only in `PUT /screens/{id}`, so the variable is still understood as created there;
     `originUsedIn` is edited with `PUT /variables/{id}`. Without `originScreenId` it is a 400 (`originUsedIn`, rule
     `requires`). The change is additive: no operation, `x-roles` or `x-rule` changed (53 operations).
+
+    Changes in 0.5.1 (ETag of a screen, D-153): the `ETag` of a screen, in `GET`, `POST` and `PUT /screens/{id}`,
+    `PUT /screens/{id}/status` and `POST /screens/{id}/review`, is now
+    `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>-<fingerprint>"`, where the fingerprint is 8 lowercase hexadecimal
+    digits computed from the items of the detail that come from other rows and change without touching `updatedAt` of the
+    screen: the author (id and name); each variable, collection and screen that the screen links to, navigates to or uses
+    in a component (id and name); and `originUsedIn` of the origin row. A rename or a delete of any of them now changes the
+    `ETag`, so `If-None-Match` answers 200 with the new data instead of a 304. `If-Match` still compares only the
+    `updatedAt` part and accepts three formats, `W/"<updatedAt ms>"`, `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"`
+    and the full one; any other format is a 412 whose `details.currentETag` is the full `ETag`. The references to the
+    decisions of the onboarding progress (0.4.0) and of `originUsedIn` (0.5.0) are renumbered from D-133 and D-134 to D-149
+    and D-150; the text of the contract does not change. No operation was added or removed (53); no `x-roles` or `x-rule`
+    changed.
 
     Error catalog (`code` -> HTTP status: `message`):
 
@@ -1300,11 +1314,14 @@ paths:
       x-roles: [ADMINISTRATOR, DEVELOPER, READER]
       summary: Get a screen with its template, components and links
       description: |
-        Roles: all. The `ETag` is `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"`:
+        Roles: all. The `ETag` is `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>-<fingerprint>"`:
         the counters change without touching `updatedAt` (Jira tickets created,
-        refreshed or updated by the webhook, comments), so `If-None-Match` compares
-        all of it and answers 304 only when neither the screen nor either counter
-        changed. The same `ETag` is sent by the answers of `POST /screens`,
+        refreshed or updated by the webhook, comments), and so do the items that come
+        from other rows (the name of a variable, collection or screen that the screen
+        links to, navigates to or uses, `originUsedIn`, the author). The fingerprint
+        (8 hexadecimal digits) covers those items, so `If-None-Match` compares all of
+        it and answers 304 only when nothing the screen shows changed. The same `ETag`
+        is sent by the answers of `POST /screens`,
         `PUT /screens/{id}`, `PUT /screens/{id}/status` and `POST /screens/{id}/review`.
       parameters:
         - $ref: '#/components/parameters/IfNoneMatch'
@@ -1351,11 +1368,13 @@ paths:
         created in this screen); it is read-only here and is edited with `PUT /variables/{id}`.
         `If-Match` is always checked when sent, also when the body changes nothing.
         Only its `updatedAt` part is compared, inside the transaction: a change of
-        `pendingSubtasks` or `commentCount` between the read and the save is not a 412.
-        The former format `W/"<updatedAt ms>"` is accepted; a value in any other format
-        is a 412, whose `details.currentETag` is the full `ETag`.
+        `pendingSubtasks`, `commentCount` or the fingerprint between the read and the
+        save (for example a renamed variable) is not a 412. The formats `W/"<updatedAt ms>"`,
+        `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"` and the full one are
+        accepted; a value in any other format is a 412, whose `details.currentETag` is
+        the full `ETag`.
         An update that changes nothing writes nothing: it answers 200 with the same
-        `updatedAt` and status, and with the same `ETag` unless a counter changed. A
+        `updatedAt` and status, and with the same `ETag` unless a counter or the fingerprint changed. A
         change in any nested array also moves the `ETag` of the screen.
         Resulting status: editing an APPROVED screen in any way (a column or a nested
         item) returns it to IN_PROGRESS; an UNDOCUMENTED screen in which a template
@@ -1457,8 +1476,8 @@ paths:
         The errors are checked in this order: 400, 404, 422 APPLICATION_ARCHIVED,
         412, 422 INVALID_TRANSITION, 422 TEMPLATE_INCOMPLETE. `If-Match` is optional;
         when sent, its `updatedAt` part is compared with the screen locked inside the
-        transaction (same rule as `PUT /screens/{id}`: a change of the counters is not
-        a 412, and the former `W/"<updatedAt ms>"` format is accepted).
+        transaction (same rule as `PUT /screens/{id}`: a change of the counters or of the
+        fingerprint is not a 412, and the three formats of the `ETag` of a screen are accepted).
         Asking for the status the screen already has is a 422 INVALID_TRANSITION
         (`details { from, to }`, with `to` equal to `from`). TEMPLATE_INCOMPLETE applies
         only to IN_PROGRESS -> IN_REVIEW and lists in `details.fields` the template
@@ -2900,8 +2919,9 @@ components:
       required: false
       description: |
         ETag from the last GET; if the resource changed since, the update is rejected with 412.
-        For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
-        the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+        For a screen only the `updatedAt` part is compared, so a change of its counters or of its fingerprint is not a 412;
+        the formats `W/"<updatedAt ms>"`, `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"` and the full one are accepted,
+        and any other format is a 412.
       schema: { type: string, example: 'W/"1727548800123"' }
     IfNoneMatch:
       name: If-None-Match
@@ -2917,7 +2937,8 @@ components:
     ETag:
       description: |
         Weak validator. A single resource with `updatedAt` sends one derived from it (`W/"<updatedAt ms>"`);
-        a screen also appends its `pendingSubtasks` and `commentCount` (`W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"`);
+        a screen also appends its `pendingSubtasks`, its `commentCount` and a fingerprint of the items that come from other rows
+        (`W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>-<fingerprint>"`, the fingerprint being 8 lowercase hexadecimal digits);
         a saved report sends `W/"<updatedAt ms>"` and a comment `W/"<ms of updatedAt, or of createdAt if updatedAt is null>"`;
         listings and other responses send a weak hash of the body.
       schema: { type: string, example: 'W/"1727548800123"' }
@@ -3593,7 +3614,7 @@ components:
           required: [description, originUsedIn, environmentDetails]
           properties:
             description: { type: [string, 'null'] }
-            originUsedIn: { type: [string, 'null'], description: 'Where the variable is created inside its origin screen (D-134); null when not described or without origin screen' }
+            originUsedIn: { type: [string, 'null'], description: 'Where the variable is created inside its origin screen (D-150); null when not described or without origin screen' }
             environmentDetails: { type: array, items: { $ref: '#/components/schemas/EnvironmentPresence' } }
     VariableEnvelope:
       type: object
@@ -3926,7 +3947,7 @@ components:
                   accessMode: { $ref: '#/components/schemas/AccessMode' }
                   usedIn: { type: string }
                   isOrigin: { type: boolean, description: 'Row maintained by the variables module (read-only here): a write never updates or deletes it and does not reconcile it' }
-                  originUsedIn: { type: [string, 'null'], description: 'Only on the origin row (isOrigin = true): where the variable is created in this screen, edited with PUT /variables/{id}; null in the other rows or when not described (D-134)' }
+                  originUsedIn: { type: [string, 'null'], description: 'Only on the origin row (isOrigin = true): where the variable is created in this screen, edited with PUT /variables/{id}; null in the other rows or when not described (D-150)' }
             collectionLinks:
               type: array
               items:
@@ -4661,7 +4682,7 @@ components:
       properties:
         data:
           type: object
-          description: The steps of the onboarding that the user of the token completed in the application (D-133).
+          description: The steps of the onboarding that the user of the token completed in the application (D-149).
           required: [applicationId, totalSteps, completedSteps]
           additionalProperties: false
           properties:

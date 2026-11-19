@@ -577,3 +577,29 @@ describe('screen edit: unknown screen', () => {
     expect(await screen.findByText("This screen doesn't exist")).toBeVisible();
   });
 });
+
+describe('screen edit: the ETag of the contract 0.5.1', () => {
+  // The tag of a screen is W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>-<fingerprint>" (four segments, the last one
+  // 8 lowercase hexadecimal digits). The page keeps it as an opaque text: whatever the read answered is what If-Match sends.
+  const FULL_ETAG = 'W/"1760000000000-3-2-9f3a1c7e"';
+
+  it('sends in If-Match exactly the ETag it received, without reading its parts', async () => {
+    expect(FULL_ETAG).toMatch(/^W\/"\d+-\d+-\d+-[0-9a-f]{8}"$/);
+    const { user, api } = await openEdit({
+      prepare: (fake) => {
+        const read = fake.client.get.bind(fake.client);
+        fake.client.get = (path, options) =>
+          read(path, options).then((answer) =>
+            path === '/screens/{id}' ? { ...answer, etag: FULL_ETAG } : answer,
+          );
+      },
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => {
+      expect(api.callsTo('PUT /screens/{id}')).toHaveLength(1);
+    });
+    expect(lastPut(api).ifMatch).toBe(FULL_ETAG);
+  });
+});
