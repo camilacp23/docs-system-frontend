@@ -268,6 +268,7 @@ type RuleText = (label: string) => string;
 
 const RULE_MESSAGES: Record<string, RuleText> = {
   required: (label) => `${label} is required.`,
+  requires: () => 'Choose the origin screen first, or leave this empty.',
   pattern: (label) => `${label} isn't in a valid format.`,
   format: (label) => `${label} isn't in a valid format.`,
   minLength: (label) => `${label} is too short.`,

@@ -3,7 +3,7 @@
 // first, then toggles). The button states the action for assistive technology; aria-sort tells the state.
 import { ArrowDown, ArrowUp } from 'lucide-react';
 
-import { ICON_STROKE_WIDTH } from './cx';
+import { cx, ICON_STROKE_WIDTH } from './cx';
 import { nextSort } from './sort';
 
 export interface SortableHeaderProps {
@@ -11,9 +11,11 @@ export interface SortableHeaderProps {
   sortKey: string;
   sort: string;
   onSort: (next: string) => void;
+  /** Overrides of the cell (the first column of a table with a wider edge padding). */
+  className?: string;
 }
 
-export function SortableHeader({ label, sortKey, sort, onSort }: SortableHeaderProps) {
+export function SortableHeader({ label, sortKey, sort, onSort, className }: SortableHeaderProps) {
   const ascending = sort === sortKey;
   const descending = sort === `-${sortKey}`;
   const Arrow = descending ? ArrowDown : ArrowUp;
@@ -21,7 +23,10 @@ export function SortableHeader({ label, sortKey, sort, onSort }: SortableHeaderP
     <th
       scope="col"
       aria-sort={ascending ? 'ascending' : descending ? 'descending' : 'none'}
-      className="px-3 py-2.5 text-left text-micro font-bold tracking-wider text-ink-500 uppercase"
+      className={cx(
+        'px-3 py-2.5 text-left text-micro font-bold tracking-wider text-ink-500 uppercase',
+        className,
+      )}
     >
       <button
         type="button"

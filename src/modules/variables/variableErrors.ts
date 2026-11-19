@@ -20,18 +20,21 @@ const FIELD_LABELS: Record<string, string> = {
   dataType: FIELD_LABEL.dataType,
   scope: FIELD_LABEL.scope,
   originScreenId: FIELD_LABEL.originScreenId,
+  originUsedIn: FIELD_LABEL.originUsedIn,
   description: FIELD_LABEL.description,
   environments: FIELD_LABEL.environments,
   'environments[].environment': 'Environment',
   'environments[].notes': FIELD_LABEL.notes,
 };
 
-type SimpleField = 'name' | 'dataType' | 'scope' | 'originScreenId' | 'description';
+type SimpleField =
+  'name' | 'dataType' | 'scope' | 'originScreenId' | 'originUsedIn' | 'description';
 const SIMPLE_FIELDS: readonly string[] = [
   'name',
   'dataType',
   'scope',
   'originScreenId',
+  'originUsedIn',
   'description',
 ];
 

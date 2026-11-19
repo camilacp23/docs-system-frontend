@@ -12,7 +12,7 @@ import type { Role } from '../../app/router/routes';
 import type { Screen } from '../../modules/screens/screenTypes';
 import { makeApplication } from '../helpers/renderApp';
 import { renderScreens, sampleScreens } from '../helpers/renderScreens';
-import { setupUser, type User } from '../helpers/setupUser';
+import { setupUser } from '../helpers/setupUser';
 
 type Status = Screen['documentationStatus'];
 
@@ -60,106 +60,90 @@ const serverStatus = (view: Awaited<ReturnType<typeof open>>) =>
 
 const button = (name: string) => screen.queryByRole('button', { name });
 
-async function menuItems(user: User): Promise<string[]> {
-  const trigger = screen.queryByRole('button', { name: 'More actions' });
-  if (trigger === null) return [];
-  await user.click(trigger);
-  const items = within(await screen.findByRole('menu')).getAllByRole('menuitem');
-  const names = items.map((item) => item.textContent ?? '');
-  await user.keyboard('{Escape}');
-  return names;
-}
-
 // What the decisions do is in screenReview.test.tsx; here only who sees them.
 const WORKFLOW_BUTTONS = [
   'Start draft',
+  'Back to undocumented',
   'Mark in progress',
+  'Back to draft',
   'Submit for review',
   'Withdraw from review',
   'Return',
   'Approve',
+  'Reopen',
 ];
 
 describe('workflow actions by status and role', () => {
-  const CASES: Array<{
-    status: Status;
-    role: Role;
-    buttons: string[];
-    menu: string[];
-  }> = [
-    { status: 'UNDOCUMENTED', role: 'ADMINISTRATOR', buttons: ['Start draft'], menu: [] },
-    { status: 'UNDOCUMENTED', role: 'DEVELOPER', buttons: ['Start draft'], menu: [] },
-    { status: 'UNDOCUMENTED', role: 'READER', buttons: [], menu: [] },
+  // Every action is a button, in the order they are drawn: the steps back, then the step forward.
+  const CASES: Array<{ status: Status; role: Role; buttons: string[] }> = [
+    { status: 'UNDOCUMENTED', role: 'ADMINISTRATOR', buttons: ['Start draft'] },
+    { status: 'UNDOCUMENTED', role: 'DEVELOPER', buttons: ['Start draft'] },
+    { status: 'UNDOCUMENTED', role: 'READER', buttons: [] },
     {
       status: 'DRAFT',
       role: 'ADMINISTRATOR',
-      buttons: ['Mark in progress'],
-      menu: ['Back to undocumented'],
+      buttons: ['Back to undocumented', 'Mark in progress'],
     },
-    {
-      status: 'DRAFT',
-      role: 'DEVELOPER',
-      buttons: ['Mark in progress'],
-      menu: ['Back to undocumented'],
-    },
-    { status: 'DRAFT', role: 'READER', buttons: [], menu: [] },
+    { status: 'DRAFT', role: 'DEVELOPER', buttons: ['Back to undocumented', 'Mark in progress'] },
+    { status: 'DRAFT', role: 'READER', buttons: [] },
     {
       status: 'IN_PROGRESS',
       role: 'ADMINISTRATOR',
-      buttons: ['Submit for review'],
-      menu: ['Back to draft'],
+      buttons: ['Back to draft', 'Submit for review'],
     },
-    {
-      status: 'IN_PROGRESS',
-      role: 'DEVELOPER',
-      buttons: ['Submit for review'],
-      menu: ['Back to draft'],
-    },
-    { status: 'IN_PROGRESS', role: 'READER', buttons: [], menu: [] },
+    { status: 'IN_PROGRESS', role: 'DEVELOPER', buttons: ['Back to draft', 'Submit for review'] },
+    { status: 'IN_PROGRESS', role: 'READER', buttons: [] },
     {
       status: 'IN_REVIEW',
       role: 'ADMINISTRATOR',
-      buttons: ['Return', 'Approve'],
-      menu: ['Withdraw from review'],
+      buttons: ['Withdraw from review', 'Return', 'Approve'],
     },
-    {
-      status: 'IN_REVIEW',
-      role: 'DEVELOPER',
-      buttons: ['Withdraw from review'],
-      menu: [],
-    },
-    { status: 'IN_REVIEW', role: 'READER', buttons: [], menu: [] },
-    { status: 'APPROVED', role: 'ADMINISTRATOR', buttons: [], menu: ['Reopen'] },
-    { status: 'APPROVED', role: 'DEVELOPER', buttons: [], menu: ['Reopen'] },
-    { status: 'APPROVED', role: 'READER', buttons: [], menu: [] },
+    { status: 'IN_REVIEW', role: 'DEVELOPER', buttons: ['Withdraw from review'] },
+    { status: 'IN_REVIEW', role: 'READER', buttons: [] },
+    { status: 'APPROVED', role: 'ADMINISTRATOR', buttons: ['Reopen'] },
+    { status: 'APPROVED', role: 'DEVELOPER', buttons: ['Reopen'] },
+    { status: 'APPROVED', role: 'READER', buttons: [] },
   ];
 
-  for (const { status, role, buttons, menu } of CASES) {
+  for (const { status, role, buttons } of CASES) {
     it(`${status} as ${role}`, async () => {
-      const user = setupUser();
       await open(status, role);
 
       const visible = WORKFLOW_BUTTONS.filter((name) => button(name) !== null);
-      expect(visible).toEqual(buttons);
-      expect(await menuItems(user)).toEqual(menu);
+      expect([...visible].sort()).toEqual([...buttons].sort());
+      // The order of the DOM is the order of the table: the steps back first, the step forward last.
+      const drawn = screen
+        .getAllByRole('button')
+        .map((candidate) => candidate.textContent ?? '')
+        .filter((name) => buttons.includes(name));
+      expect(drawn).toEqual(buttons);
+      expect(screen.queryByRole('button', { name: 'More actions' })).not.toBeInTheDocument();
     });
   }
 
-  it('keeps Edit disabled, with its reason, in review for the Developer (P-01)', async () => {
+  it('draws neither Edit nor Delete for a screen in review (P-01), for the Developer and the Administrator', async () => {
+    for (const role of ['DEVELOPER', 'ADMINISTRATOR'] as const) {
+      const view = await open('IN_REVIEW', role);
+
+      expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+      view.unmount();
+    }
+  });
+
+  it('draws Edit and Delete again once the screen leaves review', async () => {
+    const user = setupUser();
     await open('IN_REVIEW', 'DEVELOPER');
 
-    const edit = screen.getByRole('button', { name: 'Edit' });
-    expect(edit).toBeDisabled();
-    expect(edit).toHaveAttribute(
-      'title',
-      'This screen is in review. Edit it after the review, or withdraw it from review.',
-    );
+    await user.click(screen.getByRole('button', { name: 'Withdraw from review' }));
+
+    expect(await screen.findByRole('button', { name: 'Edit' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled();
   });
 
   it('draws no workflow control for a Reader', async () => {
     await open('IN_PROGRESS', 'READER');
 
-    expect(screen.queryByRole('button', { name: 'More actions' })).not.toBeInTheDocument();
     expect(button('Submit for review')).not.toBeInTheDocument();
     expect(button('Edit')).not.toBeInTheDocument();
   });
@@ -198,30 +182,28 @@ describe('transitions of /status', () => {
     expect(button('Submit for review')).toBeInTheDocument();
   });
 
-  it('Back to undocumented: DRAFT -> UNDOCUMENTED, from the menu', async () => {
+  it('Back to undocumented: DRAFT -> UNDOCUMENTED', async () => {
     const user = setupUser();
     const view = await open('DRAFT');
 
-    await user.click(screen.getByRole('button', { name: 'More actions' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Back to undocumented' }));
+    await user.click(screen.getByRole('button', { name: 'Back to undocumented' }));
 
     expect(await screen.findByText('Detalle is now Undocumented.')).toBeInTheDocument();
     expect(serverStatus(view)).toBe('UNDOCUMENTED');
     expect(button('Start draft')).toBeInTheDocument();
   });
 
-  it('Back to draft: IN_PROGRESS -> DRAFT, from the menu', async () => {
+  it('Back to draft: IN_PROGRESS -> DRAFT', async () => {
     const user = setupUser();
     const view = await open('IN_PROGRESS');
 
-    await user.click(screen.getByRole('button', { name: 'More actions' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Back to draft' }));
+    await user.click(screen.getByRole('button', { name: 'Back to draft' }));
 
     expect(await screen.findByText('Detalle is now Draft.')).toBeInTheDocument();
     expect(serverStatus(view)).toBe('DRAFT');
   });
 
-  it('Submit for review: IN_PROGRESS -> IN_REVIEW, and Edit is disabled with its reason (P-01)', async () => {
+  it('Submit for review: IN_PROGRESS -> IN_REVIEW, and Edit and Delete are not drawn (P-01)', async () => {
     const user = setupUser();
     const view = await open('IN_PROGRESS');
 
@@ -230,11 +212,12 @@ describe('transitions of /status', () => {
     expect(await screen.findByText('Detalle submitted for review.')).toBeInTheDocument();
     expect(serverStatus(view)).toBe('IN_REVIEW');
     expect(screen.getAllByText('In review').length).toBeGreaterThan(0);
-    expect(screen.getByRole('button', { name: 'Edit' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
     expect(button('Withdraw from review')).toBeInTheDocument();
   });
 
-  it('Withdraw from review: IN_REVIEW -> IN_PROGRESS, as the Developer (button)', async () => {
+  it('Withdraw from review: IN_REVIEW -> IN_PROGRESS, as the Developer', async () => {
     const user = setupUser();
     const view = await open('IN_REVIEW', 'DEVELOPER');
 
@@ -245,12 +228,11 @@ describe('transitions of /status', () => {
     expect(screen.getByRole('button', { name: 'Edit' })).toBeEnabled();
   });
 
-  it('Withdraw from review: as the Administrator (menu)', async () => {
+  it('Withdraw from review: as the Administrator', async () => {
     const user = setupUser();
     const view = await open('IN_REVIEW', 'ADMINISTRATOR');
 
-    await user.click(screen.getByRole('button', { name: 'More actions' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Withdraw from review' }));
+    await user.click(screen.getByRole('button', { name: 'Withdraw from review' }));
 
     expect(await screen.findByText('Detalle withdrawn from review.')).toBeInTheDocument();
     expect(serverStatus(view)).toBe('IN_PROGRESS');
@@ -260,8 +242,7 @@ describe('transitions of /status', () => {
     const user = setupUser();
     const view = await open('APPROVED');
 
-    await user.click(screen.getByRole('button', { name: 'More actions' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Reopen' }));
+    await user.click(screen.getByRole('button', { name: 'Reopen' }));
 
     expect(
       await screen.findByText('Detalle reopened. Its status is now In progress.'),
@@ -311,12 +292,7 @@ describe('transitions of /status', () => {
 
     await user.click(screen.getByRole('button', { name: 'Mark in progress' }));
     await user.click(screen.getByRole('button', { name: 'Mark in progress' }));
-    await user.click(screen.getByRole('button', { name: 'More actions' }));
-    expect(await screen.findByRole('menuitem', { name: 'Back to undocumented' })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    );
-    await user.keyboard('{Escape}');
+    expect(screen.getByRole('button', { name: 'Back to undocumented' })).toBeDisabled();
     hold.release();
 
     expect(await screen.findByText('Detalle is now In progress.')).toBeInTheDocument();
@@ -431,17 +407,15 @@ describe('errors of /status', () => {
 
 describe('disabled cases', () => {
   it('disables the actions, with the reason, when the application is archived', async () => {
-    const user = setupUser();
     await open('IN_PROGRESS', 'DEVELOPER', { archived: true });
 
     const submit = screen.getByRole('button', { name: 'Submit for review' });
     expect(submit).toBeDisabled();
     expect(submit).toHaveAttribute('title', ARCHIVED_REASON);
     expect(submit).toHaveAccessibleDescription(ARCHIVED_REASON);
-    await user.click(screen.getByRole('button', { name: 'More actions' }));
-    const item = await screen.findByRole('menuitem', { name: 'Back to draft' });
-    expect(item).toHaveAttribute('aria-disabled', 'true');
-    expect(item).toHaveAttribute('title', ARCHIVED_REASON);
+    const back = screen.getByRole('button', { name: 'Back to draft' });
+    expect(back).toBeDisabled();
+    expect(back).toHaveAttribute('title', ARCHIVED_REASON);
   });
 
   it('disables the actions, with the reason, while the browser is offline', async () => {

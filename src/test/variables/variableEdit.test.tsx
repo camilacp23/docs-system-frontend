@@ -115,6 +115,7 @@ describe('edit variable', () => {
       scope: 'GLOBAL',
       description: 'New description',
       originScreenId: 10,
+      originUsedIn: null,
       environments: [
         { environment: 'DEV', notes: null },
         { environment: 'PROD', notes: 'Loaded from the production user list.' },
@@ -539,5 +540,98 @@ describe('edit variable: access and state', () => {
     await waitFor(() => {
       expect(router.state.location.pathname).toBe('/variables');
     });
+  });
+});
+
+describe('edit variable: where it is created in its origin screen (contract 0.5.0)', () => {
+  it('loads originUsedIn, edits it and sends it with the rest of the variable', async () => {
+    const user = setupUser();
+    const { api } = await render({
+      variables: sampleVariables().map((v) => (v.id === 1 ? { ...v, originUsedIn: 'OnStart' } : v)),
+    });
+    const { save } = await ready();
+    await waitFor(() => {
+      expect(screen.getByLabelText('Origin screen')).toHaveValue('10');
+    });
+    const field = screen.getByLabelText('Used in');
+    expect(field).toHaveValue('OnStart');
+    expect(field).toHaveClass('font-mono');
+
+    await user.clear(field);
+    await user.click(field);
+    await user.paste('btnGuardar.OnSelect');
+    await user.click(save);
+
+    await waitFor(() => {
+      expect(api.callsTo('PUT /variables/{id}')).toHaveLength(1);
+    });
+    expect(api.callsTo('PUT /variables/{id}')[0]?.options.body).toMatchObject({
+      originScreenId: 10,
+      originUsedIn: 'btnGuardar.OnSelect',
+    });
+  });
+
+  it('sends an empty field as null, never as an empty text', async () => {
+    const user = setupUser();
+    const { api } = await render({
+      variables: sampleVariables().map((v) => (v.id === 1 ? { ...v, originUsedIn: 'OnStart' } : v)),
+    });
+    const { save } = await ready();
+    await waitFor(() => {
+      expect(screen.getByLabelText('Origin screen')).toHaveValue('10');
+    });
+
+    await user.clear(screen.getByLabelText('Used in'));
+    await user.click(save);
+
+    await waitFor(() => {
+      expect(api.callsTo('PUT /variables/{id}')).toHaveLength(1);
+    });
+    expect(api.callsTo('PUT /variables/{id}')[0]?.options.body).toMatchObject({
+      originUsedIn: null,
+    });
+  });
+
+  it('is off without an origin screen, says why, and sends null when the origin is taken off', async () => {
+    const user = setupUser();
+    const { api } = await render({
+      variables: sampleVariables().map((v) => (v.id === 1 ? { ...v, originUsedIn: 'OnStart' } : v)),
+    });
+    const { save } = await ready();
+    await waitFor(() => {
+      expect(screen.getByLabelText('Origin screen')).toHaveValue('10');
+    });
+    expect(screen.getByLabelText('Used in')).toBeEnabled();
+
+    await user.selectOptions(screen.getByLabelText('Origin screen'), 'None (untraced)');
+
+    expect(screen.getByLabelText('Used in')).toBeDisabled();
+    expect(screen.getByLabelText('Used in')).toHaveValue('');
+    expect(screen.getByText('Choose the origin screen first, or leave this empty.')).toBeVisible();
+    await user.click(save);
+    await waitFor(() => {
+      expect(api.callsTo('PUT /variables/{id}')).toHaveLength(1);
+    });
+    expect(api.callsTo('PUT /variables/{id}')[0]?.options.body).toMatchObject({
+      originScreenId: null,
+      originUsedIn: null,
+    });
+  });
+
+  it('checks the format on the field before sending', async () => {
+    const user = setupUser();
+    const { api } = await render();
+    const { save } = await ready();
+    await waitFor(() => {
+      expect(screen.getByLabelText('Origin screen')).toHaveValue('10');
+    });
+
+    await user.click(screen.getByLabelText('Used in'));
+    await user.paste('not valid');
+    await user.click(save);
+
+    expect(await screen.findByText("Used in isn't in a valid format.")).toBeVisible();
+    expect(screen.getByLabelText('Used in')).toHaveAttribute('aria-invalid', 'true');
+    expect(api.callsTo('PUT /variables/{id}')).toHaveLength(0);
   });
 });

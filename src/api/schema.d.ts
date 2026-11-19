@@ -251,6 +251,9 @@ export interface paths {
          *     name must be free where DUPLICATE_NAME says (global variable: in the
          *     application; context variable: in its origin screen, or in the application
          *     when it has none); a repeated environment is a 400 with its position.
+         *     `originUsedIn` (optional) describes where the variable is created inside its origin
+         *     screen; without `originScreenId` it is a 400 with `details.fields[].field` =
+         *     `originUsedIn`. It does not change the `origin` link of the screen.
          */
         post: operations["createVariable"];
         delete?: never;
@@ -292,6 +295,9 @@ export interface paths {
          *     `POST /variables`), SCOPE_CONFLICT, CONTEXT_SCREEN_MISMATCH. The name must be
          *     free where DUPLICATE_NAME says (409). The environments are replaced by
          *     difference, and a change in them also moves the `ETag`.
+         *     `originUsedIn` is replaced like the other fields (omitted = null) and also moves
+         *     the `ETag`; without `originScreenId` it is a 400 with `details.fields[].field` =
+         *     `originUsedIn`, and when the origin screen is removed it is cleared by the database.
          */
         put: operations["updateVariable"];
         post?: never;
@@ -526,11 +532,14 @@ export interface paths {
         };
         /**
          * Get a screen with its template, components and links
-         * @description Roles: all. The `ETag` is `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"`:
+         * @description Roles: all. The `ETag` is `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>-<fingerprint>"`:
          *     the counters change without touching `updatedAt` (Jira tickets created,
-         *     refreshed or updated by the webhook, comments), so `If-None-Match` compares
-         *     all of it and answers 304 only when neither the screen nor either counter
-         *     changed. The same `ETag` is sent by the answers of `POST /screens`,
+         *     refreshed or updated by the webhook, comments), and so do the items that come
+         *     from other rows (the name of a variable, collection or screen that the screen
+         *     links to, navigates to or uses, `originUsedIn`, the author). The fingerprint
+         *     (8 hexadecimal digits) covers those items, so `If-None-Match` compares all of
+         *     it and answers 304 only when nothing the screen shows changed. The same `ETag`
+         *     is sent by the answers of `POST /screens`,
          *     `PUT /screens/{id}`, `PUT /screens/{id}/status` and `POST /screens/{id}/review`.
          */
         get: operations["getScreen"];
@@ -555,14 +564,17 @@ export interface paths {
          *     Links with `usedIn = origin` are maintained by the variables module: they come
          *     back with `isOrigin = true`, are never read as editable, and are never updated
          *     or deleted here, even when they are missing from the body. `usedIn = origin` in
-         *     the body is a 400.
+         *     the body is a 400. The origin row also carries `originUsedIn` (where the variable is
+         *     created in this screen); it is read-only here and is edited with `PUT /variables/{id}`.
          *     `If-Match` is always checked when sent, also when the body changes nothing.
          *     Only its `updatedAt` part is compared, inside the transaction: a change of
-         *     `pendingSubtasks` or `commentCount` between the read and the save is not a 412.
-         *     The former format `W/"<updatedAt ms>"` is accepted; a value in any other format
-         *     is a 412, whose `details.currentETag` is the full `ETag`.
+         *     `pendingSubtasks`, `commentCount` or the fingerprint between the read and the
+         *     save (for example a renamed variable) is not a 412. The formats `W/"<updatedAt ms>"`,
+         *     `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"` and the full one are
+         *     accepted; a value in any other format is a 412, whose `details.currentETag` is
+         *     the full `ETag`.
          *     An update that changes nothing writes nothing: it answers 200 with the same
-         *     `updatedAt` and status, and with the same `ETag` unless a counter changed. A
+         *     `updatedAt` and status, and with the same `ETag` unless a counter or the fingerprint changed. A
          *     change in any nested array also moves the `ETag` of the screen.
          *     Resulting status: editing an APPROVED screen in any way (a column or a nested
          *     item) returns it to IN_PROGRESS; an UNDOCUMENTED screen in which a template
@@ -640,8 +652,8 @@ export interface paths {
          *     The errors are checked in this order: 400, 404, 422 APPLICATION_ARCHIVED,
          *     412, 422 INVALID_TRANSITION, 422 TEMPLATE_INCOMPLETE. `If-Match` is optional;
          *     when sent, its `updatedAt` part is compared with the screen locked inside the
-         *     transaction (same rule as `PUT /screens/{id}`: a change of the counters is not
-         *     a 412, and the former `W/"<updatedAt ms>"` format is accepted).
+         *     transaction (same rule as `PUT /screens/{id}`: a change of the counters or of the
+         *     fingerprint is not a 412, and the three formats of the `ETag` of a screen are accepted).
          *     Asking for the status the screen already has is a 422 INVALID_TRANSITION
          *     (`details { from, to }`, with `to` equal to `from`). TEMPLATE_INCOMPLETE applies
          *     only to IN_PROGRESS -> IN_REVIEW and lists in `details.fields` the template
@@ -1386,6 +1398,65 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/onboarding/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Steps of the onboarding that the user completed in an application (FR-25)
+         * @description Roles: all. The progress is personal: it is the one of the user of the token, and a user
+         *     never sees the progress of another. An `applicationId` that does not exist (or is outside
+         *     the `integer` range) is a 404. An archived application can be read.
+         *
+         *     `completedSteps` lists the steps (1 to `totalSteps`) that the user completed, ascending and
+         *     without repeats; it is empty when the user has not completed any. `totalSteps` is always 5.
+         *     The `ETag` is a weak hash of the body, so the 304 works as in the summary.
+         */
+        get: operations["getOnboardingProgress"];
+        put?: never;
+        post?: never;
+        /**
+         * Forget the steps that the user completed in an application (FR-25)
+         * @description Roles: all. Deletes every completed step of the user of the token in the application, so the
+         *     onboarding starts again. It never touches the progress of another user. Idempotent: it answers
+         *     204 also when the user had completed nothing. An `applicationId` that does not exist (or is
+         *     outside the `integer` range) is a 404. It is allowed on an archived application: the progress
+         *     is not documentation (D-47 does not apply).
+         */
+        delete: operations["resetOnboardingProgress"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/onboarding/progress/steps/{step}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Mark a step of the onboarding as completed (FR-25)
+         * @description Roles: all. Marks `step` (1 to 5) as completed for the user of the token in the application and
+         *     answers 200 with the whole progress. Idempotent: a step that was already completed stays as it
+         *     is and the answer is the same 200, also when two requests arrive at the same time. There is no
+         *     body. A `step` outside 1 to 5 or an `applicationId` that is missing is a 400; an `applicationId`
+         *     that does not exist (or is outside the `integer` range) is a 404. It is allowed on an archived
+         *     application: the progress is not documentation (D-47 does not apply).
+         */
+        put: operations["completeOnboardingStep"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/integrations/jira/webhook": {
         parameters: {
             query?: never;
@@ -1588,6 +1659,8 @@ export interface components {
             description?: string | null;
             /** @description Screen where the variable is created; null = without full traceability. A CONTEXT variable cannot originate in the App (OnStart) screen. */
             originScreenId?: number | null;
+            /** @description Event or property of the origin screen where the variable is created (e.g. OnVisible). Optional; requires `originScreenId` (400 otherwise). The `origin` link of the screen is not affected. */
+            originUsedIn?: components["schemas"]["UsedIn"] | null;
             /** @description At most one entry per environment. A repeated environment (even with different notes) is a 400 that names its position, for example `environments[1].environment`. */
             environments: components["schemas"]["EnvironmentPresence"][];
         };
@@ -1608,6 +1681,8 @@ export interface components {
         } & components["schemas"]["Timestamps"];
         Variable: components["schemas"]["VariableSummary"] & {
             description: string | null;
+            /** @description Where the variable is created inside its origin screen (D-150); null when not described or without origin screen */
+            originUsedIn: string | null;
             environmentDetails: components["schemas"]["EnvironmentPresence"][];
         };
         VariableEnvelope: {
@@ -1851,6 +1926,8 @@ export interface components {
                 usedIn: string;
                 /** @description Row maintained by the variables module (read-only here): a write never updates or deletes it and does not reconcile it */
                 isOrigin: boolean;
+                /** @description Only on the origin row (isOrigin = true): where the variable is created in this screen, edited with PUT /variables/{id}; null in the other rows or when not described (D-150) */
+                originUsedIn: string | null;
             }[];
             collectionLinks: {
                 id: number;
@@ -2490,6 +2567,19 @@ export interface components {
                 }[];
             };
         };
+        OnboardingProgressEnvelope: {
+            /** @description The steps of the onboarding that the user of the token completed in the application (D-149). */
+            data: {
+                applicationId: number;
+                /**
+                 * @description Number of steps of the onboarding
+                 * @constant
+                 */
+                totalSteps: 5;
+                /** @description Completed steps, ascending and without repeats; empty when none was completed. */
+                completedSteps: number[];
+            };
+        };
     };
     responses: {
         /**
@@ -2759,6 +2849,8 @@ export interface components {
         Id: number;
         /** @description Application whose elements are listed (NFR-16). */
         ApplicationId: number;
+        /** @description Step of the onboarding (FR-25), from 1 to 5. */
+        OnboardingStep: number;
         Page: number;
         PageSize: number;
         /** @description Case-insensitive text contained in the name (and e-mail for users). */
@@ -2767,8 +2859,9 @@ export interface components {
         EnvironmentFilter: components["schemas"]["Environment"];
         /**
          * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
-         *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
-         *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+         *     For a screen only the `updatedAt` part is compared, so a change of its counters or of its fingerprint is not a 412;
+         *     the formats `W/"<updatedAt ms>"`, `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"` and the full one are accepted,
+         *     and any other format is a 412.
          */
         IfMatch: string;
         /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
@@ -2780,7 +2873,8 @@ export interface components {
         Location: string;
         /**
          * @description Weak validator. A single resource with `updatedAt` sends one derived from it (`W/"<updatedAt ms>"`);
-         *     a screen also appends its `pendingSubtasks` and `commentCount` (`W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"`);
+         *     a screen also appends its `pendingSubtasks`, its `commentCount` and a fingerprint of the items that come from other rows
+         *     (`W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>-<fingerprint>"`, the fingerprint being 8 lowercase hexadecimal digits);
          *     a saved report sends `W/"<updatedAt ms>"` and a comment `W/"<ms of updatedAt, or of createdAt if updatedAt is null>"`;
          *     listings and other responses send a weak hash of the body.
          */
@@ -2993,8 +3087,9 @@ export interface operations {
             header?: {
                 /**
                  * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
-                 *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
-                 *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+                 *     For a screen only the `updatedAt` part is compared, so a change of its counters or of its fingerprint is not a 412;
+                 *     the formats `W/"<updatedAt ms>"`, `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"` and the full one are accepted,
+                 *     and any other format is a 412.
                  */
                 "If-Match"?: components["parameters"]["IfMatch"];
             };
@@ -3204,8 +3299,9 @@ export interface operations {
             header?: {
                 /**
                  * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
-                 *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
-                 *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+                 *     For a screen only the `updatedAt` part is compared, so a change of its counters or of its fingerprint is not a 412;
+                 *     the formats `W/"<updatedAt ms>"`, `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"` and the full one are accepted,
+                 *     and any other format is a 412.
                  */
                 "If-Match"?: components["parameters"]["IfMatch"];
             };
@@ -3375,8 +3471,9 @@ export interface operations {
             header?: {
                 /**
                  * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
-                 *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
-                 *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+                 *     For a screen only the `updatedAt` part is compared, so a change of its counters or of its fingerprint is not a 412;
+                 *     the formats `W/"<updatedAt ms>"`, `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"` and the full one are accepted,
+                 *     and any other format is a 412.
                  */
                 "If-Match"?: components["parameters"]["IfMatch"];
             };
@@ -3613,8 +3710,9 @@ export interface operations {
             header?: {
                 /**
                  * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
-                 *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
-                 *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+                 *     For a screen only the `updatedAt` part is compared, so a change of its counters or of its fingerprint is not a 412;
+                 *     the formats `W/"<updatedAt ms>"`, `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"` and the full one are accepted,
+                 *     and any other format is a 412.
                  */
                 "If-Match"?: components["parameters"]["IfMatch"];
             };
@@ -3869,8 +3967,9 @@ export interface operations {
             header?: {
                 /**
                  * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
-                 *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
-                 *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+                 *     For a screen only the `updatedAt` part is compared, so a change of its counters or of its fingerprint is not a 412;
+                 *     the formats `W/"<updatedAt ms>"`, `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"` and the full one are accepted,
+                 *     and any other format is a 412.
                  */
                 "If-Match"?: components["parameters"]["IfMatch"];
             };
@@ -3936,8 +4035,9 @@ export interface operations {
             header?: {
                 /**
                  * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
-                 *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
-                 *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+                 *     For a screen only the `updatedAt` part is compared, so a change of its counters or of its fingerprint is not a 412;
+                 *     the formats `W/"<updatedAt ms>"`, `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"` and the full one are accepted,
+                 *     and any other format is a 412.
                  */
                 "If-Match"?: components["parameters"]["IfMatch"];
             };
@@ -4164,8 +4264,9 @@ export interface operations {
             header?: {
                 /**
                  * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
-                 *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
-                 *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+                 *     For a screen only the `updatedAt` part is compared, so a change of its counters or of its fingerprint is not a 412;
+                 *     the formats `W/"<updatedAt ms>"`, `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"` and the full one are accepted,
+                 *     and any other format is a 412.
                  */
                 "If-Match"?: components["parameters"]["IfMatch"];
             };
@@ -4628,8 +4729,9 @@ export interface operations {
             header?: {
                 /**
                  * @description ETag from the last GET; if the resource changed since, the update is rejected with 412.
-                 *     For a screen only the `updatedAt` part is compared, so a change of its counters is not a 412;
-                 *     the former format `W/"<updatedAt ms>"` is accepted, and any other format is a 412.
+                 *     For a screen only the `updatedAt` part is compared, so a change of its counters or of its fingerprint is not a 412;
+                 *     the formats `W/"<updatedAt ms>"`, `W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>"` and the full one are accepted,
+                 *     and any other format is a 412.
                  */
                 "If-Match"?: components["parameters"]["IfMatch"];
             };
@@ -4808,6 +4910,119 @@ export interface operations {
                 };
             };
             304: components["responses"]["NotModified"];
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getOnboardingProgress: {
+        parameters: {
+            query: {
+                /** @description Application whose elements are listed (NFR-16). */
+                applicationId: components["parameters"]["ApplicationId"];
+            };
+            header?: {
+                /** @description ETag from the last GET; if the response would not change, the answer is 304 with no body. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Progress of the user */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "applicationId": 1,
+                     *         "totalSteps": 5,
+                     *         "completedSteps": [
+                     *           1,
+                     *           2
+                     *         ]
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["OnboardingProgressEnvelope"];
+                };
+            };
+            304: components["responses"]["NotModified"];
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    resetOnboardingProgress: {
+        parameters: {
+            query: {
+                /** @description Application whose elements are listed (NFR-16). */
+                applicationId: components["parameters"]["ApplicationId"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Progress deleted */
+            204: {
+                headers: {
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    completeOnboardingStep: {
+        parameters: {
+            query: {
+                /** @description Application whose elements are listed (NFR-16). */
+                applicationId: components["parameters"]["ApplicationId"];
+            };
+            header?: never;
+            path: {
+                /** @description Step of the onboarding (FR-25), from 1 to 5. */
+                step: components["parameters"]["OnboardingStep"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Progress of the user after the change */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "applicationId": 1,
+                     *         "totalSteps": 5,
+                     *         "completedSteps": [
+                     *           1,
+                     *           2,
+                     *           3
+                     *         ]
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["OnboardingProgressEnvelope"];
+                };
+            };
             400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];

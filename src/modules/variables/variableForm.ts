@@ -28,6 +28,8 @@ export interface VariableFormValues {
   scope: VariableScope;
   /** Id of the origin screen as text; '' = none (the variable is then untraced). */
   originScreenId: string;
+  /** Where the variable is created inside its origin screen (OnVisible, btnGuardar.OnSelect); '' = not described. Needs an origin screen. */
+  originUsedIn: string;
   environments: EnvironmentValues;
   description: string;
 }
@@ -36,12 +38,17 @@ export interface VariableFormValues {
 export const NAME_MAX_LENGTH = 150;
 export const NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export const DESCRIPTION_MAX_LENGTH = 4000;
+/** `originUsedIn` has the format of `usedIn` (UsedIn in the contract): a Power Apps identifier with an optional dot, never `origin`. */
+export const ORIGIN_USED_IN_MAX_LENGTH = 200;
+export const ORIGIN_USED_IN_PATTERN =
+  /^(?!origin$)[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$/;
 
 export const FIELD_LABEL = {
   name: 'Name',
   dataType: 'Data type',
   scope: 'Scope',
   originScreenId: 'Origin screen',
+  originUsedIn: 'Used in',
   environments: 'Environments',
   description: 'Description',
   notes: 'Notes',
@@ -53,6 +60,7 @@ export function emptyValues(): VariableFormValues {
     dataType: 'TEXT',
     scope: 'GLOBAL',
     originScreenId: '',
+    originUsedIn: '',
     // A new variable starts with no environment chosen: the user decides where it exists.
     environments: emptyEnvironments(false),
     description: '',
@@ -65,6 +73,7 @@ export function valuesFromVariable(variable: Variable): VariableFormValues {
     dataType: variable.dataType,
     scope: variable.scope,
     originScreenId: variable.originScreen === null ? '' : String(variable.originScreen.id),
+    originUsedIn: variable.originUsedIn ?? '',
     environments: environmentsFromDetails(variable.environmentDetails),
     description: variable.description ?? '',
   };
@@ -79,6 +88,11 @@ export function toVariableWrite(values: VariableFormValues): VariableWrite {
     scope: values.scope,
     description: values.description === '' ? null : values.description,
     originScreenId: values.originScreenId === '' ? null : Number(values.originScreenId),
+    // Sent empty as null, never as "" (that is a 400), and always null without an origin screen (the PUT replaces everything).
+    originUsedIn:
+      values.originScreenId === '' || values.originUsedIn.trim() === ''
+        ? null
+        : values.originUsedIn.trim(),
     environments: environmentsToWrite(values.environments),
   };
 }
@@ -88,6 +102,7 @@ export interface VariableFormErrors {
   dataType?: string;
   scope?: string;
   originScreenId?: string;
+  originUsedIn?: string;
   /** The environments group (none chosen). */
   environments?: string;
   /** One message per environment row (notes too long, repeated environment). */
@@ -117,6 +132,14 @@ export function validateVariable(values: VariableFormValues): VariableFormErrors
 
   if (values.description.length > DESCRIPTION_MAX_LENGTH)
     errors.description = getRuleMessage('maxLength', FIELD_LABEL.description);
+
+  const usedIn = values.originUsedIn.trim();
+  if (values.originScreenId !== '' && usedIn !== '') {
+    if (usedIn.length > ORIGIN_USED_IN_MAX_LENGTH)
+      errors.originUsedIn = getRuleMessage('maxLength', FIELD_LABEL.originUsedIn);
+    else if (!ORIGIN_USED_IN_PATTERN.test(usedIn))
+      errors.originUsedIn = getRuleMessage('pattern', FIELD_LABEL.originUsedIn);
+  }
 
   const environments = validateEnvironments(values.environments);
   if (environments.group) errors.environments = environments.group;

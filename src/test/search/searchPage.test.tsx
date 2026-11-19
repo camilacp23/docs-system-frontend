@@ -67,13 +67,14 @@ describe('text', () => {
     expect(api.listCalls()).toHaveLength(1);
   });
 
-  it('searches when the user presses the Search button', async () => {
+  it('searches at once when the user presses Enter (there is no Search button)', async () => {
     const user = setupUser();
     const { router } = await renderSearch();
     await user.click(searchBox());
     await user.paste('variable');
-    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await user.keyboard('{Enter}');
     expect(router.state.location.search).toBe('?q=variable');
+    expect(screen.queryByRole('button', { name: 'Search' })).not.toBeInTheDocument();
   });
 
   it('searches by itself after a pause of 300 ms while the user types', async () => {

@@ -62,7 +62,7 @@ describe('dashboard: Generate report', () => {
 
     await user.type(dialog.getByRole('textbox', { name: /Title/ }), 'SAR documentation status');
     await user.click(dialog.getByRole('button', { name: 'Variables' }));
-    await user.click(dialog.getByRole('button', { name: 'Generate' }));
+    await user.click(dialog.getByRole('button', { name: 'Create report' }));
 
     expect(reportsApi?.callsTo('POST /reports/pdf')).toHaveLength(1);
     expect(reportsApi?.callsTo('POST /reports/pdf')[0]?.options.body).toMatchObject({
@@ -87,7 +87,7 @@ describe('dashboard: Generate report', () => {
     await user.click(screen.getByRole('button', { name: 'Generate report' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Generate report' }));
 
-    await user.click(dialog.getByRole('button', { name: 'Generate' }));
+    await user.click(dialog.getByRole('button', { name: 'Create report' }));
 
     expect(dialog.getByText('2 fields need attention.')).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/dashboard');
@@ -105,7 +105,7 @@ describe('dashboard: Generate report', () => {
 
     await user.type(dialog.getByRole('textbox', { name: /Title/ }), 'Archived');
     await user.click(dialog.getByRole('button', { name: 'Collections' }));
-    await user.click(dialog.getByRole('button', { name: 'Generate' }));
+    await user.click(dialog.getByRole('button', { name: 'Create report' }));
 
     expect(reportsApi?.callsTo('POST /reports/pdf')).toHaveLength(1);
     expect(await screen.findByRole('heading', { name: 'Reports', level: 1 })).toBeInTheDocument();

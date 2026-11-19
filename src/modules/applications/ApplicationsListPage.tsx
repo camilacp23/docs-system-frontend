@@ -1,9 +1,9 @@
 // ApplicationsListPage: /admin/applications, "Applications" (S-07). Administrator only: the route guard shows S-41b to
 // the other roles, and the API answers 403 whatever the client does (NFR-03). Developers and Readers choose an
 // application from the selector of the sidebar only.
-// Page header with the counts ("3 applications · 1 archived", taken from the applications the shell already holds,
-// so they follow every change) and "Register application", the filter bar (search by name, status), the table and
-// the pagination. Search, status and page live in the URL (useApplicationListParams); the API orders by name.
+// The hero of the redesigned pages in forest green with the counts ("3 applications · 1 archived", taken from the applications the shell
+// already holds, so they follow every change) and "Register" (named "Register application"), one "List" card with the filter
+// strip (search by name, status), the table and the pagination. Search, status and page live in the URL (useApplicationListParams); the API orders by name.
 // Registering and editing happen in a modal (ApplicationFormModal); the name of a row opens the edit form. After a
 // write the list is read again and the applications of the shell are refreshed in place (selector, application card,
 // archived strip), without reloading the page. The register modal is part of the URL (?new=1).
@@ -13,7 +13,7 @@
 // application selected in the sidebar makes the archived strip appear on every other page at once.
 // Loading shows a skeleton only after 300 ms (Table 58); an empty list offers "Clear filters" when filters are set;
 // a failure shows the server error state with a retry.
-import { Archive, ArchiveRestore, LayoutGrid, Pencil, Plus, X } from 'lucide-react';
+import { Archive, ArchiveRestore, Blocks, ListFilter, Pencil, Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import { useSearchParams } from 'react-router';
 
@@ -27,9 +27,10 @@ import {
   EmptyState,
   ErrorState,
   ICON_STROKE_WIDTH,
-  PageHeader,
+  PageHero,
   Pagination,
   SLOW_LOADING_MESSAGE,
+  ToneCard,
   useDelayedLoading,
   useToast,
 } from '../../components/ui';
@@ -113,30 +114,50 @@ export function ApplicationsListPage() {
 
   return (
     <>
-      <PageHeader
-        icon={<LayoutGrid size={20} strokeWidth={ICON_STROKE_WIDTH} />}
+      <PageHero
+        tone="apps"
+        icon={<Blocks size={20} strokeWidth={ICON_STROKE_WIDTH} />}
         title="Applications"
         description={
-          shellStatus === 'ready' ? countText(applications.length, archivedCount) : undefined
+          shellStatus === 'ready'
+            ? countText(applications.length, archivedCount)
+            : 'The applications the department documents.'
         }
         actions={
           <Button
+            size="sm"
             variant="primary"
             disabled={blocked}
             title={reason ?? undefined}
+            aria-label="Register application"
             iconLeft={<Plus aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
             onClick={() => {
               setRegistering(true);
             }}
           >
-            Register application
+            Register
           </Button>
         }
       />
 
-      <section
-        aria-label="Application list"
-        className="overflow-hidden rounded-card border border-border-subtle bg-surface shadow-card"
+      <ToneCard
+        title="List"
+        tone="apps"
+        icon={<ListFilter size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+        description="Search and filter the applications"
+        actions={
+          hasFilters && total > 0 ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              iconLeft={<X aria-hidden="true" size={14} strokeWidth={ICON_STROKE_WIDTH} />}
+              onClick={clearFilters}
+            >
+              Clear filters
+            </Button>
+          ) : undefined
+        }
+        flush
       >
         <ApplicationFilters params={params} setParams={setParams} />
         {list.status === 'error' ? (
@@ -147,39 +168,41 @@ export function ApplicationsListPage() {
             onAction={list.reload}
           />
         ) : list.status === 'ready' && total === 0 ? (
-          hasFilters ? (
-            <EmptyState
-              icon={<LayoutGrid />}
-              title="No results"
-              description="No applications match these filters."
-              action={
-                <Button
-                  variant="primary"
-                  iconLeft={<X aria-hidden="true" size={14} strokeWidth={ICON_STROKE_WIDTH} />}
-                  onClick={clearFilters}
-                >
-                  Clear filters
-                </Button>
-              }
-            />
-          ) : (
-            <EmptyState
-              icon={<LayoutGrid />}
-              title="No applications yet"
-              description="Register the first application to start documenting it."
-              action={
-                <Button
-                  variant="primary"
-                  disabled={blocked}
-                  onClick={() => {
-                    setRegistering(true);
-                  }}
-                >
-                  Register application
-                </Button>
-              }
-            />
-          )
+          <div className="border-t border-border-subtle">
+            {hasFilters ? (
+              <EmptyState
+                icon={<Blocks />}
+                title="No results"
+                description="No applications match these filters."
+                action={
+                  <Button
+                    variant="primary"
+                    iconLeft={<X aria-hidden="true" size={14} strokeWidth={ICON_STROKE_WIDTH} />}
+                    onClick={clearFilters}
+                  >
+                    Clear filters
+                  </Button>
+                }
+              />
+            ) : (
+              <EmptyState
+                icon={<Blocks />}
+                title="No applications yet"
+                description="Register the first application to start documenting it."
+                action={
+                  <Button
+                    variant="primary"
+                    disabled={blocked}
+                    onClick={() => {
+                      setRegistering(true);
+                    }}
+                  >
+                    Register application
+                  </Button>
+                }
+              />
+            )}
+          </div>
         ) : (
           <>
             <ApplicationTable
@@ -190,6 +213,7 @@ export function ApplicationsListPage() {
               renderActions={(row) => (
                 <ActionMenu
                   label={`Actions for ${row.name}`}
+                  buttonLabel="Actions"
                   items={[
                     {
                       key: 'edit',
@@ -246,7 +270,7 @@ export function ApplicationsListPage() {
             />
           </>
         )}
-      </section>
+      </ToneCard>
 
       {editing !== null && (
         <ApplicationFormModal

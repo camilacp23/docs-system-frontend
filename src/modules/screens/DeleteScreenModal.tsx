@@ -15,7 +15,6 @@ import { useState } from 'react';
 import { getErrorMessage, getThrownMessage } from '../../api/messages';
 import { useApi } from '../../api/useApi';
 import { useApiResource } from '../../api/useApiResource';
-import { notifyScreensChanged } from '../../application/useScreenCount';
 import { Banner, Button, ICON_STROKE_WIDTH, Modal, Spinner, useToast } from '../../components/ui';
 import { useWriteBlock } from '../../hooks/useWriteBlock';
 import { DeleteImpactBody } from '../shared/DeleteImpactBody';
@@ -63,7 +62,6 @@ export function DeleteScreenModal({ screen, onClose, onDeleted }: DeleteScreenMo
         message: `${screen.name} deleted.`,
         description: 'The audit log keeps a record of everything deleted.',
       });
-      notifyScreensChanged();
       onDeleted();
     } catch (thrown) {
       setFailure(getThrownMessage(thrown, { element: 'screen', action: 'delete' }));

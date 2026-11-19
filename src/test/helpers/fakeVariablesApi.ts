@@ -67,6 +67,7 @@ export function makeVariable(
     fullTraceability: false,
     environments: ['DEV'],
     description: null,
+    originUsedIn: null,
     environmentDetails: [{ environment: 'DEV', notes: null }],
     createdAt: '2026-10-01T09:00:00.000Z',
     updatedAt: '2026-10-01T09:00:00.000Z',
@@ -175,6 +176,21 @@ export function makeVariablesApi(
   }
 
   function applyWrite(current: Variable, body: VariableWrite): Variable {
+    // Contract 0.5.0: where it is created needs the origin screen (400, rule `requires`); empty is null, never "".
+    if (body.originScreenId == null && body.originUsedIn != null) {
+      throw new ApiError({
+        status: 400,
+        code: 'VALIDATION_ERROR',
+        details: { fields: [{ field: 'originUsedIn', rule: 'requires', message: 'x' }] },
+      });
+    }
+    if (body.originUsedIn === '') {
+      throw new ApiError({
+        status: 400,
+        code: 'VALIDATION_ERROR',
+        details: { fields: [{ field: 'originUsedIn', rule: 'pattern', message: 'x' }] },
+      });
+    }
     const originScreen =
       body.originScreenId == null
         ? null
@@ -187,6 +203,7 @@ export function makeVariablesApi(
       description: body.description ?? null,
       originScreen: originScreen && { id: originScreen.id, name: originScreen.name },
       fullTraceability: originScreen !== null,
+      originUsedIn: originScreen === null ? null : (body.originUsedIn ?? null),
       environments: body.environments.map((e) => e.environment),
       environmentDetails: body.environments.map((e) => ({
         environment: e.environment,

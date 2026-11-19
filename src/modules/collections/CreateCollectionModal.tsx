@@ -149,9 +149,10 @@ export function CreateCollectionModal({ onClose, onCreated }: CreateCollectionMo
               loading={saving}
               disabled={blocked}
               aria-describedby={reason ? reasonId : undefined}
+              aria-label="Create collection"
               iconLeft={<Plus aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
             >
-              Create collection
+              Create
             </Button>
           </span>
         </div>

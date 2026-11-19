@@ -1,17 +1,16 @@
 // ScreensListPage: /screens (S-18; the Reader gets no row actions).
-// Page header with the counts ("5 screens · 1 approved"), filter bar, table and pagination. Filters, sort and
+// Page header (title, subtitle, "View on map" and "New"), the four counters (ScreenKpis), filter strip, table and pagination. Filters, sort and
 // page live in the URL (useScreenListParams), so the list can be shared; changing the application resets them.
 // App (OnStart) is always the first row (the API puts it there) with the "Reserved" tag. Loading shows a skeleton
 // only after 300 ms (Table 58); an empty list offers "Clear filters" when filters are set; a failure shows the
 // server error state with a retry. The page subtitle says why writing is disabled when the application is
-// archived (S-09b): the counts stay and the reason follows them. The counts line is never blank: a skeleton while
-// they load, "Couldn't load the counts." with a retry if they fail.
+// archived (S-09b). The counters show a dash while they load or if they cannot be read; the list keeps working either way.
 // The row menu (Administrator and Developer) has View, Edit and Delete; Edit is disabled with the reason when the
 // screen is in review, the application is archived or the browser is offline (editBlockReason); Delete also when the
 // screen is App (OnStart) (deleteBlockReason); the API stays the authority. After a deletion the list and the counts are read again.
 // "New screen" (Administrator and Developer) opens the creation modal (?new=1); it is disabled with the reason
 // when the application is archived or the browser is offline (useWriteBlock).
-import { Eye, ListFilter, Monitor, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Eye, ListFilter, Monitor, Network, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 
@@ -21,23 +20,23 @@ import { useApplication } from '../../application/useApplication';
 import {
   ActionMenu,
   Button,
+  ButtonLink,
   EmptyState,
   ErrorState,
   ICON_STROKE_WIDTH,
-  PageHeader,
+  PageHero,
   Pagination,
-  SectionCard,
   SLOW_LOADING_MESSAGE,
-  Skeleton,
+  ToneCard,
   useDelayedLoading,
 } from '../../components/ui';
 import { ARCHIVED_WRITE_REASON, useWriteBlock } from '../../hooks/useWriteBlock';
 import { useCurrentUser } from '../../session/useCurrentUser';
-import { countText } from '../variables/variableLabels';
 
 import { CreateScreenModal } from './CreateScreenModal';
 import { DeleteScreenModal } from './DeleteScreenModal';
 import { ScreenFilters } from './ScreenFilters';
+import { ScreenKpis } from './ScreenKpis';
 import { ScreenTable } from './ScreenTable';
 import { deleteBlockReason, editBlockReason } from './screenActionBlock';
 import type { ScreenSummary } from './screenTypes';
@@ -109,54 +108,50 @@ function ScreensList() {
 
   return (
     <>
-      <PageHeader
+      <PageHero
+        tone="screen"
         icon={<Monitor size={20} strokeWidth={ICON_STROKE_WIDTH} />}
         title="Screens"
         description={
-          <>
-            {counts.status === 'error' ? (
-              <span>
-                Couldn&apos;t load the counts.{' '}
-                <button
-                  type="button"
-                  className="rounded-chip font-semibold text-primary hover:underline"
-                  onClick={counts.reload}
-                >
-                  Try again
-                </button>
-              </span>
-            ) : counts.data === null ? (
-              <Skeleton className="mt-1.5 h-4 w-56" />
-            ) : (
-              <span>
-                {countText(counts.data.total, 'screen')} · {counts.data.approved} approved
-              </span>
-            )}
-            {archived && <span> · {ARCHIVED_WRITE_REASON}</span>}
-          </>
+          archived
+            ? ARCHIVED_WRITE_REASON
+            : `Screens of ${applicationName}, their template and the variables and collections they use.`
         }
         actions={
-          canWrite && (
-            <Button
-              variant="primary"
-              disabled={blocked}
-              title={reason ?? undefined}
-              iconLeft={<Plus aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
-              onClick={() => {
-                setCreating(true);
-              }}
+          <>
+            <ButtonLink
+              size="sm"
+              to="/dependency-map"
+              iconLeft={<Network aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
             >
-              New screen
-            </Button>
-          )
+              View on map
+            </ButtonLink>
+            {canWrite && (
+              <Button
+                size="sm"
+                variant="primary"
+                disabled={blocked}
+                title={reason ?? undefined}
+                aria-label="New screen"
+                iconLeft={<Plus aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+                onClick={() => {
+                  setCreating(true);
+                }}
+              >
+                New
+              </Button>
+            )}
+          </>
         }
       />
 
-      <SectionCard
-        title="Screen list"
+      <ScreenKpis counts={counts.data} />
+
+      <ToneCard
+        title="List"
+        tone="screen"
         icon={<ListFilter size={16} strokeWidth={ICON_STROKE_WIDTH} />}
         description="Search, filter and sort the screens of this application"
-        count={list.status === 'ready' ? total : null}
         actions={
           hasFilters && total > 0 ? (
             <Button
@@ -218,6 +213,7 @@ function ScreensList() {
                       return (
                         <ActionMenu
                           label={`Actions for ${row.name}`}
+                          buttonLabel="Actions"
                           items={[
                             {
                               key: 'view',
@@ -274,7 +270,7 @@ function ScreensList() {
             />
           </>
         )}
-      </SectionCard>
+      </ToneCard>
 
       {deleting !== null && (
         <DeleteScreenModal

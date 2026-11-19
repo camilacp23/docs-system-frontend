@@ -75,14 +75,14 @@ describe('who can decide', () => {
     }
   });
 
-  it('puts Approve as the primary button after the disabled Edit (S-25b)', async () => {
+  it('puts Approve as the last, primary button of the group and draws no Edit or Delete for a screen in review', async () => {
     await open();
 
     const names = screen.getAllByRole('button').map((button) => button.textContent);
-    const edit = names.indexOf('Edit');
-    expect(names.indexOf('Return')).toBeGreaterThan(edit);
-    expect(names.indexOf('Approve')).toBeGreaterThan(names.indexOf('Return'));
-    expect(screen.getByRole('button', { name: 'Edit' })).toBeDisabled();
+    expect(names.indexOf('Withdraw from review')).toBeLessThan(names.indexOf('Return'));
+    expect(names.indexOf('Return')).toBeLessThan(names.indexOf('Approve'));
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
   });
 });
 
@@ -164,8 +164,7 @@ describe('Approve (S-37c)', () => {
     await user.click(dialog.getByRole('button', { name: 'Approve' }));
     await screen.findByText('Detalle approved.');
 
-    await user.click(screen.getByRole('button', { name: 'More actions' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Reopen' }));
+    await user.click(screen.getByRole('button', { name: 'Reopen' }));
 
     expect(
       await screen.findByText('Detalle reopened. Its status is now In progress.'),

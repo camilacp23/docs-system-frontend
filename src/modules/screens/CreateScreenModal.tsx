@@ -6,15 +6,15 @@
 // Client checks cover only what the contract declares; every other rule is the server's and its error is shown on
 // the exact field (DUPLICATE_NAME and the format of the link). Saving is disabled with the reason when the
 // application is archived or the browser is offline. On success the page goes to the new screen and a toast says
-// "<name> created.".
-import { Info, Layers, Link2, Monitor, Plus } from 'lucide-react';
+// "<name> created.". The layout is the one of the New variable modal: wide, two columns of headed groups (Basics on the
+// left; Template and Status on the right).
+import { GitBranch, Info, Layers, Link2, ListTree, Monitor, Plus } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 
 import { isApiError } from '../../api/ApiError';
 import { useApi } from '../../api/useApi';
-import { notifyScreensChanged } from '../../application/useScreenCount';
 import { useApplication } from '../../application/useApplication';
 import {
   Banner,
@@ -26,6 +26,7 @@ import {
   useToast,
 } from '../../components/ui';
 import { useWriteBlock } from '../../hooks/useWriteBlock';
+import { ModalGroup } from '../shared/ModalGroup';
 import { focusFirstInvalid } from '../variables/focusFirstInvalid';
 
 import { mapScreenError } from './screenErrors';
@@ -86,7 +87,6 @@ export function CreateScreenModal({ onClose }: CreateScreenModalProps) {
       });
       const { id, name } = created.data;
       toast.show({ message: `${name} created.` });
-      notifyScreensChanged();
       void navigate(`/screens/${id}`);
     } catch (thrown) {
       if (isApiError(thrown)) fail(mapScreenError(thrown));
@@ -102,7 +102,7 @@ export function CreateScreenModal({ onClose }: CreateScreenModalProps) {
       onClose={() => {
         if (!saving) onClose();
       }}
-      size="md"
+      size="xl"
       initialFocusRef={nameRef}
       icon={<Monitor size={16} strokeWidth={ICON_STROKE_WIDTH} />}
       title={
@@ -146,9 +146,10 @@ export function CreateScreenModal({ onClose }: CreateScreenModalProps) {
               loading={saving}
               disabled={blocked}
               aria-describedby={reason ? reasonId : undefined}
+              aria-label="Create screen"
               iconLeft={<Plus aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
             >
-              Create screen
+              Create
             </Button>
           </span>
         </div>
@@ -161,82 +162,94 @@ export function CreateScreenModal({ onClose }: CreateScreenModalProps) {
         onSubmit={(event) => {
           void submit(event);
         }}
-        className="flex flex-col gap-5"
+        className="flex flex-col gap-4"
       >
         {errors.form && <Banner tone="danger">{errors.form}</Banner>}
-        <FormField
-          label={FIELD_LABEL.name}
-          required
-          error={errors.name}
-          help={
-            <span className="flex justify-between gap-2">
-              <span>Unique in {applicationName}</span>
-              <span aria-hidden="true">
-                {values.name.length}/{NAME_MAX_LENGTH}
-              </span>
-            </span>
-          }
-        >
-          {(control) => (
-            <TextField
-              {...control}
-              ref={nameRef}
-              mono
-              autoComplete="off"
-              spellCheck={false}
-              disabled={saving}
-              value={values.name}
-              onChange={(event) => {
-                setValues({ ...values, name: event.target.value });
-              }}
-            />
-          )}
-        </FormField>
-        <FormField
-          label={FIELD_LABEL.miroLink}
-          error={errors.miroLink}
-          help="Optional · https only"
-        >
-          {(control) => (
-            <TextField
-              {...control}
-              type="url"
-              icon={<Link2 size={16} strokeWidth={ICON_STROKE_WIDTH} />}
-              placeholder="https://miro.com/app/board/…"
-              autoComplete="off"
-              spellCheck={false}
-              maxLength={MIRO_LINK_MAX_LENGTH}
-              disabled={saving}
-              value={values.miroLink}
-              onChange={(event) => {
-                setValues({ ...values, miroLink: event.target.value });
-              }}
-            />
-          )}
-        </FormField>
-        <section
-          aria-label="Template"
-          className="flex flex-col gap-3 rounded-card bg-search-bg p-4 text-small text-ink-500"
-        >
-          <h3 className="flex items-center gap-2 text-label font-semibold text-ink-900">
-            <Layers aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />
-            Template · {TEMPLATE_FIELDS.length} fields
-          </h3>
-          <p>
-            You complete them in the screen detail. The screen stays Undocumented until a field has
-            content, then it becomes Draft. All seven are required to submit for review.
-          </p>
-          <ul aria-label="Template fields" className="flex flex-wrap gap-2">
-            {TEMPLATE_FIELDS.map((field) => (
-              <li
-                key={field.key}
-                className="rounded-pill border border-border-subtle bg-surface px-2.5 py-0.5 text-label text-ink-900"
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-x-8">
+          <ModalGroup title="Basics" icon={<ListTree size={13} strokeWidth={ICON_STROKE_WIDTH} />}>
+            <div className="flex flex-col gap-4">
+              <FormField
+                label={FIELD_LABEL.name}
+                required
+                error={errors.name}
+                help={
+                  <span className="flex justify-between gap-2">
+                    <span>Unique in {applicationName}</span>
+                    <span aria-hidden="true">
+                      {values.name.length}/{NAME_MAX_LENGTH}
+                    </span>
+                  </span>
+                }
               >
-                {field.label}
-              </li>
-            ))}
-          </ul>
-        </section>
+                {(control) => (
+                  <TextField
+                    {...control}
+                    ref={nameRef}
+                    mono
+                    autoComplete="off"
+                    spellCheck={false}
+                    disabled={saving}
+                    value={values.name}
+                    onChange={(event) => {
+                      setValues({ ...values, name: event.target.value });
+                    }}
+                  />
+                )}
+              </FormField>
+              <FormField
+                label={FIELD_LABEL.miroLink}
+                error={errors.miroLink}
+                help="Optional · https only"
+              >
+                {(control) => (
+                  <TextField
+                    {...control}
+                    type="url"
+                    icon={<Link2 size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+                    placeholder="https://miro.com/app/board/…"
+                    autoComplete="off"
+                    spellCheck={false}
+                    maxLength={MIRO_LINK_MAX_LENGTH}
+                    disabled={saving}
+                    value={values.miroLink}
+                    onChange={(event) => {
+                      setValues({ ...values, miroLink: event.target.value });
+                    }}
+                  />
+                )}
+              </FormField>
+            </div>
+          </ModalGroup>
+          <div className="flex flex-col gap-5 border-t border-divider pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-8">
+            <ModalGroup
+              title="Template"
+              icon={<Layers size={13} strokeWidth={ICON_STROKE_WIDTH} />}
+            >
+              <p className="text-small text-ink-500">
+                {TEMPLATE_FIELDS.length} fields. You complete them in the screen detail; all seven
+                are required to submit for review.
+              </p>
+              <ul aria-label="Template fields" className="flex flex-wrap gap-2">
+                {TEMPLATE_FIELDS.map((field) => (
+                  <li
+                    key={field.key}
+                    className="rounded-pill border border-border-subtle bg-search-bg px-2.5 py-0.5 text-label text-ink-900"
+                  >
+                    {field.label}
+                  </li>
+                ))}
+              </ul>
+            </ModalGroup>
+            <ModalGroup
+              title="Status"
+              icon={<GitBranch size={13} strokeWidth={ICON_STROKE_WIDTH} />}
+            >
+              <p className="text-small text-ink-500">
+                The screen stays Undocumented until a field has content, then it becomes Draft.
+              </p>
+            </ModalGroup>
+          </div>
+        </div>
       </form>
     </Modal>
   );

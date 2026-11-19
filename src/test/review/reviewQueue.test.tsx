@@ -64,26 +64,22 @@ describe('the queue', () => {
     expect(await screen.findByText('1 screen waiting for a decision · oldest first')).toBeVisible();
   });
 
-  it('writes the row as the author and how long it has been in review, never "Submitted by"', async () => {
+  it('writes the row as the author and the comments (the time in review is in the panel), never "Submitted by"', async () => {
     await openReview();
 
     const [reportes, busqueda, detalle] = rowButtons() as [HTMLElement, HTMLElement, HTMLElement];
-    expect(reportes).toHaveTextContent(
-      'ReportesAuthor: Sample Developer A · In review since 4 days ago0 comments',
-    );
-    expect(busqueda).toHaveTextContent(
-      'BusquedaAuthor: Sample Developer B · In review since 3 days ago2 comments',
-    );
-    expect(detalle).toHaveTextContent(
-      'DetalleAuthor: Sample Developer A · In review since 2 days ago4 comments',
-    );
+    expect(reportes).toHaveTextContent('ReportesAuthor: Sample Developer A0 comments');
+    expect(busqueda).toHaveTextContent('BusquedaAuthor: Sample Developer B2 comments');
+    expect(detalle).toHaveTextContent('DetalleAuthor: Sample Developer A4 comments');
     expect(screen.queryByText(/Submitted by/)).not.toBeInTheDocument();
   });
 
   it('keeps the exact date and time of updatedAt as the title of the relative time', async () => {
     await openReview();
 
-    const time = within(rowButtons()[0] as HTMLElement).getByText('4 days ago');
+    await screen.findByRole('heading', { name: 'Reportes', level: 2 });
+    expect(within(rowButtons()[0] as HTMLElement).queryByText(/days ago/)).not.toBeInTheDocument();
+    const time = screen.getByText('4 days ago');
     expect(time.tagName).toBe('TIME');
     expect(time).toHaveAttribute('title', '2026-10-02 09:00');
     expect(time).toHaveAttribute('datetime', '2026-10-02T09:00:00');

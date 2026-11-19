@@ -12,9 +12,9 @@ import {
   Banner,
   Button,
   ICON_STROKE_WIDTH,
-  SectionCard,
   Skeleton,
   Tag,
+  ToneCard,
   useDelayedLoading,
 } from '../../components/ui';
 import { ACCESS_MODE_LABEL } from '../dependency-map/graphLabels';
@@ -34,10 +34,10 @@ export function UsedByScreensCard({ collectionId }: { collectionId: number }) {
   const groups = screens.status === 'ready' ? (screens.data ?? []) : [];
 
   return (
-    <SectionCard
+    <ToneCard
       title="Used by screens"
       icon={<Monitor size={16} strokeWidth={ICON_STROKE_WIDTH} />}
-      tone="neutral"
+      tone="screen"
       actions={
         screens.status === 'ready' ? (
           <span className="text-small text-ink-500">{groups.length} · edited in each screen</span>
@@ -122,6 +122,6 @@ export function UsedByScreensCard({ collectionId }: { collectionId: number }) {
             </table>
           </div>
         ))}
-    </SectionCard>
+    </ToneCard>
   );
 }

@@ -21,7 +21,6 @@ describe('collection detail: overview', () => {
     await open();
     await ready();
 
-    expect(screen.getByText('Updated 2026-10-02 14:31')).toBeInTheDocument();
     const tabs = screen.getByRole('tablist', { name: 'Collection sections' });
     expect(within(tabs).getByRole('tab', { name: 'Overview' })).toHaveAttribute(
       'aria-selected',
@@ -33,6 +32,7 @@ describe('collection detail: overview', () => {
     ).toHaveClass('font-mono');
 
     const details = screen.getByRole('region', { name: 'Details' });
+    expect(within(details).getByText('2026-10-02 14:31')).toBeInTheDocument();
     expect(within(details).getByText('Active clients shown on the home gallery.')).toBeVisible();
     expect(within(details).getByText('Yes')).toBeInTheDocument();
     expect(within(details).getByRole('link', { name: 'colUsuarios' })).toHaveAttribute(

@@ -78,6 +78,7 @@ export function CollectionEditPage() {
   const { blocked, reason } = useWriteBlock();
   const { applications, currentApplication } = useApplication();
   const reasonId = useId();
+  const formId = useId();
   const formRef = useRef<HTMLFormElement>(null);
   const errorBannerRef = useRef<HTMLDivElement>(null);
 
@@ -233,7 +234,28 @@ export function CollectionEditPage() {
           </>
         }
         description="Update the details below and save your changes."
+        actions={
+          <>
+            <ButtonLink to={`/collections/${loaded.id}`}>Cancel</ButtonLink>
+            <Button
+              type="submit"
+              form={formId}
+              variant="primary"
+              loading={saving}
+              disabled={blocked || conflict !== null}
+              aria-describedby={saveReason ? reasonId : undefined}
+              aria-label="Save changes"
+            >
+              Save
+            </Button>
+          </>
+        }
       />
+      {saveReason && (
+        <p id={reasonId} className="-mt-2 text-right text-small text-warning-ink">
+          {saveReason}
+        </p>
+      )}
 
       {conflict !== null && !conflictHidden && (
         <Banner
@@ -265,7 +287,7 @@ export function CollectionEditPage() {
               tone="danger"
               lead={`${summary.length} ${summary.length === 1 ? 'field needs' : 'fields need'} attention.`}
             >
-              <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+              <ul className="inline-flex flex-wrap items-baseline gap-x-4 gap-y-1">
                 {summary.map((entry, index) => (
                   <li key={`${entry.label}-${index}`}>
                     <button
@@ -286,6 +308,7 @@ export function CollectionEditPage() {
       )}
 
       <form
+        id={formId}
         ref={formRef}
         noValidate
         onSubmit={(event) => {
@@ -367,23 +390,6 @@ export function CollectionEditPage() {
               loading={collections.loading}
             />
           </PageBand>
-        </div>
-        <div className="flex items-center justify-end gap-3">
-          {saveReason && (
-            <p id={reasonId} className="mr-auto text-small text-warning-ink">
-              {saveReason}
-            </p>
-          )}
-          <ButtonLink to={`/collections/${loaded.id}`}>Cancel</ButtonLink>
-          <Button
-            type="submit"
-            variant="primary"
-            loading={saving}
-            disabled={blocked || conflict !== null}
-            aria-describedby={saveReason ? reasonId : undefined}
-          >
-            Save changes
-          </Button>
         </div>
       </form>
     </>

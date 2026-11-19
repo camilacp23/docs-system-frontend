@@ -1,5 +1,6 @@
 // reviewTexts: the fixed texts of the review queue (frame S-36) and the ones derived from it (DESIGN_REFERENCE §9).
 export const REVIEW_TITLE = 'Review';
+export const WRITE_REASON_ID = 'review-write-reason';
 export const WAITING_TITLE = 'Waiting';
 export const QUEUE_LABEL = 'Screens waiting for review';
 export const LOAD_MORE_LABEL = 'Load more';

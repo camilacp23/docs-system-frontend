@@ -9,7 +9,7 @@
 // (/dev/dashboard) gives it test data so the design can be photographed.
 // Layout (SDD 7.3.7): it answers to the width of its container: from 900 px the blocks are in two columns as in the
 // frame S-31, and the row of figures is one row from 940 px (see KpiCards).
-import { ChartPie, Database, FileText, History, ListTodo, RefreshCw } from 'lucide-react';
+import { ChartPie, Clock, Database, FileText, History, ListTodo, RefreshCw } from 'lucide-react';
 import { Link } from 'react-router';
 
 import {
@@ -19,8 +19,6 @@ import {
   ButtonLink,
   EmptyState,
   ICON_STROKE_WIDTH,
-  PageHeader,
-  SectionCard,
   Skeleton,
 } from '../../components/ui';
 import { clockOf } from '../audit/auditDates';
@@ -54,6 +52,9 @@ import {
   STATUS_FAILED_LEAD,
   STATUS_TITLE,
 } from './dashboardTexts';
+import { DashboardCard } from './DashboardCard';
+import { DashboardHero } from './DashboardHero';
+import { JiraSyncChip } from './JiraSyncChip';
 import { KpiCards } from './KpiCards';
 import { PendingBars } from './PendingBars';
 import { RecentActivity } from './RecentActivity';
@@ -64,9 +65,9 @@ const CARD_ICON = { size: 16, strokeWidth: ICON_STROKE_WIDTH } as const;
 // The skeleton of the row of figures has the same grid as the row (see KpiCards).
 const KPI_GRID =
   'grid grid-cols-6 gap-3.5 @min-[940px]:grid-cols-[minmax(0,1.35fr)_repeat(4,minmax(0,1fr))]';
-/** From 900 px of container the blocks are in two columns as in S-31; narrower, the status card goes across the page. */
+/** From 900 px of container: status and pending to-dos side by side (same height), recent activity across both; narrower, one column. */
 const BLOCKS_GRID =
-  'grid grid-cols-2 gap-3.5 @min-[900px]:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]';
+  'grid grid-cols-1 gap-3.5 @min-[900px]:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]';
 
 export interface DashboardViewProps {
   name: string;
@@ -111,16 +112,22 @@ export function DashboardView({
   // The wrapper is the container the layout answers to (@container): the width of the page, not of the window.
   return (
     <div className="@container flex flex-col gap-4">
-      <PageHeader
+      <DashboardHero
         title={heading}
         description={`Documentation health of ${applicationName}`}
+        corner={
+          read && (
+            <time
+              dateTime={read.readAt}
+              className="flex items-center gap-1 rounded-pill bg-accent-soft px-2 py-0.5 text-micro font-bold text-accent-ink"
+            >
+              <Clock aria-hidden="true" size={12} strokeWidth={ICON_STROKE_WIDTH} />
+              Updated {clockOf(read.readAt, timeZone)}
+            </time>
+          )
+        }
         actions={
           <>
-            {read && (
-              <time dateTime={read.readAt} className="text-small font-bold text-ink-500">
-                Updated {clockOf(read.readAt, timeZone)}
-              </time>
-            )}
             <Button
               size="sm"
               iconLeft={<RefreshCw size={16} strokeWidth={ICON_STROKE_WIDTH} />}
@@ -132,6 +139,7 @@ export function DashboardView({
             {onGenerateReport && (
               <Button
                 size="sm"
+                variant="primary"
                 disabled={generateDisabledReason !== null}
                 title={generateDisabledReason ?? undefined}
                 iconLeft={<FileText aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
@@ -178,7 +186,7 @@ export function DashboardView({
       )}
 
       <div className={BLOCKS_GRID}>
-        <SectionCard
+        <DashboardCard
           title={STATUS_TITLE}
           icon={<ChartPie {...CARD_ICON} />}
           description={
@@ -186,7 +194,6 @@ export function DashboardView({
               ? `${screensText(read.indicators.documentation.totalScreens)} · App (OnStart) included`
               : undefined
           }
-          className="col-span-2 @min-[900px]:col-span-1 @min-[900px]:row-span-2"
         >
           {failedIndicators ? (
             <BlockError
@@ -219,12 +226,19 @@ export function DashboardView({
               <Skeleton className="h-55 w-full" />
             </BlockLoading>
           )}
-        </SectionCard>
+        </DashboardCard>
 
-        <SectionCard
+        <DashboardCard
           title={PENDING_TITLE}
           icon={<ListTodo {...CARD_ICON} />}
           description={PENDING_SUBTITLE}
+          tone="jira"
+          actions={
+            read?.indicators.jira.jiraAvailable ? (
+              <JiraSyncChip lastSyncedAt={read.indicators.jira.lastSyncedAt} timeZone={timeZone} />
+            ) : undefined
+          }
+          centered
         >
           {top.status === 'error' ? (
             <BlockError lead={PENDING_FAILED_LEAD} error={top.error} onRetry={top.reload} />
@@ -237,13 +251,15 @@ export function DashboardView({
               <Skeleton className="h-3 w-1/3" />
             </BlockLoading>
           )}
-        </SectionCard>
+        </DashboardCard>
 
         {/* The key is absent for a Reader: then there is no card at all, and no link to the audit log. */}
         {showActivity && (
-          <SectionCard
+          <DashboardCard
             title={ACTIVITY_TITLE}
             icon={<History {...CARD_ICON} />}
+            tone="teal"
+            className="@min-[900px]:col-span-2"
             actions={
               <Link
                 to={AUDIT_HREF}
@@ -268,7 +284,7 @@ export function DashboardView({
                 <Skeleton className="h-8 w-full" />
               </BlockLoading>
             )}
-          </SectionCard>
+          </DashboardCard>
         )}
       </div>
     </div>

@@ -18,10 +18,10 @@ import {
   EmptyState,
   ErrorState,
   ICON_STROKE_WIDTH,
-  PageHeader,
+  PageHero,
   Pagination,
-  SectionCard,
   SLOW_LOADING_MESSAGE,
+  ToneCard,
   useDelayedLoading,
 } from '../../components/ui';
 import { ARCHIVED_WRITE_REASON } from '../../hooks/useWriteBlock';
@@ -106,7 +106,8 @@ function VariablesList() {
 
   return (
     <>
-      <PageHeader
+      <PageHero
+        tone="variable"
         icon={<Braces size={20} strokeWidth={ICON_STROKE_WIDTH} />}
         title="Variables"
         description={
@@ -117,6 +118,7 @@ function VariablesList() {
         actions={
           <>
             <ButtonLink
+              size="sm"
               to="/dependency-map"
               iconLeft={<Network aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
             >
@@ -124,15 +126,17 @@ function VariablesList() {
             </ButtonLink>
             {canWrite && (
               <Button
+                size="sm"
                 variant="primary"
                 disabled={archived}
                 title={archived ? ARCHIVED_WRITE_REASON : undefined}
+                aria-label="New variable"
                 iconLeft={<Plus aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
                 onClick={() => {
                   setCreating(true);
                 }}
               >
-                New variable
+                New
               </Button>
             )}
           </>
@@ -147,11 +151,11 @@ function VariablesList() {
         }}
       />
 
-      <SectionCard
-        title="Variable list"
+      <ToneCard
+        title="List"
+        tone="variable"
         icon={<ListFilter size={16} strokeWidth={ICON_STROKE_WIDTH} />}
         description="Search, filter and sort the variables of this application"
-        count={list.status === 'ready' ? total : null}
         actions={
           hasFilters && total > 0 ? (
             <Button
@@ -210,6 +214,7 @@ function VariablesList() {
                   ? (row) => (
                       <ActionMenu
                         label={`Actions for ${row.name}`}
+                        buttonLabel="Actions"
                         items={[
                           {
                             key: 'view',
@@ -265,7 +270,7 @@ function VariablesList() {
             />
           </>
         )}
-      </SectionCard>
+      </ToneCard>
 
       {deleting !== null && (
         <DeleteVariableModal

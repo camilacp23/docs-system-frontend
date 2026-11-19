@@ -1,9 +1,9 @@
 // AuditLogPage: /audit, "Audit log" (S-32, S-32d, S-32f; FR-20, FR-21, NFR-20). The Administrator sees every
 // record; the Developer only their own actions (the API enforces it, NFR-03); the Reader gets S-41b from the route
 // guard. Read-only: the page writes nothing.
-// A timeline grouped by local day (AuditTimeline) with the filter bar above it (AuditFilters), the "This period"
-// totals at the side (AuditTotals) and the pagination under the timeline. Every filter, the page and its size live in
-// the URL (useAuditListParams). Without dates the page applies Last 7 days and writes it to the URL. The days are the
+// The layout of the list pages: the hero in teal, four widgets (AuditTotals: created, updated, deleted, events) and one card
+// with the filter bar (AuditFilters, three captioned rows), the whole timeline grouped by local day (AuditTimeline) over the full
+// width and the pagination under it. Every filter, the page and its size live in the URL (useAuditListParams). Without dates the page applies Last 7 days and writes it to the URL. The days are the
 // browser's: "from" is the start of its day and "to" the end of its day, sent as ISO instants (auditDates).
 // An upside-down range is marked on "To" and nothing is asked; the API's 400 (`required` on the element type, `range`
 // on "to", `format`) is marked on the field it names. A Developer who opens a link to another user's actions gets
@@ -26,7 +26,7 @@ import {
   EmptyState,
   ErrorState,
   ICON_STROKE_WIDTH,
-  PageHeader,
+  PageHero,
   Pagination,
   SLOW_LOADING_MESSAGE,
   useDelayedLoading,
@@ -232,57 +232,56 @@ export function AuditLogPage() {
 
   return (
     <>
-      <PageHeader
+      <PageHero
+        tone="audit"
         icon={<History size={20} strokeWidth={ICON_STROKE_WIDTH} />}
         title="Audit log"
         description={description}
       />
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
-        <section
-          aria-label="Audit records"
-          className="overflow-hidden rounded-card border border-border-subtle bg-surface shadow-card"
-        >
-          <AuditFilters
-            params={params}
-            setParams={setParams}
-            range={range}
-            today={today}
-            applicationName={currentApplication?.name ?? null}
-            isDeveloper={isDeveloper}
-            errors={fieldErrors}
-          />
-          {content}
-          {showPagination && (
-            <Pagination
-              page={params.page}
-              pageSize={params.pageSize}
-              total={total}
-              disabled={list.loading}
-              onPageChange={(page) => {
-                setParams({ page });
-              }}
-              onPageSizeChange={(pageSize) => {
-                setParams({ pageSize });
-              }}
-            />
-          )}
-          {applicationId !== null && list.status !== 'error' && (
-            <p className="border-t border-divider px-5 py-3 text-small text-ink-500">
-              {CASCADE_NOTE}
-            </p>
-          )}
-        </section>
-        {!forbidden && (
-          <AuditTotals
-            base={base}
-            enabled={canAsk}
-            action={params.action}
-            onPickAction={(action) => {
-              setParams({ action });
+      {!forbidden && (
+        <AuditTotals
+          base={base}
+          enabled={canAsk}
+          action={params.action}
+          onPickAction={(action) => {
+            setParams({ action });
+          }}
+        />
+      )}
+      <section
+        aria-label="Audit records"
+        className="shrink-0 overflow-hidden rounded-modal border border-audit-border bg-surface shadow-card"
+      >
+        <AuditFilters
+          params={params}
+          setParams={setParams}
+          range={range}
+          today={today}
+          applicationName={currentApplication?.name ?? null}
+          isDeveloper={isDeveloper}
+          errors={fieldErrors}
+        />
+        {content}
+        {showPagination && (
+          <Pagination
+            page={params.page}
+            pageSize={params.pageSize}
+            total={total}
+            disabled={list.loading}
+            onPageChange={(page) => {
+              setParams({ page });
+            }}
+            onPageSizeChange={(pageSize) => {
+              setParams({ pageSize });
             }}
           />
         )}
-      </div>
+        {applicationId !== null && list.status !== 'error' && (
+          <p className="border-t border-audit-border/60 bg-audit-soft/40 px-5 py-3 text-small text-ink-500">
+            {CASCADE_NOTE}
+          </p>
+        )}
+      </section>
     </>
   );
 }

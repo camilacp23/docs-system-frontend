@@ -1,6 +1,7 @@
 // AuditUserFilter: the "User" filter of the audit log (S-32, S-32d).
 // Props: value (user id as text, '' = anyone), onChange(value), invalid, describedBy (id of its error text).
-// Administrator: a SearchPicker over GET /users that searches on the SERVER while the user types (`q`, after the
+// Administrator: a SearchPicker over GET /users, each option the initials, the name and the role (never the e-mail), that searches
+// on the SERVER while the user types (`q`, after the
 // same short pause as the other search boxes); inactive users are listed too, their history stays. A user id
 // that came from the URL and is not in the results is read with GET /users/{id} and shown by name, or as
 // "User #id" when it cannot be read.
@@ -10,7 +11,10 @@ import { useEffect, useState } from 'react';
 
 import { useApi } from '../../api/useApi';
 import { useApiResource } from '../../api/useApiResource';
-import { ICON_STROKE_WIDTH, SearchPicker, TextField } from '../../components/ui';
+import { UserRound } from 'lucide-react';
+
+import { ROLE_LABEL } from '../../app/router/routes';
+import { Avatar, ICON_STROKE_WIDTH, SearchPicker } from '../../components/ui';
 import type { SearchPickerOption } from '../../components/ui';
 import { SEARCH_DEBOUNCE_MS } from '../../hooks/useSearchDraft';
 
@@ -64,7 +68,12 @@ export function AuditUserFilter({ value, onChange, invalid, describedBy }: Audit
   const options: SearchPickerOption[] = [];
   if (typed === '') options.push({ value: ANYONE, label: 'Anyone' });
   for (const user of users)
-    options.push({ value: String(user.id), label: user.name, detail: user.email });
+    options.push({
+      value: String(user.id),
+      label: user.name,
+      detail: ROLE_LABEL[user.role],
+      leading: <Avatar name={user.name} decorative className="size-6 text-micro" />,
+    });
   if (typed === '' && value !== '' && chosen === undefined) {
     options.push({ value, label: chosenName });
   }
@@ -83,6 +92,8 @@ export function AuditUserFilter({ value, onChange, invalid, describedBy }: Audit
       filterOptions={false}
       loading={results.loading}
       invalid={invalid}
+      pill
+      icon={<UserRound size={15} strokeWidth={ICON_STROKE_WIDTH} />}
     />
   );
 }
@@ -91,15 +102,22 @@ export function AuditUserFilter({ value, onChange, invalid, describedBy }: Audit
 export function AuditOwnActionsFilter({ reasonId }: { reasonId: string }) {
   return (
     <>
-      <TextField
-        aria-label="User"
-        aria-describedby={reasonId}
-        icon={<Lock size={14} strokeWidth={ICON_STROKE_WIDTH} />}
-        value="Only my actions"
+      <div
         title={OWN_ACTIONS_REASON}
-        disabled
-        readOnly
-      />
+        className="flex h-9 items-center gap-2 rounded-pill border border-border-subtle bg-surface pr-4 pl-3.5 text-ink-700 opacity-70 shadow-button"
+      >
+        <Lock aria-hidden="true" size={14} strokeWidth={ICON_STROKE_WIDTH} className="shrink-0" />
+        <input
+          type="text"
+          aria-label="User"
+          aria-describedby={reasonId}
+          value="Only my actions"
+          title={OWN_ACTIONS_REASON}
+          disabled
+          readOnly
+          className="min-w-0 flex-1 bg-transparent text-label font-bold outline-none disabled:cursor-not-allowed"
+        />
+      </div>
       <span id={reasonId} className="sr-only">
         {OWN_ACTIONS_REASON}
       </span>

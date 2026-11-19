@@ -1,18 +1,19 @@
-// CollectionAssignmentsTab: the Variable assignments tab of the collection detail (S-15c), from the collection
+// CollectionAssignmentsTab: the Variable assignments tab of the collection detail (S-15c), in a card with the tinted header
+// of the other redesigned pages (cerulean, the color of the variables), from the collection
 // (`variableAssignments`). Props: assignments. Columns: Variable (links to its detail), Function (Set /
 // UpdateContext), Table function, Screen (links to its page; App (OnStart) is a screen like the others, D-57) and
 // Used in (the Power Apps event or property). Identifiers and usedIn are in IBM Plex Mono.
 import { Variable } from 'lucide-react';
 import { Link } from 'react-router';
 
-import { ICON_STROKE_WIDTH, SectionCard, Tag } from '../../components/ui';
+import { ICON_STROKE_WIDTH, Tag, ToneCard } from '../../components/ui';
 import { ASSIGNMENT_FUNCTION_LABEL } from '../variables/variableLabels';
 
 import type { VariableAssignment } from './collectionTypes';
 
 const HEAD_CLASS =
-  'px-4 py-2.5 text-left text-micro font-bold tracking-wider text-ink-500 uppercase';
-const CELL_CLASS = 'px-4 py-2.5 align-middle';
+  'px-4 py-3 text-left text-micro font-bold tracking-wider text-variable-ink uppercase';
+const CELL_CLASS = 'px-4 py-3 align-middle';
 const MONO_CLASS = 'font-mono text-label text-identifier';
 
 export function CollectionAssignmentsTab({
@@ -21,11 +22,11 @@ export function CollectionAssignmentsTab({
   assignments: readonly VariableAssignment[];
 }) {
   return (
-    <SectionCard
+    <ToneCard
       title="Variable assignments"
+      tone="variable"
       description="Variables this collection feeds, and where"
       icon={<Variable size={16} strokeWidth={ICON_STROKE_WIDTH} />}
-      tone="success"
       count={assignments.length}
       flush
     >
@@ -34,7 +35,7 @@ export function CollectionAssignmentsTab({
       ) : (
         <div className="overflow-x-auto">
           <table aria-label="Variable assignments" className="w-full text-left">
-            <thead className="bg-search-bg">
+            <thead className="bg-variable-soft/70">
               <tr>
                 {['Variable', 'Function', 'Table function', 'Screen', 'Used in'].map((header) => (
                   <th key={header} scope="col" className={HEAD_CLASS}>
@@ -45,7 +46,10 @@ export function CollectionAssignmentsTab({
             </thead>
             <tbody>
               {assignments.map((assignment) => (
-                <tr key={assignment.id} className="border-t border-divider">
+                <tr
+                  key={assignment.id}
+                  className="border-t border-divider transition-colors duration-150 hover:bg-variable-soft/40 motion-reduce:transition-none"
+                >
                   <td className={CELL_CLASS}>
                     <Link
                       to={`/variables/${assignment.variable.id}`}
@@ -77,6 +81,6 @@ export function CollectionAssignmentsTab({
           </table>
         </div>
       )}
-    </SectionCard>
+    </ToneCard>
   );
 }

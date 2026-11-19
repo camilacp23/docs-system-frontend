@@ -72,7 +72,7 @@ describe('screen edit: loading', () => {
     expect(options.map((option) => option.textContent)).toContain('Busqueda');
   });
 
-  it('loads the links, with the origin row apart and read only', async () => {
+  it('loads the links, with the origin row apart: its tag and mode are read only and its Used in is a field', async () => {
     await openEdit({ tab: 'links' });
 
     expect(pickerValue('Variable (link 1)')).toBe('gRegistroSel');
@@ -87,13 +87,17 @@ describe('screen edit: loading', () => {
     expect(textbox('Used in (variable link 1)')).toHaveValue('btnGuardar.OnSelect');
     expect(pickerValue('Collection (link 1)')).toBe('colClientes');
     expect(textbox('Used in (collection link 1)')).toHaveValue('galClientes.Items');
-    // The origin row is not a control: no second link, no editable field for it.
+    // The origin row is not a link of the screen: no second picker, no Remove; only its Used in is a field.
     expect(screen.queryByRole('combobox', { name: 'Variable (link 2)' })).not.toBeInTheDocument();
     const table = screen.getByRole('table', { name: 'Variable links' });
     expect(within(table).getByRole('link', { name: 'locMostrarDetalle' })).toBeVisible();
-    expect(within(table).getByText('Maintained from the variable')).toBeVisible();
+    expect(within(table).getByText('Saved on the variable')).toBeVisible();
+    expect(within(table).getByText('Origin')).toBeVisible();
+    expect(textbox('Used in (origin locMostrarDetalle)')).toHaveValue('');
     expect(
-      screen.getByText("Origin rows come from the variable and can't be edited here."),
+      screen.getByText(
+        'The Origin row marks where a variable is created. Its Used in is saved on the variable.',
+      ),
     ).toBeVisible();
   });
 
@@ -571,5 +575,31 @@ describe('screen edit: unknown screen', () => {
   it('shows "This screen doesn\'t exist" for an id that is not there', async () => {
     await renderScreens({ path: '/screens/999/edit' });
     expect(await screen.findByText("This screen doesn't exist")).toBeVisible();
+  });
+});
+
+describe('screen edit: the ETag of the contract 0.5.1', () => {
+  // The tag of a screen is W/"<updatedAt ms>-<pendingSubtasks>-<commentCount>-<fingerprint>" (four segments, the last one
+  // 8 lowercase hexadecimal digits). The page keeps it as an opaque text: whatever the read answered is what If-Match sends.
+  const FULL_ETAG = 'W/"1760000000000-3-2-9f3a1c7e"';
+
+  it('sends in If-Match exactly the ETag it received, without reading its parts', async () => {
+    expect(FULL_ETAG).toMatch(/^W\/"\d+-\d+-\d+-[0-9a-f]{8}"$/);
+    const { user, api } = await openEdit({
+      prepare: (fake) => {
+        const read = fake.client.get.bind(fake.client);
+        fake.client.get = (path, options) =>
+          read(path, options).then((answer) =>
+            path === '/screens/{id}' ? { ...answer, etag: FULL_ETAG } : answer,
+          );
+      },
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => {
+      expect(api.callsTo('PUT /screens/{id}')).toHaveLength(1);
+    });
+    expect(lastPut(api).ifMatch).toBe(FULL_ETAG);
   });
 });

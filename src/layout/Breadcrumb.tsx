@@ -13,7 +13,6 @@ import { HOME_PATH } from '../app/router/routes';
 import { useApplication } from '../application/useApplication';
 import { cx, ICON_STROKE_WIDTH } from '../components/ui';
 
-import { applicationInitials } from './applicationInitials';
 import { buildCrumbs } from './buildCrumbs';
 import { BreadcrumbContext } from './breadcrumbContext';
 
@@ -27,19 +26,10 @@ export function Breadcrumb() {
   const crumbs = buildCrumbs(pathname, label);
   const chip = currentApplication && (
     <>
-      <span
-        aria-hidden="true"
-        className="flex size-5 shrink-0 items-center justify-center rounded-keycap bg-accent text-[9px] font-extrabold text-on-primary"
-      >
-        {applicationInitials(currentApplication.name)}
-      </span>
-      <span className="truncate text-[12.5px]/5 font-bold text-accent-ink">
-        {currentApplication.name}
-      </span>
+      <span className="truncate text-label/5 font-medium">{currentApplication.name}</span>
     </>
   );
-  const chipClass =
-    'flex min-w-0 items-center gap-2 rounded-pill bg-accent-soft py-1.25 pr-3 pl-1.5';
+  const chipClass = 'flex min-w-0 items-center gap-2 rounded-pill px-2.5 py-1 text-ink-500';
 
   return (
     <nav aria-label="Breadcrumb" className="min-w-0">
@@ -49,7 +39,10 @@ export function Breadcrumb() {
             <Link
               to={HOME_PATH}
               title="Go to Dashboard"
-              className={cx(chipClass, 'transition-colors duration-150 hover:bg-info-border')}
+              className={cx(
+                chipClass,
+                'transition-colors duration-150 hover:bg-control-hover hover:text-accent-ink motion-reduce:transition-none',
+              )}
             >
               {chip}
             </Link>
@@ -64,11 +57,14 @@ export function Breadcrumb() {
                   aria-hidden="true"
                   size={14}
                   strokeWidth={ICON_STROKE_WIDTH}
-                  className="shrink-0 text-ink-500"
+                  className="shrink-0 text-border-control"
                 />
               )}
               {last || crumb.to === undefined ? (
-                <span aria-current="page" className="truncate text-label/5 font-bold text-ink-900">
+                <span
+                  aria-current="page"
+                  className="truncate text-section font-bold tracking-tight text-ink-900"
+                >
                   {crumb.label}
                 </span>
               ) : (

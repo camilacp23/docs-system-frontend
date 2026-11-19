@@ -1,6 +1,8 @@
 // VariableUsage: the "where it is used" cards of the variable detail (S-11), from GET /variables/{id}/dependencies:
 //   Screens (the origin row first, with its "Origin" tag, then the other screens with access mode and usedIn),
 //   Fed from collections (collection, function, table function, screen, usedIn) and Used by components.
+// Layout: Screens and Used by components side by side (they are narrow tables of three columns), Fed from collections
+// across the page below them (the widest table, five columns).
 // Props: variable (the Variable, for its origin screen), dependencies (the resource of the dependencies read).
 // While they load the cards show skeletons; if the read fails only these cards show the error with a retry, the rest
 // of the page keeps working. Power Apps identifiers and usedIn values are in IBM Plex Mono; every screen and
@@ -15,12 +17,12 @@ import {
   Banner,
   Button,
   ICON_STROKE_WIDTH,
-  SectionCard,
   Skeleton,
   Tag,
+  ToneCard,
   useDelayedLoading,
 } from '../../components/ui';
-import type { SectionTone } from '../../components/ui';
+import type { ToneCardTone } from '../../components/ui';
 
 import { ACCESS_MODE_LABEL, ASSIGNMENT_FUNCTION_LABEL } from './variableLabels';
 import type { Variable, VariableDependencies } from './variableTypes';
@@ -36,26 +38,29 @@ function UsageCard({
   tone,
   description,
   count,
+  className,
   children,
 }: {
   title: string;
   icon: ReactNode;
-  tone: SectionTone;
+  tone: ToneCardTone;
   description: string;
   count: number | null;
+  className?: string;
   children: ReactNode;
 }) {
   return (
-    <SectionCard
+    <ToneCard
       title={title}
       icon={icon}
       tone={tone}
       description={description}
       count={count}
       flush
+      className={className}
     >
       {children}
-    </SectionCard>
+    </ToneCard>
   );
 }
 
@@ -151,11 +156,11 @@ export function VariableUsage({ variable, dependencies }: VariableUsageProps) {
   const loading = loaded === null;
 
   return (
-    <>
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <UsageCard
         title="Screens"
         icon={<Monitor {...ICON} />}
-        tone="accent"
+        tone="screen"
         description="Where it is created and read"
         count={screenCount}
       >
@@ -202,7 +207,8 @@ export function VariableUsage({ variable, dependencies }: VariableUsageProps) {
       <UsageCard
         title="Fed from collections"
         icon={<Database {...ICON} />}
-        tone="success"
+        tone="collection"
+        className="lg:order-3 lg:col-span-2"
         description="Collections that assign its value"
         count={loaded?.collections.length ?? null}
       >
@@ -239,7 +245,7 @@ export function VariableUsage({ variable, dependencies }: VariableUsageProps) {
       <UsageCard
         title="Used by components"
         icon={<Box {...ICON} />}
-        tone="warning"
+        tone="teal"
         description="Components that read it"
         count={loaded?.components.length ?? null}
       >
@@ -275,6 +281,6 @@ export function VariableUsage({ variable, dependencies }: VariableUsageProps) {
           </Link>
         </p>
       </UsageCard>
-    </>
+    </div>
   );
 }

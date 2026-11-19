@@ -35,7 +35,6 @@ describe('accessibility', () => {
     await screen.findByRole('list', { name: 'Search results' });
     const form = screen.getByRole('search', { name: 'Advanced search' });
     expect(within(form).getByRole('searchbox', { name: 'Search text' })).toBeInTheDocument();
-    expect(within(form).getByRole('button', { name: 'Search' })).toBeInTheDocument();
     expect(within(form).getByRole('group', { name: 'Element types' })).toBeInTheDocument();
     for (const label of ['Environment', 'Status', 'Scope']) {
       expect(within(form).getByRole('combobox', { name: label })).toBeInTheDocument();

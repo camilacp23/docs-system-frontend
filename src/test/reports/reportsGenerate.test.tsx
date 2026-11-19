@@ -112,7 +112,7 @@ describe('generate dialog: the form', () => {
     await user.click(chip(dialog, 'Components'));
     expect(chip(dialog, 'Approved')).toBeDisabled();
     expect(dialog.getByRole('button', { name: /All screens/ })).toBeDisabled();
-    await user.click(dialog.getByRole('button', { name: 'Generate' }));
+    await user.click(dialog.getByRole('button', { name: 'Create report' }));
 
     expect(api.callsTo('POST /reports/pdf')[0]?.options.body).toEqual({
       applicationId: 1,
@@ -140,7 +140,7 @@ describe('generate dialog: what it sends', () => {
     await user.click(chip(dialog, 'Variables'));
     await user.click(chip(dialog, 'Screens'));
     await user.click(dialog.getByRole('switch', { name: 'Include dependencies' }));
-    await user.click(dialog.getByRole('button', { name: 'Generate' }));
+    await user.click(dialog.getByRole('button', { name: 'Create report' }));
 
     const posts = api.callsTo('POST /reports/pdf');
     expect(posts).toHaveLength(1);
@@ -173,7 +173,7 @@ describe('generate dialog: what it sends', () => {
     await user.click(chip(dialog, 'Approved'));
     await user.click(chip(dialog, 'Draft'));
     await user.click(dialog.getByRole('switch', { name: 'Publish when ready' }));
-    await user.click(dialog.getByRole('button', { name: 'Generate' }));
+    await user.click(dialog.getByRole('button', { name: 'Create report' }));
 
     expect(api.callsTo('POST /reports/pdf')).toHaveLength(0);
     expect(api.callsTo('POST /reports/excel')[0]?.options.body).toEqual({
@@ -197,7 +197,7 @@ describe('generate dialog: what it sends', () => {
     await user.type(dialog.getByRole('textbox', { name: /Title/ }), 'Overall status');
     await user.click(dialog.getByRole('switch', { name: 'Include status summary' }));
     expect(dialog.getByText('PDF · Status summary', { exact: false })).toBeInTheDocument();
-    await user.click(dialog.getByRole('button', { name: 'Generate' }));
+    await user.click(dialog.getByRole('button', { name: 'Create report' }));
 
     expect(api.callsTo('POST /reports/pdf')[0]?.options.body).toMatchObject({
       scope: { elementTypes: [], includeStatusSummary: true },
@@ -217,7 +217,7 @@ describe('generate dialog: what it sends', () => {
     await user.click(await dialog.findByRole('checkbox', { name: 'Detalle' }));
     await user.click(dialog.getByRole('checkbox', { name: 'Inicio' }));
 
-    await user.click(dialog.getByRole('button', { name: 'Generate' }));
+    await user.click(dialog.getByRole('button', { name: 'Create report' }));
 
     expect(api.callsTo('POST /reports/pdf')[0]?.options.body).toMatchObject({
       scope: { elementTypes: ['SCREEN'], screenIds: [22, 21] },
@@ -232,7 +232,7 @@ describe('generate dialog: what it sends', () => {
     const dialog = within(await openDialog(user));
     await user.type(dialog.getByRole('textbox', { name: /Title/ }), 'Follow me');
     await user.click(chip(dialog, 'Variables'));
-    await user.click(dialog.getByRole('button', { name: 'Generate' }));
+    await user.click(dialog.getByRole('button', { name: 'Create report' }));
     expect(await screen.findByText('Generating')).toBeInTheDocument();
     const created = api.state.nextId - 1;
     api.settle(created, 'READY');
@@ -255,7 +255,7 @@ describe('generate dialog: what it refuses before asking', () => {
     const { api } = await renderReports({ reports: [] });
     const dialog = within(await openDialog(user));
 
-    await user.click(dialog.getByRole('button', { name: 'Generate' }));
+    await user.click(dialog.getByRole('button', { name: 'Create report' }));
 
     expect(dialog.getByText('2 fields need attention.')).toBeInTheDocument();
     const title = dialog.getByRole('textbox', { name: /Title/ });
@@ -280,7 +280,7 @@ describe('generate dialog: what it refuses before asking', () => {
     await user.type(dialog.getByRole('textbox', { name: /Title/ }), '   ');
     await user.click(chip(dialog, 'Variables'));
 
-    await user.click(dialog.getByRole('button', { name: 'Generate' }));
+    await user.click(dialog.getByRole('button', { name: 'Create report' }));
 
     expect(dialog.getByText('Title is required.')).toBeInTheDocument();
     expect(api.callsTo('POST /reports/pdf')).toHaveLength(0);
@@ -290,7 +290,7 @@ describe('generate dialog: what it refuses before asking', () => {
     const user = setupUser();
     await renderReports({ reports: [] });
     const dialog = within(await openDialog(user));
-    await user.click(dialog.getByRole('button', { name: 'Generate' }));
+    await user.click(dialog.getByRole('button', { name: 'Create report' }));
 
     await user.type(dialog.getByRole('textbox', { name: /Title/ }), 'x');
     await user.click(chip(dialog, 'Collections'));
@@ -317,7 +317,7 @@ describe('generate dialog: what the API refuses (400 and 404)', () => {
     await user.type(dialog.getByRole('textbox', { name: /Title/ }), 'Whatever');
     await user.click(chip(dialog, 'Screens'));
     await fill?.(dialog, user);
-    await user.click(dialog.getByRole('button', { name: 'Generate' }));
+    await user.click(dialog.getByRole('button', { name: 'Create report' }));
     return { dialog, user, ...view };
   }
 
@@ -440,7 +440,7 @@ describe('generate dialog: what the API refuses (400 and 404)', () => {
         'Something went wrong on our side. Try again in a moment. Reference: req-77.',
       ),
     ).toBeInTheDocument();
-    expect(dialog.getByRole('button', { name: 'Generate' })).toBeEnabled();
+    expect(dialog.getByRole('button', { name: 'Create report' })).toBeEnabled();
   });
 
   it('takes a 400 with a field it does not know to the banner, never the server text', async () => {
@@ -469,7 +469,7 @@ describe('generate dialog: archived application, roles and connection', () => {
     await user.type(dialog.getByRole('textbox', { name: /Title/ }), 'Archived report');
     await user.click(chip(dialog, 'Variables'));
 
-    await user.click(dialog.getByRole('button', { name: 'Generate' }));
+    await user.click(dialog.getByRole('button', { name: 'Create report' }));
 
     expect(api.callsTo('POST /reports/pdf')).toHaveLength(1);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -505,7 +505,7 @@ describe('generate dialog: archived application, roles and connection', () => {
         "You're offline. Changes can't be saved until the connection is back.",
       ),
     ).toBeInTheDocument();
-    expect(dialog.getByRole('button', { name: 'Generate' })).toBeDisabled();
+    expect(dialog.getByRole('button', { name: 'Create report' })).toBeDisabled();
   });
 });
 
@@ -528,7 +528,7 @@ describe('generate dialog: accessibility', () => {
     inside.getByRole('button', { name: 'Close' }).focus();
     await user.tab({ shift: true });
     expect(dialog.contains(document.activeElement)).toBe(true);
-    inside.getByRole('button', { name: 'Generate' }).focus();
+    inside.getByRole('button', { name: 'Create report' }).focus();
     await user.tab();
     expect(dialog.contains(document.activeElement)).toBe(true);
 

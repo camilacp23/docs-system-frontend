@@ -1,4 +1,4 @@
-// ReportsView: the reports page (S-33, S-33r) drawn from what it is given: header with the filter and "Generate report",
+// ReportsView: the reports page (S-33, S-33r) drawn from what it is given: hero with "Generate report", the filter,
 // the notice banner, and the cards, the skeleton, the empty state or the error with the pagination.
 // It holds no state of its own and reads nothing: ReportsPage gives it the data and the handlers, and the development page
 // (/dev/reports) gives it test data so the design can be photographed.
@@ -6,9 +6,10 @@
 // (a read is in flight), error (the failed read), showSkeleton / isSlow (Table 58), publishedOnly + counts (the filter and its
 // numbers, null when unknown), page, pageSize, timeZone, timedOut / publishing / downloading / regenerating (ids), writeBlockReason
 // (offline), notice (the banner: a 412 offers "Reload", the rest can be dismissed), the handlers, and children (the dialog).
-// Layout (SDD 7.3.7): the cards are in one, two or three columns by the width of the page (container query). The title has no
-// icon tile and a list of 12 or fewer has no pagination row, as in S-33.
-import { FileText, Plus } from 'lucide-react';
+// Layout (SDD 7.3.7): the cards are in one, two or three columns by the width of the page (container query). The page has the
+// hero of the redesigned pages in bronze gold (title, subtitle and "Generate report"), the All / Published switch under it, and a
+// list of 12 or fewer has no pagination row, as in S-33.
+import { FileText } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { ApiError } from '../../api/ApiError';
@@ -19,9 +20,9 @@ import {
   EmptyState,
   ErrorState,
   ICON_STROKE_WIDTH,
-  PageHeader,
+  PageHero,
   Pagination,
-  SegmentedControl,
+  PillSwitch,
   Skeleton,
   SLOW_LOADING_MESSAGE,
 } from '../../components/ui';
@@ -104,7 +105,7 @@ export function ReportsView(props: ReportsViewProps) {
         {[0, 1, 2].map((key) => (
           <li
             key={key}
-            className="flex flex-col gap-3 rounded-card border border-border-subtle bg-surface p-4"
+            className="flex flex-col gap-3 rounded-modal border border-report-border bg-surface p-4"
           >
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-3 w-2/3" />
@@ -115,7 +116,7 @@ export function ReportsView(props: ReportsViewProps) {
     ) : null;
   } else if (rows.length === 0) {
     body = (
-      <div className="rounded-card border border-border-subtle bg-surface shadow-card">
+      <div className="rounded-modal border border-report-border bg-surface shadow-card">
         {reader ? (
           <EmptyState
             icon={<FileText />}
@@ -199,34 +200,41 @@ export function ReportsView(props: ReportsViewProps) {
 
   return (
     <div className="@container flex flex-col gap-4">
-      <PageHeader
+      <PageHero
+        tone="report"
+        icon={<FileText size={20} strokeWidth={ICON_STROKE_WIDTH} />}
         title={REPORTS_TITLE}
         description={pageDescription(applicationName, reader)}
         actions={
           reader ? undefined : (
-            <>
-              <SegmentedControl
-                name="report-filter"
-                label={FILTER_LABEL}
-                options={filterOptions}
-                value={props.publishedOnly ? 'published' : 'all'}
-                onChange={(value) => {
-                  props.onPublishedOnlyChange(value === 'published');
-                }}
-              />
-              <Button
-                variant="primary"
-                disabled={props.writeBlockReason !== null}
-                title={props.writeBlockReason ?? undefined}
-                iconLeft={<Plus aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
-                onClick={props.onGenerate}
-              >
-                {GENERATE_LABEL}
-              </Button>
-            </>
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={props.writeBlockReason !== null}
+              title={props.writeBlockReason ?? undefined}
+              aria-label={GENERATE_LABEL}
+              iconLeft={<FileText aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+              onClick={props.onGenerate}
+            >
+              Generate
+            </Button>
           )
         }
       />
+      {!reader && (
+        <div>
+          <PillSwitch
+            name="report-filter"
+            label={FILTER_LABEL}
+            tone="report"
+            options={filterOptions}
+            value={props.publishedOnly ? 'published' : 'all'}
+            onChange={(value) => {
+              props.onPublishedOnlyChange(value === 'published');
+            }}
+          />
+        </div>
+      )}
       {props.notice !== null && (
         <Banner
           tone={props.notice.kind === 'conflict' ? 'warning' : 'danger'}

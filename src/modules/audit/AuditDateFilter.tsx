@@ -1,15 +1,17 @@
-// AuditDateFilter: the period of the audit log (S-32f): a button with the current period and a panel with the
-// shortcuts Today, Last 7 days and Last 30 days, the custom range (From / To, days in the local time of the browser)
-// and Cancel / Apply.
+// AuditDateFilter: the period of the audit log (S-32f): a pill with the current period that opens a small popover holding the
+// shortcuts Today, Last 7 days and Last 30 days as chips, the custom range (From / To, days in the local time of the browser)
+// side by side and Cancel / Apply.
 // Props: from, to (the days in use), today (the local day), error (text for the "To" field: an upside-down range from the
 // URL or the API's 400 `range`), onApply(from, to).
-// The panel works on a draft: a shortcut or a typed day changes the draft, Apply writes it to the URL. An upside-down
-// draft shows its error on "To" and cannot be applied (nothing is sent to the API). Esc, a click outside and Cancel
-// close it without applying.
-import { CalendarDays } from 'lucide-react';
-import { useId, useState } from 'react';
+// The popover is drawn in a portal on <body> with fixed coordinates taken from the pill, so no card with `overflow-hidden` can
+// cut it, and it is kept inside the window. It works on a draft: a shortcut or a typed day changes the draft, Apply writes it to
+// the URL. An upside-down draft shows its error under the two days and cannot be applied (nothing is sent to the API). Esc, a
+// click outside and Cancel close it without applying.
+import { CalendarRange, ChevronDown } from 'lucide-react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
-import { Button, FormField, ICON_STROKE_WIDTH, TextField, cx } from '../../components/ui';
+import { Button, ICON_STROKE_WIDTH, cx } from '../../components/ui';
 import { usePopover } from '../../hooks/usePopover';
 
 import {
@@ -30,20 +32,64 @@ interface AuditDateFilterProps {
 }
 
 const PRESETS: readonly RangePreset[] = ['today', 'last7', 'last30'];
-const OPTION_CLASS =
-  'flex h-9 w-full items-center rounded-control px-2.5 text-left text-body-lg text-ink-900 hover:bg-accent-soft aria-pressed:bg-accent-soft aria-pressed:font-semibold aria-pressed:text-accent-ink';
+const POPOVER_WIDTH = 344;
+const WINDOW_GAP = 12;
+const CHIP_CLASS =
+  'h-8 rounded-pill border px-3 text-label font-semibold whitespace-nowrap transition-colors duration-150 motion-reduce:transition-none';
+const CHIP_ON = 'border-audit bg-audit text-on-primary shadow-button';
+const CHIP_OFF =
+  'border-border-subtle bg-surface text-ink-700 hover:border-audit-border hover:bg-audit-soft';
+const DAY_CLASS =
+  'h-8 w-full min-w-0 rounded-control border bg-surface px-2 text-label text-ink-900 focus:border-audit focus:outline-none';
+
+interface Position {
+  top: number;
+  left: number;
+  arrow: number;
+}
 
 export function AuditDateFilter({ from, to, today, error, onApply }: AuditDateFilterProps) {
-  const { open, setOpen, containerRef, triggerRef } = usePopover();
+  const panelRef = useRef<HTMLDivElement>(null);
+  const { open, setOpen, containerRef, triggerRef } = usePopover(panelRef);
   const panelId = useId();
   const fromId = `${panelId}-from`;
+  const toId = `${panelId}-to`;
+  const errorId = `${panelId}-error`;
   const [draft, setDraft] = useState({ from, to });
+  const [position, setPosition] = useState<Position | null>(null);
   const draftError = rangeError(draft.from, draft.to);
   const shownError = open ? (draftError ?? error ?? null) : null;
   const preset = presetOf(draft.from, draft.to, today);
 
+  useEffect(() => {
+    if (!open) return;
+    // The popover is placed from the pill when it opens: a change of the window closes it instead of leaving it behind.
+    const close = () => {
+      setOpen(false);
+    };
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('resize', close);
+    };
+  }, [open, setOpen]);
+
   const toggle = () => {
-    if (!open) setDraft({ from, to });
+    if (!open) {
+      setDraft({ from, to });
+      const pill = triggerRef.current?.getBoundingClientRect();
+      if (pill) {
+        const width = Math.min(POPOVER_WIDTH, window.innerWidth - 2 * WINDOW_GAP);
+        const left = Math.max(
+          WINDOW_GAP,
+          Math.min(pill.left, window.innerWidth - width - WINDOW_GAP),
+        );
+        setPosition({
+          top: pill.bottom + 10,
+          left,
+          arrow: Math.max(16, Math.min(pill.left + pill.width / 2 - left - 6, width - 28)),
+        });
+      }
+    }
     setOpen(!open);
   };
 
@@ -58,100 +104,131 @@ export function AuditDateFilter({ from, to, today, error, onApply }: AuditDateFi
         aria-label={`Period: ${rangeText(from, to, today)}`}
         onClick={toggle}
         className={cx(
-          'inline-flex h-9 items-center gap-2 rounded-control border px-3 text-label font-semibold',
-          'border-info-border bg-info-bg text-info-ink hover:bg-accent-soft',
-          error && 'border-danger',
+          'flex h-9 w-full cursor-pointer items-center gap-2 rounded-pill border px-3.5 text-label font-bold whitespace-nowrap shadow-button transition-colors duration-150 motion-reduce:transition-none',
+          error
+            ? 'border-danger bg-surface text-ink-900'
+            : 'border-audit bg-audit-soft text-audit-ink hover:bg-surface',
         )}
       >
-        <CalendarDays aria-hidden="true" size={14} strokeWidth={ICON_STROKE_WIDTH} />
+        <CalendarRange aria-hidden="true" size={15} strokeWidth={ICON_STROKE_WIDTH} />
         {rangeText(from, to, today)}
+        <ChevronDown
+          aria-hidden="true"
+          size={14}
+          strokeWidth={ICON_STROKE_WIDTH}
+          className="ml-auto opacity-70"
+        />
       </button>
-      {open && (
-        <div
-          id={panelId}
-          role="dialog"
-          aria-label="Date range"
-          className="absolute top-full left-0 z-30 mt-2 flex w-136 max-w-[calc(100vw-3rem)] gap-4 rounded-card border border-border-subtle bg-surface p-4 shadow-modal"
-        >
-          <div className="flex w-36 shrink-0 flex-col gap-0.5">
-            {PRESETS.map((name) => (
+      {open &&
+        position &&
+        createPortal(
+          <div
+            ref={panelRef}
+            id={panelId}
+            role="dialog"
+            aria-label="Date range"
+            style={{ top: position.top, left: position.left }}
+            className="fixed z-50 w-86 max-w-[calc(100vw-1.5rem)] origin-top-left rounded-modal border border-border-subtle bg-surface p-3.5 shadow-bubble motion-safe:animate-bubble-in"
+          >
+            <span
+              aria-hidden="true"
+              style={{ left: position.arrow }}
+              className="absolute -top-1.5 size-3 rotate-45 rounded-[3px] border-t border-l border-border-subtle bg-surface"
+            />
+            <div className="grid grid-cols-2 gap-1.5">
+              {PRESETS.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  aria-pressed={preset === name}
+                  className={cx(CHIP_CLASS, preset === name ? CHIP_ON : CHIP_OFF)}
+                  onClick={() => {
+                    setDraft(presetRange(name, today));
+                  }}
+                >
+                  {PRESET_LABEL[name]}
+                </button>
+              ))}
               <button
-                key={name}
                 type="button"
-                aria-pressed={preset === name}
-                className={OPTION_CLASS}
+                aria-pressed={preset === null}
+                className={cx(CHIP_CLASS, preset === null ? CHIP_ON : CHIP_OFF)}
                 onClick={() => {
-                  setDraft(presetRange(name, today));
+                  document.getElementById(fromId)?.focus();
                 }}
               >
-                {PRESET_LABEL[name]}
+                Custom range
               </button>
-            ))}
-            <button
-              type="button"
-              aria-pressed={preset === null}
-              className={OPTION_CLASS}
-              onClick={() => {
-                document.getElementById(fromId)?.focus();
-              }}
-            >
-              Custom range
-            </button>
-          </div>
-          <div className="flex min-w-0 flex-1 flex-col gap-3">
-            <div className="flex gap-2.5">
-              <FormField label="From" htmlFor={fromId} className="min-w-0 flex-1">
-                {(control) => (
-                  <TextField
-                    {...control}
-                    type="date"
-                    value={draft.from}
-                    onChange={(event) => {
-                      setDraft({ ...draft, from: event.target.value });
-                    }}
-                  />
-                )}
-              </FormField>
-              <FormField label="To" error={shownError} className="min-w-0 flex-1">
-                {(control) => (
-                  <TextField
-                    {...control}
-                    type="date"
-                    value={draft.to}
-                    onChange={(event) => {
-                      setDraft({ ...draft, to: event.target.value });
-                    }}
-                  />
-                )}
-              </FormField>
             </div>
-            <p className="text-small text-ink-500">Local time. “To” includes the whole day.</p>
-            <div className="flex justify-end gap-2">
-              <Button
-                size="sm"
-                onClick={() => {
-                  setOpen(false);
-                  triggerRef.current?.focus();
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                variant="primary"
-                disabled={draftError !== null}
-                onClick={() => {
-                  onApply(draft.from, draft.to);
-                  setOpen(false);
-                  triggerRef.current?.focus();
-                }}
-              >
-                Apply
-              </Button>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="flex min-w-0 flex-col gap-1">
+                <label htmlFor={fromId} className="text-small font-semibold text-ink-700">
+                  From
+                </label>
+                <input
+                  id={fromId}
+                  type="date"
+                  value={draft.from}
+                  className={cx(DAY_CLASS, 'border-border-control')}
+                  onChange={(event) => {
+                    setDraft({ ...draft, from: event.target.value });
+                  }}
+                />
+              </div>
+              <div className="flex min-w-0 flex-col gap-1">
+                <label htmlFor={toId} className="text-small font-semibold text-ink-700">
+                  To
+                </label>
+                <input
+                  id={toId}
+                  type="date"
+                  value={draft.to}
+                  aria-invalid={shownError !== null || undefined}
+                  aria-describedby={shownError === null ? undefined : errorId}
+                  className={cx(
+                    DAY_CLASS,
+                    shownError === null ? 'border-border-control' : 'border-danger',
+                  )}
+                  onChange={(event) => {
+                    setDraft({ ...draft, to: event.target.value });
+                  }}
+                />
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+            {shownError !== null && (
+              <p id={errorId} className="mt-1.5 text-small text-danger">
+                {shownError}
+              </p>
+            )}
+            <p className="mt-2 text-small text-ink-500">Local time. “To” includes the whole day.</p>
+            <div className="mt-3 flex justify-end">
+              <div className="flex shrink-0 gap-1.5">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setOpen(false);
+                    triggerRef.current?.focus();
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  disabled={draftError !== null}
+                  onClick={() => {
+                    onApply(draft.from, draft.to);
+                    setOpen(false);
+                    triggerRef.current?.focus();
+                  }}
+                >
+                  Apply
+                </Button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

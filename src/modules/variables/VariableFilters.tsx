@@ -1,12 +1,13 @@
-// VariableFilters: the filter bar of the variable list (S-10). One row: the search by name (the longest control; the URL changes after
-// the user stops typing, useSearchDraft), scope tabs, data type, environment, origin screen. "Clear filters" lives in the
-// header of the list card, so this row never changes size. On narrow widths the row wraps.
-// Props: params (current filters), setParams (writes the URL), screens (origin screen options). Every control has an accessible name; the changes reach the URL, never a local copy.
-import { Search } from 'lucide-react';
-import { useCallback } from 'react';
+// VariableFilters: the filter strip of the variable list (S-10). One centered row of pills on a soft cerulean band: the scope as a
+// pill switch (All / Global / Context) and three pill selects (data type, environment, origin screen). A select with a
+// value turns cerulean, so the active filters can be seen at a glance. There is no search by name here: the search of the
+// top bar covers it (the `q` parameter of the URL still filters if a link carries it). "Clear filters" lives in the header
+// of the list card, so this row never changes size. On narrow widths the row wraps.
+// Props: params (current filters), setParams (writes the URL), screens (origin screen options). Every control has an
+// accessible name; the changes reach the URL, never a local copy.
+import { Braces, Monitor, Server } from 'lucide-react';
 
-import { ICON_STROKE_WIDTH, SegmentedControl, Select, TextField } from '../../components/ui';
-import { useSearchDraft } from '../../hooks/useSearchDraft';
+import { cx, FilterSelect, ICON_STROKE_WIDTH } from '../../components/ui';
 
 import type { VariableListParams } from './useVariableListParams';
 import { DATA_TYPES, DATA_TYPE_LABEL, ENVIRONMENTS } from './variableLabels';
@@ -20,90 +21,106 @@ interface VariableFiltersProps {
 
 type ScopeTab = VariableScope | 'ALL';
 
-export function VariableFilters({ params, setParams, screens }: VariableFiltersProps) {
-  const [text, setText] = useSearchDraft(
-    params.q,
-    useCallback(
-      (q: string) => {
-        setParams({ q }, { replace: true });
-      },
-      [setParams],
-    ),
-  );
+const SCOPE_OPTIONS: readonly { value: ScopeTab; label: string }[] = [
+  { value: 'ALL', label: 'All' },
+  { value: 'GLOBAL', label: 'Global' },
+  { value: 'CONTEXT', label: 'Context' },
+];
 
+/** The scope as a pill switch: native radios (arrow keys, focus and screen readers as a radio group). */
+function ScopeSwitch({ value, onChange }: { value: ScopeTab; onChange: (next: ScopeTab) => void }) {
   return (
-    <div className="flex flex-wrap items-center gap-3 border-b border-divider bg-search-bg/60 p-4">
-      <div className="min-w-64 flex-1">
-        <TextField
-          type="search"
-          icon={<Search size={16} strokeWidth={ICON_STROKE_WIDTH} />}
-          aria-label="Search by name"
-          placeholder="Search variables by name…"
-          maxLength={100}
-          value={text}
-          onChange={(event) => {
-            setText(event.target.value);
-          }}
-        />
-      </div>
-      <SegmentedControl<ScopeTab>
-        name="scope-filter"
-        label="Scope"
+    <div
+      role="radiogroup"
+      aria-label="Scope"
+      className="inline-flex gap-0.5 rounded-pill border border-border-subtle bg-surface p-0.5 shadow-button"
+    >
+      {SCOPE_OPTIONS.map((option) => (
+        <label
+          key={option.value}
+          className={cx(
+            'relative flex h-8 cursor-pointer items-center justify-center rounded-pill px-4 text-label font-semibold whitespace-nowrap transition-colors duration-150 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus-ring motion-reduce:transition-none',
+            value === option.value
+              ? 'bg-variable text-on-primary shadow-button'
+              : 'text-ink-700 hover:bg-variable-soft hover:text-variable-ink',
+          )}
+        >
+          <input
+            type="radio"
+            name="scope-filter"
+            value={option.value}
+            checked={value === option.value}
+            onChange={() => {
+              onChange(option.value);
+            }}
+            className="absolute inset-0 cursor-pointer opacity-0"
+          />
+          {option.label}
+        </label>
+      ))}
+    </div>
+  );
+}
+
+const ICON = { size: 15, strokeWidth: ICON_STROKE_WIDTH } as const;
+
+export function VariableFilters({ params, setParams, screens }: VariableFiltersProps) {
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-2.5 border-b border-variable-border/60 bg-variable-soft/40 px-5 py-3">
+      <ScopeSwitch
         value={params.scope === '' ? 'ALL' : params.scope}
         onChange={(value) => {
           setParams({ scope: value === 'ALL' ? '' : value });
         }}
-        options={[
-          { value: 'ALL', label: 'All' },
-          { value: 'GLOBAL', label: 'Global' },
-          { value: 'CONTEXT', label: 'Context' },
-        ]}
       />
-      <Select
-        aria-label="Data type"
-        className="w-36"
+      <FilterSelect
+        tone="variable"
+        label="Data type"
+        icon={<Braces {...ICON} />}
         value={params.dataType}
-        onChange={(event) => {
-          setParams({ dataType: event.target.value as DataType | '' });
+        onChange={(next) => {
+          setParams({ dataType: next as DataType | '' });
         }}
       >
-        <option value="">Data type</option>
+        <option value="">All</option>
         {DATA_TYPES.map((type) => (
           <option key={type} value={type}>
             {DATA_TYPE_LABEL[type]}
           </option>
         ))}
-      </Select>
-      <Select
-        aria-label="Environment"
-        className="w-36"
+      </FilterSelect>
+      <FilterSelect
+        tone="variable"
+        label="Environment"
+        icon={<Server {...ICON} />}
         value={params.environment}
-        onChange={(event) => {
-          setParams({ environment: event.target.value as Environment | '' });
+        onChange={(next) => {
+          setParams({ environment: next as Environment | '' });
         }}
       >
-        <option value="">Environment</option>
+        <option value="">All</option>
         {ENVIRONMENTS.map((environment) => (
           <option key={environment} value={environment}>
             {environment}
           </option>
         ))}
-      </Select>
-      <Select
-        aria-label="Origin screen"
-        className="w-40"
+      </FilterSelect>
+      <FilterSelect
+        tone="variable"
+        label="Origin screen"
+        icon={<Monitor {...ICON} />}
         value={params.originScreenId}
-        onChange={(event) => {
-          setParams({ originScreenId: event.target.value });
+        onChange={(next) => {
+          setParams({ originScreenId: next });
         }}
       >
-        <option value="">Origin screen</option>
+        <option value="">All</option>
         {screens.map((screen) => (
           <option key={screen.id} value={screen.id}>
             {screen.name}
           </option>
         ))}
-      </Select>
+      </FilterSelect>
     </div>
   );
 }

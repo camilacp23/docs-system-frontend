@@ -146,9 +146,10 @@ export function CreateVariableModal({ onClose, onCreated, screens }: CreateVaria
               loading={saving}
               disabled={blocked}
               aria-describedby={reason ? reasonId : undefined}
+              aria-label="Create variable"
               iconLeft={<Plus aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
             >
-              Create variable
+              Create
             </Button>
           </span>
         </div>

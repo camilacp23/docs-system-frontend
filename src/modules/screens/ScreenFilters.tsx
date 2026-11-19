@@ -1,12 +1,11 @@
-// ScreenFilters: the filter bar of the screen list (S-18): search by name (the URL changes after the user stops
-// typing, useSearchDraft), the Status select and the "Authored by me" toggle. "Clear filters" lives in the header
-// of the list card. Props: params (current filters), setParams (writes the URL). Every control has an accessible
-// name; the changes reach the URL, never a local copy.
-import { Funnel, Search } from 'lucide-react';
-import { useCallback } from 'react';
+// ScreenFilters: the filter strip of the screen list (S-18): one centered row of pills on a soft indigo band: the Status
+// select (the five statuses, "All" to take it off) and the "Authored by me" toggle (shows a check while on). There is no
+// search by name here: the search of the top bar covers it (the `q` parameter of the URL still filters if a link carries
+// it). "Clear filters" lives in the header of the list card. Props: params (current filters), setParams (writes the URL). Every control has an accessible name; the changes
+// reach the URL, never a local copy.
+import { CircleDot, UserRound } from 'lucide-react';
 
-import { Button, ICON_STROKE_WIDTH, Select, TextField } from '../../components/ui';
-import { useSearchDraft } from '../../hooks/useSearchDraft';
+import { FilterSelect, FilterToggle, ICON_STROKE_WIDTH } from '../../components/ui';
 
 import { isApiStatus, STATUS_FILTER_OPTIONS } from './screenLabels';
 import type { ScreenListParams } from './useScreenListParams';
@@ -16,57 +15,37 @@ interface ScreenFiltersProps {
   setParams: (patch: Partial<ScreenListParams>, options?: { replace?: boolean }) => void;
 }
 
-export function ScreenFilters({ params, setParams }: ScreenFiltersProps) {
-  const [text, setText] = useSearchDraft(
-    params.q,
-    useCallback(
-      (q: string) => {
-        setParams({ q }, { replace: true });
-      },
-      [setParams],
-    ),
-  );
+const ICON = { size: 15, strokeWidth: ICON_STROKE_WIDTH } as const;
 
+export function ScreenFilters({ params, setParams }: ScreenFiltersProps) {
   return (
-    <div className="flex flex-wrap items-center gap-3 border-b border-divider bg-search-bg/60 p-4">
-      <div className="min-w-64 flex-1">
-        <TextField
-          type="search"
-          icon={<Search size={16} strokeWidth={ICON_STROKE_WIDTH} />}
-          aria-label="Search by name"
-          placeholder="Search screens by name…"
-          maxLength={100}
-          value={text}
-          onChange={(event) => {
-            setText(event.target.value);
-          }}
-        />
-      </div>
-      <Select
-        aria-label="Status"
-        className="w-44"
+    <div className="flex flex-wrap items-center justify-center gap-2.5 border-b border-screen-border/60 bg-screen-soft/50 px-5 py-3">
+      <FilterSelect
+        label="Status"
+        tone="screen"
+        icon={<CircleDot {...ICON} />}
         value={params.status}
-        onChange={(event) => {
-          const value = event.target.value;
+        onChange={(value) => {
           setParams({ status: isApiStatus(value) ? value : '' });
         }}
       >
-        <option value="">Status</option>
+        <option value="">All</option>
         {STATUS_FILTER_OPTIONS.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
           </option>
         ))}
-      </Select>
-      <Button
-        aria-pressed={params.mine}
-        iconLeft={<Funnel aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
-        onClick={() => {
-          setParams({ mine: !params.mine });
+      </FilterSelect>
+      <FilterToggle
+        tone="screen"
+        icon={<UserRound {...ICON} />}
+        pressed={params.mine}
+        onChange={(next) => {
+          setParams({ mine: next });
         }}
       >
         Authored by me
-      </Button>
+      </FilterToggle>
     </div>
   );
 }

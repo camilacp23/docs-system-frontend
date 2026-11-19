@@ -398,6 +398,7 @@ export function applyScreenUpdate(
         accessMode: link.accessMode,
         usedIn: link.usedIn,
         isOrigin: false,
+        originUsedIn: null,
       })),
     ],
     collectionLinks: body.collectionLinks.map((link) => ({

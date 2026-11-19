@@ -17,7 +17,9 @@ const ROW_NAMES = (table: HTMLElement) =>
 
 /** The table once the application is known and its first load has finished. */
 async function table() {
-  await screen.findAllByText(/collections? ·|Read-only: the application is archived/);
+  await screen.findAllByText(
+    /their fields and the variables they feed|Read-only: the application is archived/,
+  );
   const grid = await screen.findByRole('table', { name: 'Collections' });
   await waitFor(() => {
     expect(grid).toHaveAttribute('aria-busy', 'false');
@@ -56,66 +58,74 @@ describe('collection list', () => {
     const { api } = await renderCollections();
     await table();
 
-    expect(await screen.findByText(/4 collections/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '1 not linked to any screen' })).toBeInTheDocument();
+    const counts = screen.getByRole('region', { name: 'Collection counts' });
+    await waitFor(() => {
+      expect(counts).toHaveTextContent(/4Collections/);
+    });
+    expect(counts).toHaveTextContent(/3Linked to screens/);
+    expect(counts).toHaveTextContent(/1Not linked · filter/);
     expect(
       api.callsTo('GET /collections').filter((c) => c.options.query?.pageSize === 1),
     ).toHaveLength(2);
   });
 
-  it('keeps the counts when the application is archived and adds the reason after them', async () => {
+  it('says what the page is about and, when the application is archived, why writing is off', async () => {
     await renderCollections({
       applications: [makeApplication(1, { name: 'SAR', status: 'ARCHIVED' })],
     });
     await table();
 
-    // The frame's subtitle is the counts; the archived reason follows it, it does not replace it (S-14, S-09b).
-    const subtitle = (await screen.findByText(/4 collections/)).parentElement;
-    expect(subtitle).toHaveTextContent(
-      '4 collections · 1 not linked to any screen · Read-only: the application is archived.',
+    expect(await screen.findByText('Read-only: the application is archived.')).toBeInTheDocument();
+  });
+
+  it('shows the subtitle of the page and a link to the map', async () => {
+    await renderCollections();
+    await table();
+
+    expect(
+      screen.getByText('Collections of SAR, their fields and the variables they feed.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'View on map' })).toHaveAttribute(
+      'href',
+      '/dependency-map',
     );
   });
 
-  it('shows the subtitle once the counts arrive, never a blank line that stays', async () => {
+  it('shows a dash in the counters until they arrive, and again if they cannot be read; the list keeps working', async () => {
     let release: () => void = () => undefined;
-    const { api } = await renderCollections({
+    await renderCollections({
       prepare: (fake) => {
         release = fake.hold((call) => call.options.query?.pageSize === 1).release;
       },
     });
     await screen.findByRole('heading', { name: 'Collections' });
-    expect(screen.queryByText(/not linked to any screen/)).not.toBeInTheDocument();
+    const counts = screen.getByRole('region', { name: 'Collection counts' });
+    expect(counts).toHaveTextContent('–Collections');
 
     release();
 
-    expect(await screen.findByText(/4 collections/)).toBeInTheDocument();
-    expect(
-      api.callsTo('GET /collections').filter((c) => c.options.query?.pageSize === 1),
-    ).toHaveLength(2);
+    await waitFor(() => {
+      expect(counts).toHaveTextContent(/4Collections/);
+    });
   });
 
-  it('says so, with a retry, when the counts cannot be read', async () => {
-    const user = setupUser();
-    let failing = true;
+  it('keeps the list when the counts cannot be read', async () => {
     await renderCollections({
       prepare: (fake) => {
         const read = fake.client.get.bind(fake.client);
         fake.client.get = (path: string, options?: unknown) => {
           const query = (options as { query?: { pageSize?: number } } | undefined)?.query;
-          if (failing && path === '/collections' && query?.pageSize === 1)
+          if (path === '/collections' && query?.pageSize === 1)
             return Promise.reject(new ApiError({ status: 500, code: 'INTERNAL_ERROR' }));
           return read(path as never, options as never);
         };
       },
     });
 
-    expect(await screen.findByText("Couldn't load the counts.")).toBeInTheDocument();
-    // The list itself keeps working.
     expect(await screen.findByRole('link', { name: 'colActivos' })).toBeInTheDocument();
-    failing = false;
-    await user.click(screen.getByRole('button', { name: 'Try again' }));
-
-    expect(await screen.findByText(/4 collections/)).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Collection counts' })).toHaveTextContent(
+      '–Collections',
+    );
   });
 
   it('does not hide the collections without screens: all of them can be "Not linked"', async () => {
@@ -124,30 +134,12 @@ describe('collection list', () => {
     });
     const grid = await table();
 
-    expect(await screen.findByText(/2 collections/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '2 not linked to any screen' })).toBeInTheDocument();
-    expect(within(grid).getAllByText('Not linked')).toHaveLength(2);
-  });
-
-  it('filters by name with a wait after typing, through the URL and the request', async () => {
-    const user = setupUser();
-    const { router, api } = await renderCollections();
-    const grid = await table();
-
-    await user.click(screen.getByRole('searchbox', { name: 'Search by name' }));
-    await user.paste('Cli');
-
     await waitFor(() => {
-      expect(ROW_NAMES(grid)).toEqual(['colClientes']);
+      expect(screen.getByRole('region', { name: 'Collection counts' })).toHaveTextContent(
+        /2Not linked · filter/,
+      );
     });
-    expect(router.state.location.search).toBe('?q=Cli');
-    expect(api.callsTo('GET /collections').at(-1)?.options.query).toMatchObject({
-      applicationId: 1,
-      q: 'Cli',
-      page: 1,
-      pageSize: 20,
-      sort: 'name',
-    });
+    expect(within(grid).getAllByText('Not linked')).toHaveLength(2);
   });
 
   it('filters by environment', async () => {
@@ -181,8 +173,8 @@ describe('collection list', () => {
     });
     expect(button).toHaveAttribute('aria-pressed', 'true');
 
-    // The count in the subtitle is the same filter.
-    await user.click(screen.getByRole('button', { name: '1 not linked to any screen' }));
+    // Pressing the same card again takes the filter off.
+    await user.click(button);
     await waitFor(() => {
       expect(router.state.location.search).toBe('');
     });

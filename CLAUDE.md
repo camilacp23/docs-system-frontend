@@ -2,7 +2,9 @@
 
 React SPA of **"Documentación técnica"**, the technical documentation management system of the
 Enterprise Architecture Department. It consumes the REST API of the `docs-system-backend` repository.
-Phase 3 (development). The design (Phase 2) is complete and approved: implement it, do not redesign it.
+Phase 3 (development). The current design is the one of the Figma prototype with the visual changes recorded in D-154
+(`docs/phase3/DECISIONS_FASE3.md`; presentation only, `docs/design/DESIGN_REFERENCE.md` §9 not yet updated with them):
+implement it, do not redesign it beyond what is recorded.
 
 ## 1. Sources of truth (read before changing anything)
 

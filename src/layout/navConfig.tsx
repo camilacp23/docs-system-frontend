@@ -4,17 +4,17 @@
 // getNavGroups(role) -> groups with the items of that role (empty groups are dropped).
 import {
   BookOpen,
+  Braces,
   ClipboardCheck,
   Database,
   FileText,
   History,
   LayoutDashboard,
-  LayoutGrid,
+  Blocks,
   Monitor,
   Network,
   Search,
   Users,
-  Variable,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -44,7 +44,7 @@ const NAV_GROUPS: readonly NavGroup[] = [
     section: 'Documentation',
     items: [
       { to: '/screens', label: 'Screens', icon: <Monitor {...iconProps} /> },
-      { to: '/variables', label: 'Variables', icon: <Variable {...iconProps} /> },
+      { to: '/variables', label: 'Variables', icon: <Braces {...iconProps} /> },
       { to: '/collections', label: 'Collections', icon: <Database {...iconProps} /> },
       { to: '/dependency-map', label: 'Dependency map', icon: <Network {...iconProps} /> },
     ],
@@ -68,7 +68,7 @@ const NAV_GROUPS: readonly NavGroup[] = [
     section: 'Administration',
     items: [
       { to: '/admin/users', label: 'Users & roles', icon: <Users {...iconProps} /> },
-      { to: '/admin/applications', label: 'Applications', icon: <LayoutGrid {...iconProps} /> },
+      { to: '/admin/applications', label: 'Applications', icon: <Blocks {...iconProps} /> },
     ],
   },
 ];

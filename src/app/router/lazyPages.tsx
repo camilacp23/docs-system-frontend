@@ -1,6 +1,6 @@
 // lazyPages: the pages that are loaded when their route is opened (code splitting, NFR-11). One entry per page; the
-// route table (router.tsx) uses them as elements. To add a page (/onboarding comes next):
-//   export const OnboardingPage = lazyPage(() => import('../../modules/onboarding/OnboardingPage'), 'OnboardingPage');
+// route table (router.tsx) uses them as elements. To add a page:
+//   export const MyPage = lazyPage(() => import('../../modules/<module>/MyPage'), 'MyPage');
 //   and list it in LAZY_ROUTES (preloadPage.ts) with its route path.
 // preloadPage.ts maps a route path to its page, to start the load before rendering (tests).
 import { lazyPage } from './lazyPage';
@@ -19,3 +19,7 @@ export const ReportsPage = lazyPage(
   'ReportsPage',
 );
 export const ReviewPage = lazyPage(() => import('../../modules/review/ReviewPage'), 'ReviewPage');
+export const OnboardingPage = lazyPage(
+  () => import('../../modules/onboarding/OnboardingPage'),
+  'OnboardingPage',
+);

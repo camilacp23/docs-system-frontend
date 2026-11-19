@@ -280,7 +280,22 @@ export function makeScreensApi(
     if (method === 'GET' && path === '/screens') return response(listScreens(query));
     if (method === 'GET' && path === '/screens/{id}') {
       const screen = find(options.path?.id);
-      return response({ data: screen }, etagOf(screen.id));
+      // The origin row shows where its variable is created (contract 0.5.0): it lives on the variable.
+      const variables = collectionsApi.variablesApi.state.variables;
+      const data = {
+        ...screen,
+        variableLinks: screen.variableLinks.map((link) =>
+          link.isOrigin
+            ? {
+                ...link,
+                originUsedIn:
+                  variables.find((variable) => variable.id === link.variable.id)?.originUsedIn ??
+                  link.originUsedIn,
+              }
+            : link,
+        ),
+      };
+      return response({ data }, etagOf(screen.id));
     }
     if (method === 'POST' && path === '/screens') {
       const body = options.body as ScreenCreate;

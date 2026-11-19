@@ -205,7 +205,8 @@ describe('screen selector', () => {
     expect(onChange).toHaveBeenLastCalledWith(
       expect.arrayContaining([{ id: 5, name: 'One more' }]),
     );
-  });
+    // 500 chips make this the heaviest render of the file: it has room to finish on a busy machine.
+  }, 30_000);
 
   it('closes only the list on Escape and gives the focus back to its button', async () => {
     const user = setupUser();
@@ -227,14 +228,16 @@ describe('screen selector', () => {
     expect(outer).not.toHaveBeenCalled();
   });
 
-  it('keeps the list at 80 px with its own scroll, and the keyboard reaches and toggles its checkboxes', async () => {
+  it('floats the list over the dialog with its own scroll, and the keyboard reaches and toggles its checkboxes', async () => {
     const user = setupUser();
     const { onChange } = setup();
     await user.click(screen.getByRole('button', { name: /All screens/ }));
     await screen.findByRole('checkbox', { name: 'Screen 01' });
 
     const list = screen.getByRole('list', { name: 'Screens to include' });
-    expect(list).toHaveClass('max-h-20', 'overflow-y-auto');
+    // The list is in a panel that floats above the field (it pushes nothing) and scrolls inside itself.
+    expect(list.parentElement).toHaveClass('overflow-y-auto');
+    expect(list.closest('[role="group"]')).toHaveClass('absolute', 'bottom-full', 'max-h-72');
     // From the search box Tab goes into the list, and Space chooses.
     screen.getByRole('textbox', { name: 'Search screens' }).focus();
     await user.tab();

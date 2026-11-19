@@ -1,6 +1,6 @@
-// VariableDetailPage: /variables/:id (S-11). Header with the name, scope, environments and last update, the Edit
-// action (not for the Reader), the "where it is used" cards from GET /variables/{id}/dependencies and the Details
-// card. The variable and its dependencies load separately: if the dependencies fail only their cards show the
+// VariableDetailPage: /variables/:id (S-11). Hero with the name, scope, environments and last update, the Delete and Edit
+// actions (not for the Reader), the Details card across the page and the "where it is used" cards from
+// GET /variables/{id}/dependencies. The variable and its dependencies load separately: if the dependencies fail only their cards show the
 // error. A variable of another application than the selected one selects that application and says so (D-78);
 // switching application from the shell while the page is open goes back to the list.
 // The breadcrumb reads "Variables / <name>". Loading shows a skeleton after 300 ms; unknown id: "This variable
@@ -18,9 +18,8 @@ import {
   ButtonLink,
   ErrorState,
   ICON_STROKE_WIDTH,
-  PageHeader,
+  PageHero,
   Skeleton,
-  Tag,
   useDelayedLoading,
 } from '../../components/ui';
 import { ARCHIVED_WRITE_REASON } from '../../hooks/useWriteBlock';
@@ -30,7 +29,6 @@ import { useCurrentUser } from '../../session/useCurrentUser';
 import { parseId } from './parseId';
 import { DeleteVariableModal } from './DeleteVariableModal';
 import { VariableDetailsCard } from './VariableDetailsCard';
-import { formatTimestamp, SCOPE_LABEL } from './variableLabels';
 import { VariableUsage } from './VariableUsage';
 import type { Variable, VariableDependencies } from './variableTypes';
 
@@ -108,27 +106,35 @@ export function VariableDetailPage() {
 
   return (
     <>
-      <PageHeader
-        icon={<Braces size={20} strokeWidth={ICON_STROKE_WIDTH} />}
-        title={loaded.name}
-        meta={
-          <>
-            <Tag>{SCOPE_LABEL[loaded.scope]}</Tag>
-            {loaded.environments.map((environment) => (
-              <Tag key={environment} tone={environment === 'PROD' ? 'success' : 'neutral'}>
-                {environment}
-              </Tag>
-            ))}
-            <span className="text-label text-ink-500">
-              Updated {formatTimestamp(loaded.updatedAt)}
-            </span>
-          </>
-        }
+      <PageHero
+        tone="variable"
+        compact
+        icon={<Braces size={18} strokeWidth={ICON_STROKE_WIDTH} />}
+        title={<span className="font-mono">{loaded.name}</span>}
         actions={
           canWrite && (
             <>
+              {archived ? (
+                <Button
+                  size="sm"
+                  disabled
+                  title={ARCHIVED_WRITE_REASON}
+                  iconLeft={<Pencil aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+                >
+                  Edit
+                </Button>
+              ) : (
+                <ButtonLink
+                  size="sm"
+                  to={`/variables/${loaded.id}/edit`}
+                  iconLeft={<Pencil aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
+                >
+                  Edit
+                </ButtonLink>
+              )}
               <Button
-                variant="danger"
+                size="sm"
+                variant="danger-soft"
                 disabled={archived}
                 title={archived ? ARCHIVED_WRITE_REASON : undefined}
                 iconLeft={<Trash2 aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
@@ -138,35 +144,13 @@ export function VariableDetailPage() {
               >
                 Delete
               </Button>
-              {archived ? (
-                <Button
-                  variant="primary"
-                  disabled
-                  title={ARCHIVED_WRITE_REASON}
-                  iconLeft={<Pencil aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
-                >
-                  Edit
-                </Button>
-              ) : (
-                <ButtonLink
-                  to={`/variables/${loaded.id}/edit`}
-                  variant="primary"
-                  iconLeft={<Pencil aria-hidden="true" size={16} strokeWidth={ICON_STROKE_WIDTH} />}
-                >
-                  Edit
-                </ButtonLink>
-              )}
             </>
           )
         }
       />
 
-      <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)] items-start gap-4">
-        <div className="flex flex-col gap-4">
-          <VariableUsage variable={loaded} dependencies={dependencies} />
-        </div>
-        <VariableDetailsCard variable={loaded} />
-      </div>
+      <VariableDetailsCard variable={loaded} />
+      <VariableUsage variable={loaded} dependencies={dependencies} />
 
       {deleting && (
         <DeleteVariableModal
